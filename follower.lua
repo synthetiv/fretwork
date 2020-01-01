@@ -10,6 +10,7 @@ local amp_poll_l
 local pitch_in = 0
 local pitch_in_detected = false
 local pitch_in_octave = 0
+local crow_pitch_in = 0
 local mask = {}
 -- TODO: increase number of chords/masks
 local saved_masks = {} -- TODO: save with params... somehow
@@ -18,6 +19,7 @@ local active_mask = 0
 local mask_dirty = false
 local max_pitch = 96
 
+-- TODO: save/recall memory/loop contents like masks
 local memory = {}
 local mem_size = 32
 local loop_length = mem_size
@@ -29,15 +31,18 @@ local source
 local source_names = {
   'grid',
   'pitch track',
+  'crow input 2',
   'grid OR pitch',
+  'grid OR crow',
   'pitch OR grid'
   -- TODO: random too?
-  -- TODO: or CV in?
 }
 local source_grid = 1
 local source_pitch = 2
-local source_grid_pitch = 3
-local source_pitch_grid = 4
+local source_crow = 3
+local source_grid_pitch = 4
+local source_grid_crow = 5
+local source_pitch_grid = 6
 
 local loop_probability = 100
 -- TODO: add internal clock using beatclock
@@ -85,13 +90,26 @@ local mode_amp_in_stream = 12
 local mode_grid_sh = 13
 local mode_grid_stream = 14
 
+local grid_mode_play = 1
+local grid_mode_mask = 2
+local grid_mode_transpose = 3
+local grid_mode_heads = 4
+local grid_mode = grid_mode_play
+
+local output_selected = { true, true, true, true }
+local output_button_held = { false, false, false, false }
+local output_last_edited = 1
+
 local g = grid.connect()
 local held_keys = {}
 local last_key = 0
 
 local shift = false
 local ctrl = false
-local scroll = 1
+local scroll = 4
+
+local key_scroll = scroll
+local transpose_scroll = scroll
 
 local dirty = false
 local redraw_metro
@@ -160,7 +178,7 @@ local function get_grid_id_note(id)
 end
 
 local function get_grid_mask(x, y)
-  return x + (y - 4) * 3
+  return x + (y - 3) * 4
 end
 
 local function update_output(out)
@@ -202,10 +220,14 @@ local function sample_pitch(force_enable)
   local loop_pitch = memory[(head - loop_length - 1) % mem_size + 1] -- feed back an un-snapped value
   local pitch = loop_pitch
   if loop_probability <= math.random(1, 100) then
-    if #held_keys > 0 and (source == source_grid or source == source_grid_pitch) then
+    if source == source_crow then
+      pitch = crow_pitch_in
+    elseif #held_keys > 0 and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
       pitch = grid_pitch
     elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
       pitch = pitch_in
+    elseif source == source_grid_crow then
+      pitch = crow_pitch_in
     elseif #held_keys > 0 and source == source_pitch_grid then
       pitch = grid_pitch
     end
@@ -225,47 +247,105 @@ local function sample_pitch(force_enable)
 end
 
 local function grid_redraw(tick)
-  for x = 1, 16 do
-    for y = 1, 8 do
-      if x < 4 and y > 3 and y < 7 then
-        local m = get_grid_mask(x, y)
-        if active_mask == m then
-          if mask_dirty and tick % 8 > 3 then
-            g:led(x, y, 5)
-          else
-            g:led(x, y, 4)
-          end
-        else
-          g:led(x, y, 2)
-        end
-      elseif x == 1 and y == 7 then
-        g:led(x, y, shift and 4 or 2)
-      elseif x == 1 and y == 8 then
-        g:led(x, y, ctrl and 4 or 2)
-      elseif x > 4 and x < 16 then
-        local n = get_grid_note(x, y)
-        local pitch = (n - 1) % 12 + 1
-        if output_note[1] == n then
-          g:led(x, y, 7)
-        elseif output_note[2] == n then
-          g:led(x, y, 7)
-        elseif output_note[3] == n then
-          g:led(x, y, 7)
-        elseif output_note[4] == n then
-          g:led(x, y, 7)
-        elseif mask[n] then
-          g:led(x, y, 4)
-        elseif pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12 then
-          g:led(x, y, 2)
-        else
-          g:led(x, y, 0)
-        end
-      elseif x == 16 then
-        if 9 - y == scroll or 8 - y == scroll then
-          g:led(x, y, 2)
-        else
-          g:led(x, y, 1)
-        end
+
+  -- mode buttons
+  g:led(1, 1, grid_mode == grid_mode_play and 4 or 1)
+  g:led(2, 1, grid_mode == grid_mode_mask and 4 or 1)
+  g:led(3, 1, grid_mode == grid_mode_transpose and 4 or 1)
+  g:led(4, 1, grid_mode == grid_mode_heads and 4 or 1)
+
+  -- recall buttons
+  for x = 1, 4 do
+    for y = 3, 6 do
+      local m = get_grid_mask(x, y)
+      if active_mask == m then
+	if mask_dirty and tick % 8 > 3 then
+	  g:led(x, y, 5)
+	else
+	  g:led(x, y, 4)
+	end
+      else
+	g:led(x, y, 2)
+      end
+    end
+  end
+
+  -- shift + ctrl
+  g:led(1, 7, shift and 4 or 2)
+  g:led(1, 8, ctrl and 4 or 2)
+  
+  -- scrollbar
+  for y = 1, 8 do
+    if 9 - y == scroll or 8 - y == scroll then
+      g:led(16, y, 2)
+    else
+      g:led(16, y, 1)
+    end
+  end
+
+  if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
+    for x = 5, 15 do
+      for y = 1, 8 do
+	-- keyboard
+	local n = get_grid_note(x, y)
+	local pitch = (n - 1) % 12 + 1
+	if output_note[1] == n then
+	  g:led(x, y, 7)
+	elseif output_note[2] == n then
+	  g:led(x, y, 7)
+	elseif output_note[3] == n then
+	  g:led(x, y, 7)
+	elseif output_note[4] == n then
+	  g:led(x, y, 7)
+	elseif mask[n] then
+	  g:led(x, y, grid_mode == grid_mode_mask and 4 or 3)
+	elseif pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12 then
+	  g:led(x, y, grid_mode == grid_mode_mask and 2 or 1)
+	else
+	  g:led(x, y, 0)
+	end
+      end
+    end
+  elseif grid_mode == grid_mode_transpose then
+    local transpositions = {
+      params:get('output_1_transpose'),
+      params:get('output_2_transpose'),
+      params:get('output_3_transpose'),
+      params:get('output_4_transpose')
+    }
+    -- clear
+    for x = 5, 15 do
+      for y = 1, 8 do
+	g:led(x, y, 0)
+      end
+    end
+    -- output buttons
+    for i = 1, 4 do
+      g:led(5, i + 2, output_selected[i] and 4 or 1)
+    end
+    -- transposition keyboard
+    for x = 6, 15 do
+      for y = 1, 8 do
+	local n = get_grid_note(x, y)
+	local level = 0
+	if n == 36 then
+	  level = math.max(level, 4)
+	elseif n % 12 == 0 then
+	  level = math.max(level, 2)
+	end
+	for i = 1, 4 do
+	  if n - 36 == transpositions[i] then
+	    level = math.max(level, output_selected[i] and 10 or 7)
+	  end
+	end
+	g:led(x, y, level)
+      end
+    end
+  else
+    for x = 5, 16 do
+      -- TODO: this also removes the scrollbar; ideally you wouldn't draw it in the first place
+      for y = 1, 8 do
+	g:led(x, y, 0)
       end
     end
   end
@@ -274,7 +354,31 @@ end
 
 local function grid_key(x, y, z)
   if x < 5 then
-    if x < 4 and y > 3 and y < 7 then
+    if y == 1 and z == 1 then
+      -- grid mode buttons
+      if x == 1 then
+	if grid_mode == grid_mode_transpose then
+	  transpose_scroll = scroll
+	  scroll = key_scroll
+	end
+	grid_mode = grid_mode_play
+      elseif x == 2 then
+	if grid_mode == grid_mode_transpose then
+	  transpose_scroll = scroll
+	  scroll = key_scroll
+	end
+	grid_mode = grid_mode_mask
+      elseif x == 3 then
+	if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
+	  key_scroll = scroll
+	  scroll = transpose_scroll
+	end
+	grid_mode = grid_mode_transpose
+      elseif x == 4 then
+	grid_mode = grid_mode_heads
+      end
+    elseif y > 2 and y < 7 and z == 1 then
+      -- recall buttons
       local m = get_grid_mask(x, y)
       if shift then
         save_mask(m)
@@ -290,7 +394,6 @@ local function grid_key(x, y, z)
         end
       end
     elseif y == 7 and x == 1 then
-      -- TODO: add 'lock' keys for shift, ctrl, etc.
       shift = z == 1
     elseif y == 8 then
       if x == 1 then
@@ -307,28 +410,12 @@ local function grid_key(x, y, z)
         scroll = 8 - y
       end
     end
-  else
+  elseif grid_mode == grid_mode_play then
     local key_id = x + y * 16
     if z == 1 then
       local n = get_grid_note(x, y)
       -- print(string.format("pitch %d (%d)", n, pitch))
-      if shift then
-        local enable = not mask[n]
-        local pitch = (n - 1 ) % 12 + 1
-        for octave = 0, 7 do
-          mask[pitch + octave * 12] = enable
-        end
-        mask_dirty = true
-        if ctrl then
-          -- TODO: you're cutting & pasting this a lot; should you use more '*_dirty' variables instead?
-          for i = 1, 4 do
-            local mode = output_mode[i]
-            if mode ~= mode_amp_in_stream and mode ~= mode_amp_in_sh then
-              update_output(i)
-            end
-          end
-        end
-      elseif ctrl then
+	if ctrl then
         mask[n] = not mask[n]
         mask_dirty = true
         for i = 1, 4 do
@@ -377,6 +464,58 @@ local function grid_key(x, y, z)
         end
       end
     end
+  elseif grid_mode == grid_mode_mask then
+    if z == 1 then
+      local n = get_grid_note(x, y)
+      local enable = not mask[n]
+      local pitch = (n - 1 ) % 12 + 1
+      for octave = 0, 7 do
+	mask[pitch + octave * 12] = enable
+      end
+      mask_dirty = true
+      if ctrl then
+	-- TODO: you're cutting & pasting this a lot; should you use more '*_dirty' variables instead?
+	for i = 1, 4 do
+	  local mode = output_mode[i]
+	  if mode ~= mode_amp_in_stream and mode ~= mode_amp_in_sh then
+	    update_output(i)
+	  end
+	end
+      end
+    end
+  elseif grid_mode == grid_mode_transpose then
+    if x == 5 and y > 2 and y < 7 then
+      -- TODO: make it possible to select none
+      -- TODO: move these output buttons to the left so they can apply to other grid modes
+      local output = y - 2
+      local other_held = false
+      -- local was_selected = output_selected[output]
+      for i = 1, 4 do
+	other_held = other_held or output_button_held[i]
+      end
+      if not other_held then
+	output_selected = { false, false, false, false }
+      end
+      if z == 1 then
+	output_selected[output] = true -- not was_selected
+      end
+      output_button_held[output] = z == 1
+    elseif x > 5 and x < 16 and z == 1 then
+      local any_selected = false
+      for i = 1, 4 do
+	any_selected = any_selected or output_selected[i]
+      end
+      if any_selected then
+	local output_to_edit = output_last_edited % 4 + 1
+	while not output_selected[output_to_edit] do
+	  output_to_edit = output_to_edit % 4 + 1
+	end
+	params:set('output_' .. output_to_edit .. '_transpose', math.min(72, math.max(0, get_grid_note(x, y))) - 36)
+	output_last_edited = output_to_edit
+      end
+    end
+  elseif grid_mode == grid_mode_heads then
+    -- TODO
   end
   dirty = true
 end
@@ -405,11 +544,15 @@ end
 
 local function crow_setup()
   crow.clear()
-  crow.input[1].mode('change', 2.0, 0.25, 'rising')
+  -- input modes will be set by params
   crow.input[1].change = function()
     if clock_mode ~= clock_mode_grid then
       sample_pitch()
     end
+  end
+  crow.input[2].stream = function(value)
+    crow_pitch_in = math.floor(value * 12 + 0.5)
+    print(string.format('crow input 2: %fV = %d', value, crow_pitch_in))
   end
   params:bang()
 end
@@ -435,7 +578,7 @@ function init()
   amp_poll_l = poll.set('amp_analyst_l', update_amp)
   amp_poll_l.time = 1 / 8
   
-  for m = 1, 9 do
+  for m = 1, 16 do
     saved_masks[m] = {}
     for i = 1, max_pitch do
       saved_masks[m][i] = false
@@ -462,6 +605,11 @@ function init()
     default = source_grid_pitch,
     action = function(value)
       source = value
+      if source == source_crow then
+	crow.input[2].mode('stream', 1/32) -- TODO: is this too fast? not fast enough? what about querying?
+      else
+	crow.input[2].mode('none')
+      end
     end
   }
   params:add{
@@ -487,6 +635,11 @@ function init()
     default = clock_mode_trig_grid,
     action = function(value)
       clock_mode = value
+      if clock_mode ~= clock_mode_grid then
+	crow.input[1].mode('change', 2.0, 0.25, 'rising')
+      else
+	crow.input[1].mode('none')
+      end
     end
   }
   params:add{
@@ -582,8 +735,8 @@ function init()
       type = 'number',
       id = 'output_' .. i .. '_transpose',
       name = 'out ' .. i .. ' transpose',
-      min = -24,
-      max = 24,
+      min = -36,
+      max = 36,
       default = 0,
       formatter = function(param)
         local value = param:get()
