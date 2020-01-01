@@ -19,6 +19,7 @@ local max_pitch = 96
 
 local memory = {}
 local mem_size = 32
+local loop_length = mem_size
 local head = 1
 local heads = {}
 local n_heads = 4
@@ -198,7 +199,7 @@ local function sample_pitch(force_enable)
     heads[i]:move()
   end
   local grid_pitch = get_grid_id_note(last_key)
-  local loop_pitch = memory[heads[4].pos] -- feed back an un-snapped value
+  local loop_pitch = memory[(head - loop_length - 1) % mem_size + 1] -- feed back an un-snapped value
   local pitch = loop_pitch
   if loop_probability <= math.random(1, 100) then
     if #held_keys > 0 and (source == source_grid or source == source_grid_pitch) then
@@ -530,7 +531,7 @@ function init()
       id = 'head_' .. i .. '_offset_low',
       name = 'head ' .. i .. ' offset (low)',
       min = 0,
-      max = mem_size - 2,
+      max = mem_size - 1,
       default = i * 3,
       action = function(value)
         heads[i].offset_low = value
@@ -541,13 +542,25 @@ function init()
       id = 'head_' .. i .. '_offset_high',
       name = 'head ' .. i .. ' offset (high)',
       min = 0,
-      max = mem_size - 2,
+      max = mem_size - 1,
       default = i * 3,
       action = function(value)
         heads[i].offset_high = value
       end
     }
   end
+  
+  params:add{
+    type = 'number',
+    id = 'loop_length',
+    name = 'loop length',
+    min = 2,
+    max = mem_size,
+    default = mem_size,
+    action = function(value)
+      loop_length = value
+    end
+  }
   
   params:add_separator()
   
