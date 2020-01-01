@@ -11,6 +11,7 @@ local pitch_in = 0
 local pitch_in_detected = false
 local pitch_in_octave = 0
 local mask = {}
+-- TODO: increase number of chords/masks
 local saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
 local active_mask = 0
@@ -90,8 +91,6 @@ local last_key = 0
 
 local shift = false
 local ctrl = false
-local alt = false
-local cmd = false
 local scroll = 1
 
 local dirty = false
@@ -194,6 +193,7 @@ local function update_output(out)
 end
 
 local function sample_pitch(force_enable)
+  -- TODO: you ditched cmd, so `force_enable` is never used. do you want it...?
   head = head % mem_size + 1
   for i = 1, 4 do
     heads[i]:move()
@@ -242,10 +242,6 @@ local function grid_redraw(tick)
         g:led(x, y, shift and 4 or 2)
       elseif x == 1 and y == 8 then
         g:led(x, y, ctrl and 4 or 2)
-      elseif x == 2 and y == 8 then
-        g:led(x, y, alt and 4 or 2)
-      elseif x == 3 and y == 8 then
-        g:led(x, y, cmd and 4 or 2)
       elseif x > 4 and x < 16 then
         local n = get_grid_note(x, y)
         local pitch = (n - 1) % 12 + 1
@@ -299,10 +295,6 @@ local function grid_key(x, y, z)
     elseif y == 8 then
       if x == 1 then
         ctrl = z == 1
-      elseif x == 2 then
-        alt = z == 1
-      elseif x == 3 then
-        cmd = z == 1
       elseif x == 4 and z == 1 then
         sample_pitch()
       end
@@ -351,7 +343,7 @@ local function grid_key(x, y, z)
         last_key = key_id
         -- print('last key: ' .. last_key)
         if clock_mode ~= clock_mode_trig then
-          sample_pitch(cmd)
+          sample_pitch()
         end
         for i = 1, 4 do
           if output_mode[i] == mode_grid_stream  then
