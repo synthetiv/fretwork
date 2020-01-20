@@ -93,12 +93,14 @@ local mode_grid_stream = 14
 local grid_mode_play = 1
 local grid_mode_mask = 2
 local grid_mode_transpose = 3
-local grid_mode_heads = 4
+local grid_mode_memory = 4
 local grid_mode = grid_mode_play
 
 local output_selected = { true, true, true, true }
 local output_button_held = { false, false, false, false }
 local output_last_edited = 1
+
+local head_selected = 1
 
 local g = grid.connect()
 local held_keys = {}
@@ -210,6 +212,10 @@ local function update_output(out)
   crow.output[out].volts = volts
 end
 
+local function get_offset_pos(offset)
+	return (head - offset - 1) % mem_size + 1
+end
+
 local function sample_pitch(force_enable)
   -- TODO: you ditched cmd, so `force_enable` is never used. do you want it...?
   head = head % mem_size + 1
@@ -217,7 +223,7 @@ local function sample_pitch(force_enable)
     heads[i]:move()
   end
   local grid_pitch = get_grid_id_note(last_key)
-  local loop_pitch = memory[(head - loop_length - 1) % mem_size + 1] -- feed back an un-snapped value
+  local loop_pitch = memory[get_offset_pos(loop_length)] -- feed back an un-snapped value
   local pitch = loop_pitch
   if loop_probability <= math.random(1, 100) then
     if source == source_crow then
@@ -252,7 +258,7 @@ local function grid_redraw(tick)
   g:led(1, 1, grid_mode == grid_mode_play and 4 or 1)
   g:led(2, 1, grid_mode == grid_mode_mask and 4 or 1)
   g:led(3, 1, grid_mode == grid_mode_transpose and 4 or 1)
-  g:led(4, 1, grid_mode == grid_mode_heads and 4 or 1)
+  g:led(4, 1, grid_mode == grid_mode_memory and 4 or 1)
 
   -- recall buttons
   for x = 1, 4 do
@@ -375,7 +381,7 @@ local function grid_key(x, y, z)
 	end
 	grid_mode = grid_mode_transpose
       elseif x == 4 then
-	grid_mode = grid_mode_heads
+	grid_mode = grid_mode_memory
       end
     elseif y > 2 and y < 7 and z == 1 then
       -- recall buttons
@@ -399,6 +405,7 @@ local function grid_key(x, y, z)
       if x == 1 then
         ctrl = z == 1
       elseif x == 4 and z == 1 then
+				-- TODO: move this to a norns key (k1 + k3), and allow backwards clocking too (k1 + k2)
         sample_pitch()
       end
     end
@@ -409,6 +416,9 @@ local function grid_key(x, y, z)
       elseif 8 - y > scroll and scroll < 7 then
         scroll = 8 - y
       end
+			if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
+				key_scroll = scroll
+			end
     end
   elseif grid_mode == grid_mode_play then
     local key_id = x + y * 16
@@ -514,7 +524,7 @@ local function grid_key(x, y, z)
 	output_last_edited = output_to_edit
       end
     end
-  elseif grid_mode == grid_mode_heads then
+  elseif grid_mode == grid_mode_memory then
     -- TODO
   end
   dirty = true
@@ -660,37 +670,40 @@ function init()
     -- TODO: make this a 'real' class
     heads[i] = {
       pos = 1,
-      offset_low = i * 3,
-      offset_high = i * 3,
+      offset_max = i * 3,
+      offset_random = 0,
       move = function(self)
-        local offset = self.offset_low
-        if offset < self.offset_high then
-          offset = math.random(self.offset_low, self.offset_high)
+        local offset = self.offset_max
+				local offset_random = math.min(self.offset_random, self.offset_max)
+        if offset_random > 0 then
+          offset = offset - math.random(0, offset_random)
         end
-        self.pos = (head - offset - 1) % mem_size + 1
+        self.pos = get_offset_pos(offset)
       end
     }
     -- TODO: grid control over head position / random window
     params:add{
       type = 'number',
-      id = 'head_' .. i .. '_offset_low',
-      name = 'head ' .. i .. ' offset (low)',
+      id = 'head_' .. i .. '_offset_max',
+      name = 'head ' .. i .. ' offset max',
       min = 0,
       max = mem_size - 1,
       default = i * 3,
       action = function(value)
-        heads[i].offset_low = value
+        heads[i].offset_max = value
+				dirty = true
       end
     }
     params:add{
       type = 'number',
-      id = 'head_' .. i .. '_offset_high',
-      name = 'head ' .. i .. ' offset (high)',
+      id = 'head_' .. i .. '_offset_random',
+      name = 'head ' .. i .. ' offset random',
       min = 0,
       max = mem_size - 1,
-      default = i * 3,
+      default = 0,
       action = function(value)
-        heads[i].offset_high = math.max(heads[i].offset_low, value)
+        heads[i].offset_random = value
+				dirty = true
       end
     }
   end
@@ -704,6 +717,7 @@ function init()
     default = mem_size,
     action = function(value)
       loop_length = value
+			dirty = true
     end
   }
   
@@ -762,42 +776,84 @@ function init()
   dirty = true
 end
 
+function key(n, z)
+	if z == 1 then
+		-- TODO: select heads based on offsets (i.e. visually) instead of by index
+		if n == 2 then
+			head_selected = head_selected % 4 + 1
+			dirty = true
+		elseif n == 3 then
+			head_selected = (head_selected - 2) % 4 + 1
+			dirty = true
+		end
+	end
+end
+
+function enc(n, d)
+	if n == 1 then
+		params:delta('loop_length', d * -1)
+	elseif n == 2 then
+		params:delta('head_' .. head_selected .. '_offset_max', d * -1)
+	elseif n == 3 then
+		params:delta('head_' .. head_selected .. '_offset_random', d)
+	end
+end
+
+local function draw_head_brackets(h)
+	local x1 = (mem_size - heads[h].offset_max - 1) * 4 + 1
+	local x2 = x1 + 3 + (math.min(heads[h].offset_max, heads[h].offset_random)) * 4
+	screen.move(x2, 2)
+	screen.line(x2, 1)
+	screen.line(x1, 1)
+	screen.line(x1, 2)
+	screen.stroke()
+	screen.move(x2, 62)
+	screen.line(x2, 64)
+	screen.line(x1, 64)
+	screen.line(x1, 62)
+	screen.stroke()
+end
+
 function redraw()
   screen.clear()
   screen.stroke()
+	screen.line_width(1)
 
 	-- draw head/range indicators
 	for h = 1, n_heads do
-		local x1 = (mem_size - heads[h].offset_low) * 4
-		local x2 = (mem_size - heads[h].offset_high) * 4 - 3
-		screen.level(1)
-		screen.move(x2, 2)
-		screen.line(x2, 1)
-		screen.line(x1, 1)
-		screen.line(x1, 2)
-		screen.stroke()
-		screen.move(x2, 62)
-		screen.line(x2, 64)
-		screen.line(x1, 64)
-		screen.line(x1, 62)
-		screen.stroke()
+		if h ~= head_selected then
+			screen.level(1)
+			draw_head_brackets(h)
+		end
+	end
+	screen.level(3)
+	draw_head_brackets(head_selected)
+
+	-- draw loop region
+	local x = (mem_size - loop_length) * 4
+	screen.level(1)
+	for y = 4, 60 do
+		if y % 2 == 0 then
+			screen.level(1)
+		else
+			screen.level(0)
+		end
+		screen.pixel(x, y)
+		screen.pixel(127, y)
+		screen.fill()
 	end
 
 	-- draw memory contents
-  for i = 1, mem_size do
-		local x = (i - 1) * 4
-    local pos = (head - mem_size - 1 + i) % mem_size + 1
-    -- if pos == head or pos == heads[1].pos or pos == heads[2].pos or pos == heads[3].pos or pos == heads[4].pos then
-      -- TODO: indicate output transposition too
-			-- TODO: don't highlight heads that aren't used
-			-- basically: draw outputs, not heads
-      -- screen.level(15)
-    -- else
-      screen.level(1)
-    -- end
-    screen.line_width(1)
+  for offset = 0, mem_size - 1 do
+		local x = (mem_size - offset - 1) * 4
+		local pos = get_offset_pos(offset)
+		if offset > loop_length - 1 then
+			screen.level(1)
+		else
+			screen.level(2)
+		end
 		-- TODO: don't re-snap immediately unless ctrl held
-    screen.move(x, 63 + scroll * 2 - snap(memory[pos] - 1)) -- TODO: is this expensive?
+    screen.move(x, 63 + key_scroll * 2 - snap(memory[pos] - 1)) -- TODO: is this expensive?
     screen.line_rel(4, 0)
     screen.stroke()
   end
@@ -806,24 +862,25 @@ function redraw()
 	-- TODO: highlight based on output_selected
 	for o = 1, 4 do
 		screen.level(15)
+		-- TODO: split 'output mode' into 'output source' and __ (head + pitch/aux)
 		if output_mode[o] == mode_head_1_pitch then
 			local x = 128 - ((head - heads[1].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + scroll * 2 - snap(memory[heads[1].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[1].pos] - 1 + output_transpose[o]))
 			screen.line_rel(4, 0)
 			screen.stroke()
 		elseif output_mode[o] == mode_head_2_pitch then
 			local x = 128 - ((head - heads[2].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + scroll * 2 - snap(memory[heads[2].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[2].pos] - 1 + output_transpose[o]))
 			screen.line_rel(4, 0)
 			screen.stroke()
 		elseif output_mode[o] == mode_head_3_pitch then
 			local x = 128 - ((head - heads[3].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + scroll * 2 - snap(memory[heads[3].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[3].pos] - 1 + output_transpose[o]))
 			screen.line_rel(4, 0)
 			screen.stroke()
 		elseif output_mode[o] == mode_head_4_pitch then
 			local x = 128 - ((head - heads[4].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + scroll * 2 - snap(memory[heads[4].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[4].pos] - 1 + output_transpose[o]))
 			screen.line_rel(4, 0)
 			screen.stroke()
 		elseif output_mode[o] == mode_pitch_in_sh then
@@ -837,7 +894,7 @@ function redraw()
 		end
 	end
 
-	-- TODO: draw loop point
+	-- TODO: draw incoming pitches: grid, input
 	screen.update()
 end
 
