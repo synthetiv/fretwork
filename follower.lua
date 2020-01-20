@@ -98,7 +98,7 @@ local grid_mode = grid_mode_play
 
 local output_selected = { true, true, true, true }
 local output_button_held = { false, false, false, false }
-local output_last_edited = 1
+local output_to_edit = 1
 
 local head_selected = 1
 
@@ -252,7 +252,7 @@ local function sample_pitch(force_enable)
 	dirty = true
 end
 
-local function grid_redraw(tick)
+local function grid_redraw(blink_slow, blink_fast)
 
 	-- mode buttons
 	g:led(1, 1, grid_mode == grid_mode_play and 4 or 1)
@@ -265,7 +265,7 @@ local function grid_redraw(tick)
 		for y = 3, 6 do
 			local m = get_grid_mask(x, y)
 			if active_mask == m then
-				if mask_dirty and tick % 8 > 3 then
+				if mask_dirty and blink_slow then
 					g:led(x, y, 5)
 				else
 					g:led(x, y, 4)
@@ -295,6 +295,7 @@ local function grid_redraw(tick)
 				-- keyboard
 				local n = get_grid_note(x, y)
 				local pitch = (n - 1) % 12 + 1
+				-- TODO: use output_note when drawing screen too!
 				if output_note[1] == n then
 					g:led(x, y, 7)
 				elseif output_note[2] == n then
@@ -327,7 +328,13 @@ local function grid_redraw(tick)
 		end
 		-- output buttons
 		for i = 1, 4 do
-			g:led(5, i + 2, output_selected[i] and 4 or 1)
+			local level = 1
+			if i == output_to_edit and blink_fast then
+				level = 5
+			elseif output_selected[i] then
+				level = 4
+			end
+			g:led(5, i + 2, level)
 		end
 		-- transposition keyboard
 		for x = 6, 15 do
@@ -335,13 +342,19 @@ local function grid_redraw(tick)
 				local n = get_grid_note(x, y)
 				local level = 0
 				if n == 36 then
-					level = math.max(level, 4)
+					level = 3
 				elseif n % 12 == 0 then
-					level = math.max(level, 2)
+					level = 2
 				end
 				for i = 1, 4 do
 					if n - 36 == transpositions[i] then
-						level = math.max(level, output_selected[i] and 10 or 7)
+						if i == output_to_edit and blink_fast then
+							level = 8
+						elseif output_selected[i] then
+							level = math.max(level, 7)
+						else
+							level = math.max(level, 4)
+						end
 					end
 				end
 				g:led(x, y, level)
@@ -499,7 +512,6 @@ local function grid_key(x, y, z)
 			-- TODO: move these output buttons to the left so they can apply to other grid modes
 			local output = y - 2
 			local other_held = false
-			-- local was_selected = output_selected[output]
 			for i = 1, 4 do
 				other_held = other_held or output_button_held[i]
 			end
@@ -508,6 +520,7 @@ local function grid_key(x, y, z)
 			end
 			if z == 1 then
 				output_selected[output] = true -- not was_selected
+				output_to_edit = output
 			end
 			output_button_held[output] = z == 1
 		elseif x > 5 and x < 16 and z == 1 then
@@ -516,12 +529,11 @@ local function grid_key(x, y, z)
 				any_selected = any_selected or output_selected[i]
 			end
 			if any_selected then
-				local output_to_edit = output_last_edited % 4 + 1
+				params:set('output_' .. output_to_edit .. '_transpose', math.min(72, math.max(0, get_grid_note(x, y))) - 36)
+				output_to_edit = output_to_edit % 4 + 1
 				while not output_selected[output_to_edit] do
 					output_to_edit = output_to_edit % 4 + 1
 				end
-				params:set('output_' .. output_to_edit .. '_transpose', math.min(72, math.max(0, get_grid_note(x, y))) - 36)
-				output_last_edited = output_to_edit
 			end
 		end
 	elseif grid_mode == grid_mode_memory then
@@ -571,13 +583,15 @@ function init()
 	
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
-		if dirty then
-			grid_redraw(tick)
+		local blink_slow = tick % 8 > 3
+		local blink_fast = tick % 4 > 1
+		-- TODO: make 'dirty' state useful again, if you can
+		-- local blink_dirty = tick % 8 == 0 or tick % 8 == 4 or tick % 6 == 0 or tick % 6 == 3
+		-- if dirty or blink_dirty then
+			grid_redraw(blink_slow, blink_fast)
 			redraw()
 			dirty = false
-		elseif mask_dirty then -- blink
-			grid_redraw(tick)
-		end
+		-- end
 	end
 	redraw_metro:start(1 / 15)
 	
