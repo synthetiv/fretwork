@@ -690,7 +690,7 @@ function init()
       max = mem_size - 1,
       default = i * 3,
       action = function(value)
-        heads[i].offset_high = value
+        heads[i].offset_high = math.max(heads[i].offset_low, value)
       end
     }
   end
@@ -765,21 +765,80 @@ end
 function redraw()
   screen.clear()
   screen.stroke()
-  for x = 1, mem_size do
-    local pos = (head - mem_size - 1 + x) % mem_size + 1
-    if pos == head or pos == heads[1].pos or pos == heads[2].pos or pos == heads[3].pos or pos == heads[4].pos then
+
+	-- draw head/range indicators
+	for h = 1, n_heads do
+		local x1 = (mem_size - heads[h].offset_low) * 4
+		local x2 = (mem_size - heads[h].offset_high) * 4 - 3
+		screen.level(1)
+		screen.move(x2, 2)
+		screen.line(x2, 1)
+		screen.line(x1, 1)
+		screen.line(x1, 2)
+		screen.stroke()
+		screen.move(x2, 62)
+		screen.line(x2, 64)
+		screen.line(x1, 64)
+		screen.line(x1, 62)
+		screen.stroke()
+	end
+
+	-- draw memory contents
+  for i = 1, mem_size do
+		local x = (i - 1) * 4
+    local pos = (head - mem_size - 1 + i) % mem_size + 1
+    -- if pos == head or pos == heads[1].pos or pos == heads[2].pos or pos == heads[3].pos or pos == heads[4].pos then
       -- TODO: indicate output transposition too
-      -- TODO: indicate randomization window for each head
-      screen.level(15)
-    else
-      screen.level(2)
-    end
+			-- TODO: don't highlight heads that aren't used
+			-- basically: draw outputs, not heads
+      -- screen.level(15)
+    -- else
+      screen.level(1)
+    -- end
     screen.line_width(1)
-    screen.move((x - 1) * 4, 63 + scroll * 2 - snap(memory[pos] - 1)) -- TODO: is this expensive?
+		-- TODO: don't re-snap immediately unless ctrl held
+    screen.move(x, 63 + scroll * 2 - snap(memory[pos] - 1)) -- TODO: is this expensive?
     screen.line_rel(4, 0)
     screen.stroke()
   end
-  screen.update()
+
+	-- draw output states
+	-- TODO: highlight based on output_selected
+	for o = 1, 4 do
+		screen.level(15)
+		if output_mode[o] == mode_head_1_pitch then
+			local x = 128 - ((head - heads[1].pos + 1) % mem_size * 4)
+			screen.move(x, 63 + scroll * 2 - snap(memory[heads[1].pos] - 1 + output_transpose[o]))
+			screen.line_rel(4, 0)
+			screen.stroke()
+		elseif output_mode[o] == mode_head_2_pitch then
+			local x = 128 - ((head - heads[2].pos + 1) % mem_size * 4)
+			screen.move(x, 63 + scroll * 2 - snap(memory[heads[2].pos] - 1 + output_transpose[o]))
+			screen.line_rel(4, 0)
+			screen.stroke()
+		elseif output_mode[o] == mode_head_3_pitch then
+			local x = 128 - ((head - heads[3].pos + 1) % mem_size * 4)
+			screen.move(x, 63 + scroll * 2 - snap(memory[heads[3].pos] - 1 + output_transpose[o]))
+			screen.line_rel(4, 0)
+			screen.stroke()
+		elseif output_mode[o] == mode_head_4_pitch then
+			local x = 128 - ((head - heads[4].pos + 1) % mem_size * 4)
+			screen.move(x, 63 + scroll * 2 - snap(memory[heads[4].pos] - 1 + output_transpose[o]))
+			screen.line_rel(4, 0)
+			screen.stroke()
+		elseif output_mode[o] == mode_pitch_in_sh then
+			-- TODO
+		elseif output_mode[o] == mode_pitch_in_stream then
+			-- TODO
+		elseif output_mode[o] == mode_grid_sh then
+			-- TODO
+		elseif output_mode[o] == mode_grid_stream then
+			-- TODO
+		end
+	end
+
+	-- TODO: draw loop point
+	screen.update()
 end
 
 function cleanup()
