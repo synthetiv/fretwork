@@ -6,7 +6,6 @@ engine.name = 'Analyst'
 local musicutil = require 'musicutil'
 
 local pitch_poll_l
-local amp_poll_l
 local pitch_in = 0
 local pitch_in_detected = false
 local pitch_in_octave = 0
@@ -58,37 +57,21 @@ local clock_mode_trig_grid = 3
 
 local output_transpose = { 0, 0, 0, 0 }
 local output_note = { 0, 0, 0, 0 }
-local output_mode = {}
-local output_mode_names = {
-	'head 1 pitch',
-	'head 1 aux',
-	'head 2 pitch',
-	'head 2 aux',
-	'head 3 pitch',
-	'head 3 aux',
-	'head 4 pitch',
-	'head 4 aux',
-	'pitch in s+h',
-	'pitch in stream',
-	'amp in s+h',
-	'amp in stream',
-	'grid s+h',
-	'grid stream'
+local output_source = {}
+local output_source_names = {
+	'head 1',
+	'head 2',
+	'head 3',
+	'head 4',
+	'audio in',
+	'grid'
 }
-local mode_head_1_pitch = 1
-local mode_head_1_aux = 2
-local mode_head_2_pitch = 3
-local mode_head_2_aux = 4
-local mode_head_3_pitch = 5
-local mode_head_3_aux = 6
-local mode_head_4_pitch = 7
-local mode_head_4_aux = 8
-local mode_pitch_in_sh = 9
-local mode_pitch_in_stream = 10
-local mode_amp_in_sh = 11
-local mode_amp_in_stream = 12
-local mode_grid_sh = 13
-local mode_grid_stream = 14
+local output_source_head_1 = 1
+local output_source_head_2 = 2
+local output_source_head_3 = 3
+local output_source_head_4 = 4
+local output_source_audio_in = 5
+local output_source_grid = 6
 
 local grid_mode_play = 1
 local grid_mode_mask = 2
@@ -186,30 +169,17 @@ local function get_grid_mask(x, y)
 end
 
 local function update_output(out)
-	local mode = output_mode[out]
+	local output_source = output_source[out]
 	local volts = 0
-	if mode == mode_pitch_in_sh or mode == mode_pitch_in_stream then
+	if output_source == output_source_audio_in then
 		output_note[out] = snap(quantize(pitch_in) + output_transpose[out])
-		volts = output_note[out] / 12 - 1
-	elseif mode == mode_amp_in_sh or mode == mode_amp_in_stream then
-		output_note[out] = 0
-		-- TODO: scale with params... or inside supercollider? 
-		volts = amp_in * 5
-	elseif mode == mode_grid_sh or mode == mode_grid_stream then
+	elseif output_source == output_source_grid then
 		output_note[out] = snap(get_grid_id_note(last_key) + output_transpose[out])
-		volts = output_note[out] / 12 - 1
 	else
-		local is_pitch = mode % 2 > 0
-		local out_head = math.ceil(mode / 2)
-		if is_pitch then
-			output_note[out] = snap(memory[heads[out_head].pos] + output_transpose[out])
-			volts = output_note[out] / 12 - 1
-		else
-			output_note[out] = 0
-			-- TODO: aux outputs
-			-- parameter locks: add an expression lookup table, 1 value per note, accompanying output mode·
-		end
+		local output_head = output_source
+		output_note[out] = snap(memory[heads[output_head].pos] + output_transpose[out])
 	end
+	volts = output_note[out] / 12 - 1
 	dirty = true
 	crow.output[out].volts = volts
 end
@@ -246,10 +216,11 @@ local function sample_pitch(force_enable)
 		mask_dirty = true
 	end
 	for i = 1, 4 do
-		local mode = output_mode[i]
-		if mode ~= mode_pitch_in_stream and mode ~= mode_amp_in_stream and mode ~= mode_grid_stream then
+		-- TODO: s+h
+		-- local mode = output_mode[i]
+		-- if mode ~= mode_pitch_in_stream and mode ~= mode_amp_in_stream and mode ~= mode_grid_stream then
 			update_output(i)
-		end
+		-- end
 	end
 	dirty = true
 end
@@ -331,10 +302,12 @@ local function grid_redraw()
 		-- output buttons
 		for i = 1, 4 do
 			local level = 1
-			if i == output_to_edit and blink_fast then
-				level = 5
-			elseif output_selected[i] then
-				level = 4
+			if output_selected[i] then
+				if blink_fast and (shift or i == output_to_edit) then
+					level = 5
+				else
+					level = 4
+				end
 			end
 			g:led(5, i + 2, level)
 		end
@@ -350,10 +323,12 @@ local function grid_redraw()
 				end
 				for i = 1, 4 do
 					if n - 36 == transpositions[i] then
-						if i == output_to_edit and blink_fast then
-							level = 8
-						elseif output_selected[i] then
-							level = math.max(level, 7)
+						if output_selected[i] then
+							if blink_fast and (shift or i == output_to_edit) then
+								level = 8
+							else
+								level = math.max(level, 7)
+							end
 						else
 							level = math.max(level, 4)
 						end
@@ -408,10 +383,7 @@ local function grid_key(x, y, z)
 			end
 			if ctrl then
 				for i = 1, 4 do
-					local mode = output_mode[i]
-					if mode ~= mode_amp_in_stream and mode ~= mode_amp_in_sh then
-						update_output(i)
-					end
+					update_output(i)
 				end
 			end
 		elseif y == 7 and x == 1 then
@@ -444,10 +416,7 @@ local function grid_key(x, y, z)
 				mask[n] = not mask[n]
 				mask_dirty = true
 				for i = 1, 4 do
-					local mode = output_mode[i]
-					if mode ~= mode_amp_in_stream and mode ~= mode_amp_in_sh then
-						update_output(i)
-					end
+					update_output(i)
 				end
 			else
 				table.insert(held_keys, key_id)
@@ -458,7 +427,8 @@ local function grid_key(x, y, z)
 					sample_pitch()
 				end
 				for i = 1, 4 do
-					if output_mode[i] == mode_grid_stream  then
+					-- TODO: stream/s+h
+					if output_source[i] == output_source_grid then
 						update_output(i)
 					end
 				end
@@ -474,11 +444,12 @@ local function grid_key(x, y, z)
 					if clock_mode ~= clock_mode_trig then
 						sample_pitch()
 					end
-					for i = 1, 4 do
-						if output_mode[i] == mode_grid_stream then
-							update_output(i)
-						end
-					end
+					-- for i = 1, 4 do
+						-- TODO: stream/s+h
+						-- if output_source[i] == source_grid then
+							-- update_output(i)
+						-- end
+					-- end
 				end
 			else
 				for i = 1, #held_keys do
@@ -501,16 +472,13 @@ local function grid_key(x, y, z)
 			if ctrl then
 				-- TODO: you're cutting & pasting this a lot; should you use more '*_dirty' variables instead?
 				for i = 1, 4 do
-					local mode = output_mode[i]
-					if mode ~= mode_amp_in_stream and mode ~= mode_amp_in_sh then
-						update_output(i)
-					end
+					update_output(i)
 				end
 			end
 		end
 	elseif grid_mode == grid_mode_transpose then
 		if x == 5 and y > 2 and y < 7 then
-			-- TODO: make it possible to select none
+			-- TODO: make it easy to select all
 			-- TODO: move these output buttons to the left so they can apply to other grid modes
 			local output = y - 2
 			local other_held = false
@@ -521,7 +489,7 @@ local function grid_key(x, y, z)
 				output_selected = { false, false, false, false }
 			end
 			if z == 1 then
-				output_selected[output] = true -- not was_selected
+				output_selected[output] = true
 				output_to_edit = output
 			end
 			output_button_held[output] = z == 1
@@ -531,7 +499,16 @@ local function grid_key(x, y, z)
 				any_selected = any_selected or output_selected[i]
 			end
 			if any_selected then
-				params:set('output_' .. output_to_edit .. '_transpose', math.min(72, math.max(0, get_grid_note(x, y))) - 36)
+				local transpose = math.min(72, math.max(0, get_grid_note(x, y))) - 36
+				if shift then
+					for o = 1, 4 do
+						if output_selected[o] then
+							params:set('output_' .. o .. '_transpose', transpose)
+						end
+					end
+				else
+					params:set('output_' .. output_to_edit .. '_transpose', transpose)
+				end
 				output_to_edit = output_to_edit % 4 + 1
 				while not output_selected[output_to_edit] do
 					output_to_edit = output_to_edit % 4 + 1
@@ -548,21 +525,13 @@ local function update_freq(value)
 	pitch_in_detected = value > 0
 	if pitch_in_detected then
 		pitch_in = musicutil.freq_to_note_num(value) + (pitch_in_octave - 2) * 12
-		for i = 1, 4 do
-			if output_mode[i] == mode_pitch_in_stream then
-				update_output(i)
-			end
-		end
+		-- for i = 1, 4 do
+			-- TODO: stream
+			-- if output_mode[i] == mode_pitch_in_stream then
+				-- update_output(i)
+			-- end
+		-- end
 		dirty = true
-	end
-end
-
-local function update_amp(value)
-	amp_in = value
-	for i = 1, 4 do
-		if output_mode[i] == mode_amp_in_stream then
-			update_output(i)
-		end
 	end
 end
 
@@ -585,6 +554,7 @@ function init()
 	
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
+		-- TODO: stop blinking after n seconds of inactivity?
 		if not blink_slow and tick % 8 > 3 then
 			blink_slow = true
 			dirty = true
@@ -611,8 +581,6 @@ function init()
 	-- TODO: did you get rid of the 'clarity' threshold in the engine, or no?
 	pitch_poll_l = poll.set('pitch_analyst_l', update_freq)
 	pitch_poll_l.time = 1 / 8
-	amp_poll_l = poll.set('amp_analyst_l', update_amp)
-	amp_poll_l.time = 1 / 8
 	
 	for m = 1, 16 do
 		saved_masks[m] = {}
@@ -752,12 +720,12 @@ function init()
 	for i = 1, 4 do
 		params:add{
 			type = 'option',
-			id = 'output_' .. i .. '_mode',
-			name = 'out ' .. i .. ' mode',
-			options = output_mode_names,
-			default = (i - 1) * 2 + 1,
+			id = 'output_' .. i .. '_source',
+			name = 'out ' .. i .. ' source',
+			options = output_source_names,
+			default = i,
 			action = function(value)
-				output_mode[i] = value
+				output_source[i] = value
 				update_output(i)
 			end
 		}
@@ -765,7 +733,7 @@ function init()
 			type = 'control',
 			id = 'output_' .. i .. '_slew',
 			name = 'out ' .. i .. ' slew',
-			controlspec = controlspec.new(1, 1000, 'exp', 1, 10, 'ms'),
+			controlspec = controlspec.new(1, 1000, 'exp', 1, 1, 'ms'),
 			action = function(value)
 				crow.output[i].slew = value / 1000
 			end
@@ -793,7 +761,6 @@ function init()
 	end
 	
 	pitch_poll_l:start()
-	amp_poll_l:start()
 	g.key = grid_key
 	
 	crow.add = crow_setup -- when crow is connected
@@ -845,6 +812,8 @@ function redraw()
 	screen.stroke()
 	screen.line_width(1)
 
+	local y_memory = {}
+
 	-- draw head/range indicators
 	for h = 1, n_heads do
 		if h ~= head_selected then
@@ -873,12 +842,13 @@ function redraw()
 	for offset = 0, mem_size - 1 do
 		local x = (mem_size - offset - 1) * 4
 		local pos = get_offset_pos(offset)
-		if offset > loop_length - 1 or pos == heads[1].pos or pos == heads[2].pos or pos == heads[3].pos or pos == heads[4].pos then
+		if offset > loop_length - 1 then
 			screen.level(1)
 		else
 			screen.level(2)
 		end
-		screen.move(x, 63 + key_scroll * 2 - snap(memory[pos]))
+		y_memory[pos] = 63 + key_scroll * 2 - snap(memory[pos])
+		screen.move(x, y_memory[pos])
 		screen.line_rel(4, 0)
 		screen.stroke()
 	end
@@ -886,63 +856,37 @@ function redraw()
 	-- draw output states
 	-- TODO: highlight based on output_selected
 	for o = 1, 4 do
-		-- TODO: split 'output mode' into 'output source' and __ (head + pitch/aux)
-		-- TODO: draw a line connecting transposed output with original note
-		if output_mode[o] == mode_head_1_pitch then
-			local x = 128 - ((head - heads[1].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - output_note[o])
+		if output_source[o] == output_source_head_1 or output_source[o] == output_source_head_2 or output_source[o] == output_source_head_3 or output_source[o] == output_source_head_4 then
+			local output_head = output_source[o]
+			local x = 128 - ((head - heads[output_head].pos + 1) % mem_size * 4)
+			local y_transposed = 63 + key_scroll * 2 - output_note[o]
+			local y_original = y_memory[heads[output_head].pos]
+			screen.move(x, y_transposed)
 			screen.line_rel(4, 0)
-			if o == output_to_edit then
-				screen.level(blink_fast and 15 or 7)
-			elseif output_selected[o] then
-				screen.level(10)
+			if output_selected[o] then
+				if o == output_to_edit or shift then
+					screen.level(blink_fast and 15 or 7)
+				else
+					-- TODO: differentiate better between selected and non-selected outputs
+					screen.level(10)
+				end
 			else
 				screen.level(7)
 			end
 			screen.stroke()
-		elseif output_mode[o] == mode_head_2_pitch then
-			local x = 128 - ((head - heads[2].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - output_note[o])
-			screen.line_rel(4, 0)
-			if o == output_to_edit then
-				screen.level(blink_fast and 15 or 7)
-			elseif output_selected[o] then
-				screen.level(10)
-			else
-				screen.level(7)
-			end
+			-- draw a line connecting transposed output with original note
+			screen.level(2)
+			local drag_top = math.min(y_transposed + 1, y_original)
+			local drag_height = math.max(0, math.abs(y_transposed - y_original) - 2)
+			screen.move(x + 1, drag_top)
+			screen.line_rel(0, drag_height)
 			screen.stroke()
-		elseif output_mode[o] == mode_head_3_pitch then
-			local x = 128 - ((head - heads[3].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - output_note[o])
-			screen.line_rel(4, 0)
-			if o == output_to_edit then
-				screen.level(blink_fast and 15 or 7)
-			elseif output_selected[o] then
-				screen.level(10)
-			else
-				screen.level(7)
-			end
+			screen.move(x + 4, drag_top)
+			screen.line_rel(0, drag_height)
 			screen.stroke()
-		elseif output_mode[o] == mode_head_4_pitch then
-			local x = 128 - ((head - heads[4].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - output_note[o])
-			screen.line_rel(4, 0)
-			if o == output_to_edit then
-				screen.level(blink_fast and 15 or 7)
-			elseif output_selected[o] then
-				screen.level(10)
-			else
-				screen.level(7)
-			end
-			screen.stroke()
-		elseif output_mode[o] == mode_pitch_in_sh then
+		elseif output_source[o] == output_source_audio_in then
 			-- TODO
-		elseif output_mode[o] == mode_pitch_in_stream then
-			-- TODO
-		elseif output_mode[o] == mode_grid_sh then
-			-- TODO
-		elseif output_mode[o] == mode_grid_stream then
+		elseif output_source[o] == output_source_grid then
 			-- TODO
 		end
 	end
@@ -953,6 +897,5 @@ end
 
 function cleanup()
   pitch_poll_l:stop()
-  amp_poll_l:stop()
   redraw_metro:stop()
 end
