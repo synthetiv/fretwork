@@ -113,6 +113,8 @@ local scroll = 4
 local key_scroll = scroll
 local transpose_scroll = scroll
 
+local blink_slow = false
+local blink_fast = false
 local dirty = false
 local redraw_metro
 
@@ -252,7 +254,7 @@ local function sample_pitch(force_enable)
 	dirty = true
 end
 
-local function grid_redraw(blink_slow, blink_fast)
+local function grid_redraw()
 
 	-- mode buttons
 	g:led(1, 1, grid_mode == grid_mode_play and 4 or 1)
@@ -583,15 +585,25 @@ function init()
 	
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
-		local blink_slow = tick % 8 > 3
-		local blink_fast = tick % 4 > 1
-		-- TODO: make 'dirty' state useful again, if you can
-		-- local blink_dirty = tick % 8 == 0 or tick % 8 == 4 or tick % 6 == 0 or tick % 6 == 3
-		-- if dirty or blink_dirty then
+		if not blink_slow and tick % 8 > 3 then
+			blink_slow = true
+			dirty = true
+		elseif blink_slow and tick % 8 <= 3 then
+			blink_slow = false
+			dirty = true
+		end
+		if not blink_fast and tick % 4 > 1 then
+			blink_fast = true
+			dirty = true
+		elseif blink_fast and tick % 4 <= 1 then
+			blink_fast = false
+			dirty = true
+		end
+		if dirty then
 			grid_redraw(blink_slow, blink_fast)
 			redraw()
 			dirty = false
-		-- end
+		end
 	end
 	redraw_metro:start(1 / 15)
 	
@@ -861,13 +873,12 @@ function redraw()
 	for offset = 0, mem_size - 1 do
 		local x = (mem_size - offset - 1) * 4
 		local pos = get_offset_pos(offset)
-		if offset > loop_length - 1 then
+		if offset > loop_length - 1 or pos == heads[1].pos or pos == heads[2].pos or pos == heads[3].pos or pos == heads[4].pos then
 			screen.level(1)
 		else
 			screen.level(2)
 		end
-		-- TODO: don't re-snap immediately unless ctrl held
-		screen.move(x, 63 + key_scroll * 2 - snap(memory[pos] - 1)) -- TODO: is this expensive?
+		screen.move(x, 63 + key_scroll * 2 - snap(memory[pos]))
 		screen.line_rel(4, 0)
 		screen.stroke()
 	end
@@ -875,27 +886,55 @@ function redraw()
 	-- draw output states
 	-- TODO: highlight based on output_selected
 	for o = 1, 4 do
-		screen.level(15)
 		-- TODO: split 'output mode' into 'output source' and __ (head + pitch/aux)
+		-- TODO: draw a line connecting transposed output with original note
 		if output_mode[o] == mode_head_1_pitch then
 			local x = 128 - ((head - heads[1].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[1].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - output_note[o])
 			screen.line_rel(4, 0)
+			if o == output_to_edit then
+				screen.level(blink_fast and 15 or 7)
+			elseif output_selected[o] then
+				screen.level(10)
+			else
+				screen.level(7)
+			end
 			screen.stroke()
 		elseif output_mode[o] == mode_head_2_pitch then
 			local x = 128 - ((head - heads[2].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[2].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - output_note[o])
 			screen.line_rel(4, 0)
+			if o == output_to_edit then
+				screen.level(blink_fast and 15 or 7)
+			elseif output_selected[o] then
+				screen.level(10)
+			else
+				screen.level(7)
+			end
 			screen.stroke()
 		elseif output_mode[o] == mode_head_3_pitch then
 			local x = 128 - ((head - heads[3].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[3].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - output_note[o])
 			screen.line_rel(4, 0)
+			if o == output_to_edit then
+				screen.level(blink_fast and 15 or 7)
+			elseif output_selected[o] then
+				screen.level(10)
+			else
+				screen.level(7)
+			end
 			screen.stroke()
 		elseif output_mode[o] == mode_head_4_pitch then
 			local x = 128 - ((head - heads[4].pos + 1) % mem_size * 4)
-			screen.move(x, 63 + key_scroll * 2 - snap(memory[heads[4].pos] - 1 + output_transpose[o]))
+			screen.move(x, 63 + key_scroll * 2 - output_note[o])
 			screen.line_rel(4, 0)
+			if o == output_to_edit then
+				screen.level(blink_fast and 15 or 7)
+			elseif output_selected[o] then
+				screen.level(10)
+			else
+				screen.level(7)
+			end
 			screen.stroke()
 		elseif output_mode[o] == mode_pitch_in_sh then
 			-- TODO
