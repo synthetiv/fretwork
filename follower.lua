@@ -11,7 +11,6 @@ local pitch_in_detected = false
 local pitch_in_octave = 0
 local crow_pitch_in = 0
 local mask = {}
--- TODO: increase number of chords/masks
 local saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
 local active_mask = 0
