@@ -267,7 +267,6 @@ local function grid_redraw()
 				-- keyboard
 				local n = get_grid_note(x, y)
 				local pitch = (n - 1) % 12 + 1
-				-- TODO: use output_note when drawing screen too!
 				if output_note[1] == n then
 					g:led(x, y, 7)
 				elseif output_note[2] == n then
