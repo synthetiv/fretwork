@@ -739,7 +739,6 @@ function init()
 				crow.output[i].slew = value / 1000
 			end
 		}
-		-- TODO: grid control over output transpose
 		params:add{
 			type = 'number',
 			id = 'output_' .. i .. '_transpose',
