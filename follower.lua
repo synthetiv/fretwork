@@ -494,6 +494,7 @@ local function grid_key(x, y, z)
 			end
 			output_button_held[output] = z == 1
 		elseif x > 5 and x < 16 and z == 1 then
+			-- TODO: track held keys so you can legato lines, like play mode
 			local any_selected = false
 			for i = 1, 4 do
 				any_selected = any_selected or output_selected[i]
@@ -666,16 +667,18 @@ function init()
 			pos = 1,
 			offset_max = i * 3,
 			offset_random = 0,
+			offset = 0,
+			active = false,
 			move = function(self)
-				local offset = self.offset_max
 				local offset_random = math.min(self.offset_random, self.offset_max)
 				if offset_random > 0 then
-					offset = offset - math.random(0, offset_random)
+					self.offset = self.offset_max - math.random(0, offset_random)
+				else
+					self.offset = self.offset_max
 				end
-				self.pos = get_offset_pos(offset)
+				self.pos = get_offset_pos(self.offset)
 			end
 		}
-		-- TODO: grid control over head position / random window
 		params:add{
 			type = 'number',
 			id = 'head_' .. i .. '_offset_max',
@@ -793,8 +796,8 @@ function enc(n, d)
 end
 
 local function draw_head_brackets(h)
-	local x1 = (mem_size - heads[h].offset_max - 1) * 4 + 1
-	local x2 = x1 + 3 + (math.min(heads[h].offset_max, heads[h].offset_random)) * 4
+	local x1 = (mem_size - heads[h].offset_max - 1) * 4 + 2
+	local x2 = x1 + 2 + (math.min(heads[h].offset_max, heads[h].offset_random)) * 4
 	screen.move(x2, 2)
 	screen.line(x2, 1)
 	screen.line(x1, 1)
@@ -829,18 +832,15 @@ function redraw()
 	screen.level(1)
 	for y = 4, 60 do
 		if y % 2 == 0 then
-			screen.level(1)
-		else
-			screen.level(0)
+			screen.level(2)
+			screen.pixel(x, y)
+			screen.fill()
 		end
-		screen.pixel(x, y)
-		screen.pixel(127, y)
-		screen.fill()
 	end
 
 	-- draw memory contents
 	for offset = 0, mem_size - 1 do
-		local x = (mem_size - offset - 1) * 4
+		local x = (mem_size - offset - 1) * 4 + 1
 		local pos = get_offset_pos(offset)
 		if offset > loop_length - 1 then
 			screen.level(1)
@@ -849,20 +849,19 @@ function redraw()
 		end
 		y_memory[pos] = 63 + key_scroll * 2 - snap(memory[pos])
 		screen.move(x, y_memory[pos])
-		screen.line_rel(4, 0)
+		screen.line_rel(3, 0)
 		screen.stroke()
 	end
 
 	-- draw output states
-	-- TODO: highlight based on output_selected
 	for o = 1, 4 do
 		if output_source[o] == output_source_head_1 or output_source[o] == output_source_head_2 or output_source[o] == output_source_head_3 or output_source[o] == output_source_head_4 then
 			local output_head = output_source[o]
-			local x = 128 - ((head - heads[output_head].pos + 1) % mem_size * 4)
+			local x = 129 - ((heads[output_head].offset + 1) % mem_size * 4)
 			local y_transposed = 63 + key_scroll * 2 - output_note[o]
 			local y_original = y_memory[heads[output_head].pos]
 			screen.move(x, y_transposed)
-			screen.line_rel(4, 0)
+			screen.line_rel(3, 0)
 			if output_selected[o] then
 				if o == output_to_edit or shift then
 					screen.level(blink_fast and 15 or 7)
@@ -875,14 +874,9 @@ function redraw()
 			end
 			screen.stroke()
 			-- draw a line connecting transposed output with original note
-			screen.level(2)
-			local drag_top = math.min(y_transposed + 1, y_original)
-			local drag_height = math.max(0, math.abs(y_transposed - y_original) - 2)
-			screen.move(x + 1, drag_top)
-			screen.line_rel(0, drag_height)
-			screen.stroke()
-			screen.move(x + 4, drag_top)
-			screen.line_rel(0, drag_height)
+			screen.level(1)
+			screen.move(x + 2, math.min(y_transposed + 1, y_original))
+			screen.line_rel(0, math.max(0, math.abs(y_transposed - y_original) - 2))
 			screen.stroke()
 		elseif output_source[o] == output_source_audio_in then
 			-- TODO
