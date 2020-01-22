@@ -24,6 +24,7 @@ local loop_length = mem_size
 local head = 1
 local heads = {}
 local n_heads = 4
+local offset_to_edit = 0
 
 local source
 local source_names = {
@@ -193,6 +194,7 @@ local function sample_pitch()
 	for i = 1, 4 do
 		heads[i]:move()
 	end
+	offset_to_edit = (offset_to_edit + 1) % loop_length
 	local grid_pitch = get_grid_id_note(last_key)
 	local loop_pitch = memory[get_offset_pos(loop_length)] -- feed back an un-snapped value
 	local pitch = loop_pitch
@@ -221,6 +223,7 @@ end
 local function rewind()
 	memory[get_offset_pos(loop_length)] = memory[head]
 	head = (head - 2) % mem_size + 1
+	offset_to_edit = (offset_to_edit - 1) % loop_length
 	for i = 1, 4 do
 		heads[i]:move()
 	end
@@ -269,26 +272,32 @@ local function grid_redraw()
 		end
 	end
 
-	if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
+	if grid_mode == grid_mode_play or grid_mode == grid_mode_mask or grid_mode == grid_mode_memory then
+		local offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 		for x = 5, 15 do
 			for y = 1, 8 do
 				-- keyboard
 				local n = get_grid_note(x, y)
 				local pitch = (n - 1) % 12 + 1
-				if output_note[1] == n then
-					g:led(x, y, 7)
-				elseif output_note[2] == n then
-					g:led(x, y, 7)
-				elseif output_note[3] == n then
-					g:led(x, y, 7)
-				elseif output_note[4] == n then
-					g:led(x, y, 7)
-				elseif mask[n] then
+				if mask[n] then
 					g:led(x, y, grid_mode == grid_mode_mask and 4 or 3)
 				elseif pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12 then
 					g:led(x, y, grid_mode == grid_mode_mask and 2 or 1)
 				else
 					g:led(x, y, 0)
+				end
+				if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
+					if output_note[1] == n then
+						g:led(x, y, 7)
+					elseif output_note[2] == n then
+						g:led(x, y, 7)
+					elseif output_note[3] == n then
+						g:led(x, y, 7)
+					elseif output_note[4] == n then
+						g:led(x, y, 7)
+					end
+				elseif grid_mode == grid_mode_memory and n == offset_to_edit_note then
+					g:led(x, y, blink_fast and 8 or 7)
 				end
 			end
 		end
@@ -329,7 +338,7 @@ local function grid_redraw()
 				end
 				for i = 1, 4 do
 					if n - 36 == transpositions[i] then
-						if output_selected[i] then
+						if grid_mode == grid_mode_transpose and output_selected[i] then
 							if blink_fast and (grid_shift or i == output_to_edit) then
 								level = 8
 							else
@@ -341,13 +350,6 @@ local function grid_redraw()
 					end
 				end
 				g:led(x, y, level)
-			end
-		end
-	else
-		for x = 5, 16 do
-			-- TODO: this also removes the scrollbar; ideally you wouldn't draw it in the first place
-			for y = 1, 8 do
-				g:led(x, y, 0)
 			end
 		end
 	end
@@ -509,7 +511,20 @@ local function grid_key(x, y, z)
 			end
 		end
 	elseif grid_mode == grid_mode_memory then
-		-- TODO
+		if x > 4 and x < 16 and z == 1 then
+			local note = get_grid_note(x, y)
+			memory[get_offset_pos(offset_to_edit)] = note
+			-- update outputs immediately, if appropriate
+			for h = 1, 4 do
+				if heads[h].offset == offset_to_edit then
+					for o = 1, 4 do
+						if output_source[o] == h then
+							update_output(o)
+						end
+					end
+				end
+			end
+		end
 	end
 	dirty = true
 end
@@ -705,6 +720,7 @@ function init()
 		default = mem_size,
 		action = function(value)
 			loop_length = value
+			offset_to_edit = math.min(loop_length, offset_to_edit)
 			dirty = true
 		end
 	}
@@ -779,24 +795,60 @@ function init()
 	dirty = true
 end
 
+local function key_shift_clock(n)
+	if n == 2 then
+		rewind()
+	elseif n == 3 then
+		sample_pitch()
+	end
+end
+
+local function key_select_head(n)
+	-- TODO: select heads based on offsets (i.e. visually) instead of by index
+	if n == 2 then
+		head_selected = head_selected % 4 + 1
+		dirty = true
+	elseif n == 3 then
+		head_selected = (head_selected - 2) % 4 + 1
+		dirty = true
+	end
+end
+
+local function key_select_pos(n)
+	if n == 2 then
+		offset_to_edit = (offset_to_edit + 1) % loop_length
+	elseif n == 3 then
+		offset_to_edit = (offset_to_edit - 1) % loop_length
+	end
+end
+
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
 	elseif z == 1 then
-		if key_shift then
-			if n == 2 then
-				rewind()
-			elseif n == 3 then
-				sample_pitch()
+		if grid_mode == grid_mode_play then
+			if key_shift then
+				key_select_head(n)
+			else
+				key_shift_clock(n)
 			end
-		else
-			-- TODO: select heads based on offsets (i.e. visually) instead of by index
-			if n == 2 then
-				head_selected = head_selected % 4 + 1
-				dirty = true
-			elseif n == 3 then
-				head_selected = (head_selected - 2) % 4 + 1
-				dirty = true
+		elseif grid_mode == grid_mode_mask then
+			if key_shift then
+				key_shift_clock(n)
+			else
+				key_select_head(n)
+			end
+		elseif grid_mode == grid_mode_transpose then
+			if key_shift then
+				key_shift_clock(n)
+			else
+				key_select_head(n)
+			end
+		elseif grid_mode == grid_mode_memory then
+			if key_shift then
+				key_shift_clock(n)
+			else
+				key_select_pos(n)
 			end
 		end
 	end
@@ -862,7 +914,9 @@ function redraw()
 	for offset = 0, mem_size - 1 do
 		local x = (mem_size - offset - 1) * 4 + 1
 		local pos = get_offset_pos(offset)
-		if offset > loop_length - 1 then
+		if grid_mode == grid_mode_memory and offset == offset_to_edit then
+			screen.level(blink_fast and 15 or 7)
+		elseif offset > loop_length - 1 then
 			screen.level(1)
 		else
 			screen.level(2)
@@ -892,7 +946,7 @@ function redraw()
 	for o = 1, 4 do
 		local y_transposed = 63 + key_scroll * 2 - output_note[o]
 		local level = 7
-		if output_selected[o] then
+		if grid_mode == grid_mode_transpose and output_selected[o] then
 			if o == output_to_edit or grid_shift then
 				level = blink_fast and 15 or 7
 			else
@@ -904,6 +958,9 @@ function redraw()
 			local output_head = output_source[o]
 			local x = 129 - ((heads[output_head].offset + 1) % mem_size * 4)
 			local y_original = y_memory[heads[output_head].pos]
+			if grid_mode == grid_mode_memory and heads[output_head].offset == offset_to_edit then
+				level = blink_fast and 15 or 7
+			end
 			screen.level(level)
 			screen.move(x, y_transposed)
 			screen.line_rel(3, 0)
