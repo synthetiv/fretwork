@@ -27,6 +27,7 @@ local head = 1
 local heads = {}
 local n_heads = 4
 local offset_to_edit = 0
+local offset_to_edit_note = 0
 
 local source
 local source_names = {
@@ -83,7 +84,6 @@ local grid_mode_memory = 4
 local grid_mode = grid_mode_play
 
 local output_selector = grid_multi_select.new(5, 3, 4)
-output_selector:reset(true) -- TODO: move to init()?
 
 local head_selected = 1
 
@@ -181,6 +181,7 @@ local function sample_pitch()
 		heads[i]:move()
 	end
 	offset_to_edit = (offset_to_edit + 1) % loop_length
+	offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)]) -- TODO: use a function for this
 	local grid_pitch = keyboard:get_last_note()
 	local loop_pitch = memory[get_offset_pos(loop_length)] -- feed back an un-snapped value
 	local pitch = loop_pitch
@@ -210,6 +211,7 @@ local function rewind()
 	memory[get_offset_pos(loop_length)] = memory[head]
 	head = (head - 2) % mem_size + 1
 	offset_to_edit = (offset_to_edit - 1) % loop_length
+	offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 	for i = 1, 4 do
 		heads[i]:move()
 	end
@@ -261,73 +263,83 @@ local function grid_redraw()
 		end
 	end
 
-	-- TODO: offload drawing to the Keyboard class; just pass in an array of notes and/or ids to highlight and at what level
-	-- -OR- create a keyboard:highlight_note() method (woah)
-	-- ^ not sure a highlight_note method could be implemented efficiently, unless all it did was write to an internal array of notes to highlight just like what you'd pass in in my first idea
-	if grid_mode == grid_mode_play or grid_mode == grid_mode_mask or grid_mode == grid_mode_memory then
-		local offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
-		for x = keyboard.x, keyboard.x2 do
-			for y = keyboard.y, keyboard.y2 do
-				-- keyboard
-				local n = keyboard:get_key_note(x, y)
-				local level = 0
-				if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
-					if grid_mode == grid_mode_play then
-						if keyboard.gate and keyboard:is_key_last(x, y) then
-							level = 15
-						end
-					elseif grid_mode == grid_mode_mask then
-						local pitch = (n - 1) % 12 + 1
-						if (pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12) then
-							level = 2
-						end
-					end
-					if output_note[1] == n or output_note[2] == n or output_note[3] == n or output_note[4] == n then
-						level = math.max(level, 10)
-					end
-				elseif grid_mode == grid_mode_memory then
-					-- TODO: draw trails / other notes in loop
-					if n == offset_to_edit_note then
-						-- TODO: maybe make this blinking a little more relaxed
-						level = blink_fast and 15 or 10
-					end
-				end
-				if mask[n] then
-					level = math.max(level, grid_mode == grid_mode_mask and 5 or 4)
-				end
-				g:led(x, y, level)
-			end
+	-- keyboard
+	keyboard:draw(g)
+	g:refresh()
+end
+
+local key_level_callbacks = {}
+
+key_level_callbacks[grid_mode_play] = function(x, y, n)
+	local level = 0
+	-- highlight mask
+	if mask[n] then
+		level = 4
+	end
+	-- highlight output notes
+	for o = 1, 4 do
+		if n == output_note[o] then
+			level = 10
 		end
-	elseif grid_mode == grid_mode_transpose then
-		local transpositions = {
-			params:get('output_1_transpose'),
-			params:get('output_2_transpose'),
-			params:get('output_3_transpose'),
-			params:get('output_4_transpose')
-		}
-		-- transposition keyboard
-		for x = keyboard.x, keyboard.x2 do
-			for y = keyboard.y, keyboard.y2 do
-				local n = keyboard:get_key_note(x, y)
-				local level = 0
-				-- highlight octaves
-				if n % 12 == 0 then
-					level = 2
-				end
-				for i = 1, 4 do
-					if n - 36 == transpositions[i] then
-						if grid_mode == grid_mode_transpose and output_selector:is_selected(i) then
-							level = math.max(level, 10)
-						else
-							level = math.max(level, 5)
-						end
-					end
-				end
-				g:led(x, y, level)
+	end
+	-- highlight current note
+	if keyboard.gate and keyboard:is_key_last(x, y) then
+		level = 15
+	end
+	return level
+end
+
+key_level_callbacks[grid_mode_mask] = function(x, y, n)
+	local level = 0
+	-- highlight white keys
+	if keyboard:is_white_key(n) then
+		level = 2
+	end
+	-- highlight mask
+	if mask[n] then
+		level = 5
+	end
+	-- highlight output notes
+	for o = 1, 4 do
+		if n == output_note[o] then
+			level = 10
+		end
+	end
+	return level
+end
+
+key_level_callbacks[grid_mode_transpose] = function(x, y, n)
+	local level = 0
+	-- highlight octaves
+	if n % 12 == 0 then
+		level = 2
+	end
+	-- highlight transposition settings
+	for i = 1, 4 do
+		if n - 36 == params:get('output_' .. i .. '_transpose') then
+			if grid_mode == grid_mode_transpose and output_selector:is_selected(i) then
+				level = 10
+			else
+				level = 5
 			end
 		end
 	end
-	g:refresh()
+	return level
+end
+
+key_level_callbacks[grid_mode_memory] = function(x, y, n)
+	local level = 0
+	-- highlight mask
+	if mask[n] then
+		level = 4
+	end
+	-- TODO: draw trails / other notes in loop
+	-- highlight the note we're editing
+	if n == offset_to_edit_note then
+		-- TODO: maybe make this blinking a little more relaxed
+		level = blink_fast and 15 or 10
+	end
+	return level
 end
 
 local function grid_key(x, y, z)
@@ -374,6 +386,7 @@ local function grid_key(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
 				memory[get_offset_pos(offset_to_edit)] = note
+				offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 				-- update outputs immediately, if appropriate
 				for h = 1, 4 do
 					if heads[h].offset == offset_to_edit then
@@ -411,6 +424,8 @@ local function grid_key(x, y, z)
 		elseif x == 4 then
 			grid_mode = grid_mode_memory
 		end
+		-- set the grid drawing routine based on new mode
+		keyboard.get_key_level = key_level_callbacks[grid_mode]
 		-- clear held note stack
 		-- this prevents held notes from getting stuck when switching to a mode that doesn't call
 		-- keyboard:note()
@@ -470,6 +485,11 @@ end
 
 function init()
 	
+	-- initialize grid controls
+	grid_mode = grid_mode_play
+	keyboard.get_key_level = key_level_callbacks[grid_mode]
+	output_selector:reset(true)
+
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
 		-- TODO: stop blinking after n seconds of inactivity?
@@ -632,6 +652,7 @@ function init()
 		action = function(value)
 			loop_length = value
 			offset_to_edit = math.min(loop_length, offset_to_edit)
+			offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 			dirty = true
 		end
 	}
@@ -728,8 +749,10 @@ end
 local function key_select_pos(n)
 	if n == 2 then
 		offset_to_edit = (offset_to_edit + 1) % loop_length
+		offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 	elseif n == 3 then
 		offset_to_edit = (offset_to_edit - 1) % loop_length
+		offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 	end
 end
 

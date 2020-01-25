@@ -10,6 +10,10 @@ function Keyboard.new(x, y, width, height)
 	instance.held_keys = {}
 	instance.last_key = 0
 	instance.gate = false
+	-- this method can be redefined on the fly
+	instance.get_key_level = function(x, y, n)
+		return instance:is_white_key(n) and 2 or 0
+	end
 	setmetatable(instance, Keyboard)
 	return instance
 end
@@ -83,6 +87,20 @@ end
 
 function Keyboard:is_key_last(x, y)
 	return self.get_key_id(x, y) == self.last_key
+end
+
+function Keyboard:draw(g)
+	for x = self.x, self.x2 do
+		for y = self.y, self.y2 do
+			local n = self:get_key_note(x, y)
+			g:led(x, y, self.get_key_level(x, y, n))
+		end
+	end
+end
+
+function Keyboard:is_white_key(n)
+	local pitch = (n - 1) % 12 + 1
+	return (pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12)
 end
 
 return Keyboard
