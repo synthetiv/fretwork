@@ -3,7 +3,8 @@
 
 engine.name = 'Analyst'
 
-local grid_controls = include 'lib/grid_controls'
+local grid_keyboard = include 'lib/grid_keyboard'
+local grid_multi_select = include 'lib/grid_multi_select'
 local musicutil = require 'musicutil'
 
 local pitch_poll_l
@@ -81,7 +82,7 @@ local grid_mode_transpose = 3
 local grid_mode_memory = 4
 local grid_mode = grid_mode_play
 
-local output_selector = grid_controls.multi_select.new(5, 3, 4)
+local output_selector = grid_multi_select.new(5, 3, 4)
 output_selector:reset(true) -- TODO: move to init()?
 
 local head_selected = 1
@@ -91,7 +92,7 @@ local g = grid.connect()
 local grid_shift = false
 local grid_ctrl = false
 local scroll = 4
-local keyboard = grid_controls.keyboard.new(6, 1, 10, 8)
+local keyboard = grid_keyboard.new(6, 1, 10, 8)
 
 local blink_slow = false
 local blink_fast = false
@@ -387,9 +388,11 @@ local function grid_key(x, y, z)
 		end
 	elseif output_selector:should_handle_key(x, y) then
 		-- output select buttons
+		-- TODO: what should these do in modes other than transpose?
 		output_selector:key(x, y, z)
 	elseif x == 16 then
 		-- scroll
+		-- TODO: no more scroll; use octave buttons
 		if z == 1 then
 			if 9 - y < keyboard.scroll and keyboard.scroll > 1 then
 				keyboard.scroll = 9 - y
