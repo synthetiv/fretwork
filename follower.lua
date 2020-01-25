@@ -3,6 +3,7 @@
 
 engine.name = 'Analyst'
 
+local grid_controls = include 'lib/grid_controls'
 local musicutil = require 'musicutil'
 
 local pitch_poll_l
@@ -87,15 +88,11 @@ local output_to_edit = 1
 local head_selected = 1
 
 local g = grid.connect()
-local held_keys = {}
-local last_key = 0
 
 local grid_shift = false
 local grid_ctrl = false
 local scroll = 4
-
-local key_scroll = scroll
-local transpose_scroll = scroll
+local keyboard = grid_controls.keyboard.new(5, 1, 12, 8)
 
 local blink_slow = false
 local blink_fast = false
@@ -153,18 +150,7 @@ local function save_mask(m)
 	mask_dirty = false
 end
 
-local function get_grid_note(x, y)
-	return x - 4 + (7 + scroll - y) * 5
-end
-
-local function get_grid_id_note(id)
-	local x = id % 16
-	local y = math.floor(id / 16)
-	local note = get_grid_note(x, y)
-	-- print(string.format('get grid id note: %d (%d, %d) = %d', id, x, y, note))
-	return note
-end
-
+-- TODO: make this into a 'grid bank' control
 local function get_grid_mask(x, y)
 	return x + (y - 3) * 4
 end
@@ -175,7 +161,7 @@ local function update_output(out)
 	if output_source == output_source_audio_in then
 		output_note[out] = snap(quantize(pitch_in) + output_transpose[out])
 	elseif output_source == output_source_grid then
-		output_note[out] = snap(get_grid_id_note(last_key) + output_transpose[out])
+		output_note[out] = snap(keyboard:get_last_note() + output_transpose[out])
 	else
 		local output_head = output_source
 		output_note[out] = snap(memory[heads[output_head].pos] + output_transpose[out])
@@ -195,19 +181,19 @@ local function sample_pitch()
 		heads[i]:move()
 	end
 	offset_to_edit = (offset_to_edit + 1) % loop_length
-	local grid_pitch = get_grid_id_note(last_key)
+	local grid_pitch = keyboard:get_last_note()
 	local loop_pitch = memory[get_offset_pos(loop_length)] -- feed back an un-snapped value
 	local pitch = loop_pitch
 	if loop_probability <= math.random(1, 100) then
 		if source == source_crow then
 			pitch = crow_pitch_in
-		elseif #held_keys > 0 and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+		elseif keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 			pitch = grid_pitch
 		elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
 			pitch = pitch_in
 		elseif source == source_grid_crow then
 			pitch = crow_pitch_in
-		elseif #held_keys > 0 and source == source_pitch_grid then
+		elseif keyboard.gate and source == source_pitch_grid then
 			pitch = grid_pitch
 		end
 	end
@@ -265,19 +251,22 @@ local function grid_redraw()
 	
 	-- scrollbar
 	for y = 1, 8 do
-		if 9 - y == scroll or 8 - y == scroll then
+		if 9 - y == keyboard.scroll or 8 - y == keyboard.scroll then
 			g:led(16, y, 4)
 		else
 			g:led(16, y, 2)
 		end
 	end
 
+	-- TODO: offload drawing to the Keyboard class; just pass in an array of notes and/or ids to highlight and at what level
+	-- -OR- create a keyboard:highlight_note() method (woah)
+	-- ^ not sure a highlight_note method could be implemented efficiently, unless all it did was write to an internal array of notes to highlight just like what you'd pass in in my first idea
 	if grid_mode == grid_mode_play or grid_mode == grid_mode_mask or grid_mode == grid_mode_memory then
 		local offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
 		for x = 5, 15 do
 			for y = 1, 8 do
 				-- keyboard
-				local n = get_grid_note(x, y)
+				local n = keyboard:get_key_note(x, y)
 				local pitch = (n - 1) % 12 + 1
 				if mask[n] then
 					g:led(x, y, grid_mode == grid_mode_mask and 4 or 3)
@@ -329,7 +318,7 @@ local function grid_redraw()
 		-- transposition keyboard
 		for x = 6, 15 do
 			for y = 1, 8 do
-				local n = get_grid_note(x, y)
+				local n = keyboard:get_key_note(x, y)
 				local level = 0
 				if n == 36 then
 					level = 3
@@ -361,26 +350,18 @@ local function grid_key(x, y, z)
 		if y == 1 and z == 1 then
 			-- grid mode buttons
 			if x == 1 then
-				if grid_mode == grid_mode_transpose then
-					transpose_scroll = scroll
-					scroll = key_scroll
-				end
 				grid_mode = grid_mode_play
 			elseif x == 2 then
-				if grid_mode == grid_mode_transpose then
-					transpose_scroll = scroll
-					scroll = key_scroll
-				end
 				grid_mode = grid_mode_mask
 			elseif x == 3 then
-				if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
-					key_scroll = scroll
-					scroll = transpose_scroll
-				end
 				grid_mode = grid_mode_transpose
 			elseif x == 4 then
 				grid_mode = grid_mode_memory
 			end
+			-- clear held note stack
+			-- this prevents held notes from getting stuck when switching to a mode that doesn't call
+			-- keyboard:note()
+			keyboard:reset()
 		elseif y > 2 and y < 7 and z == 1 then
 			-- recall buttons
 			local m = get_grid_mask(x, y)
@@ -403,24 +384,15 @@ local function grid_key(x, y, z)
 		end
 	elseif x == 16 then
 		if z == 1 then
-			if 9 - y < scroll and scroll > 1 then
-				scroll = 9 - y
-			elseif 8 - y > scroll and scroll < 7 then
-				scroll = 8 - y
-			end
-			if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
-				key_scroll = scroll
+			if 9 - y < keyboard.scroll and keyboard.scroll > 1 then
+				keyboard.scroll = 9 - y
+			elseif 8 - y > keyboard.scroll and keyboard.scroll < 7 then
+				keyboard.scroll = 8 - y
 			end
 		end
 	elseif grid_mode == grid_mode_play then
-		local key_id = x + y * 16
-		if z == 1 then
-			local n = get_grid_note(x, y)
-			-- print(string.format("pitch %d (%d)", n, pitch))
-			table.insert(held_keys, key_id)
-			-- tab.print(held_keys)
-			last_key = key_id
-			-- print('last key: ' .. last_key)
+		keyboard:note(x, y, z)
+		if keyboard.gate then
 			if clock_mode ~= clock_mode_trig then
 				sample_pitch()
 			end
@@ -429,35 +401,10 @@ local function grid_key(x, y, z)
 					update_output(out)
 				end
 			end
-		else
-			-- TODO: this assumes there's no way a key ID could end up in held_keys twice; is that safe?
-			if held_keys[#held_keys] == key_id then
-				table.remove(held_keys)
-				-- tab.print(held_keys)
-				if #held_keys > 0 then
-					last_key = held_keys[#held_keys]
-					-- print('last key: ' .. last_key)
-					if clock_mode ~= clock_mode_trig then
-						sample_pitch()
-					end
-					for out = 1, 4 do
-						if output_source[out] == output_source_grid and output_stream[out] then
-							update_output(out)
-						end
-					end
-				end
-			else
-				for i = 1, #held_keys do
-					if held_keys[i] == key_id then
-						table.remove(held_keys, i)
-					end
-					-- tab.print(held_keys)
-				end
-			end
 		end
 	elseif grid_mode == grid_mode_mask then
 		if z == 1 then
-			local n = get_grid_note(x, y)
+			local n = keyboard:get_key_note(x, y)
 			local enable = not mask[n]
 			local pitch = (n - 1 ) % 12 + 1
 			for octave = 0, 7 do
@@ -494,7 +441,7 @@ local function grid_key(x, y, z)
 				any_selected = any_selected or output_selected[i]
 			end
 			if any_selected then
-				local transpose = math.min(72, math.max(0, get_grid_note(x, y))) - 36
+				local transpose = math.min(72, math.max(0, keyboard:get_key_note(x, y))) - 36
 				if grid_shift then
 					for o = 1, 4 do
 						if output_selected[o] then
@@ -512,7 +459,7 @@ local function grid_key(x, y, z)
 		end
 	elseif grid_mode == grid_mode_memory then
 		if x > 4 and x < 16 and z == 1 then
-			local note = get_grid_note(x, y)
+			local note = keyboard:get_key_note(x, y)
 			memory[get_offset_pos(offset_to_edit)] = note
 			-- update outputs immediately, if appropriate
 			for h = 1, 4 do
@@ -921,7 +868,7 @@ function redraw()
 		else
 			screen.level(2)
 		end
-		y_memory[pos] = 63 + key_scroll * 2 - snap(memory[pos])
+		y_memory[pos] = 63 + keyboard.scroll * 2 - snap(memory[pos])
 		screen.move(x, y_memory[pos])
 		screen.line_rel(3, 0)
 		screen.stroke()
@@ -931,9 +878,9 @@ function redraw()
 	for o = 1, 4 do
 		local y = -1
 		if output_source[o] == output_source_grid then
-			y = 63 + key_scroll * 2 - snap(get_grid_id_note(last_key))
+			y = 63 + keyboard.scroll * 2 - snap(keyboard:get_last_note())
 		elseif pitch_in_detected and (output_source[o] == output_source_audio_in) then
-			y = 63 + key_scroll * 2 - snap(quantize(pitch_in))
+			y = 63 + keyboard.scroll * 2 - snap(quantize(pitch_in))
 		end
 		if y > -1 then
 			screen.pixel(127, y - 1)
@@ -944,7 +891,7 @@ function redraw()
 
 	-- draw output states
 	for o = 1, 4 do
-		local y_transposed = 63 + key_scroll * 2 - output_note[o]
+		local y_transposed = 63 + keyboard.scroll * 2 - output_note[o]
 		local level = 7
 		if grid_mode == grid_mode_transpose and output_selected[o] then
 			if o == output_to_edit or grid_shift then
