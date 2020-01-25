@@ -83,7 +83,6 @@ local grid_mode = grid_mode_play
 
 local output_selected = { true, true, true, true }
 local output_button_held = { false, false, false, false }
-local output_to_edit = 1
 
 local head_selected = 1
 
@@ -305,13 +304,9 @@ local function grid_redraw()
 		end
 		-- output buttons
 		for i = 1, 4 do
-			local level = 1
+			local level = 5
 			if output_selected[i] then
-				if blink_fast and (grid_shift or i == output_to_edit) then
-					level = 5
-				else
-					level = 4
-				end
+				level = 10
 			end
 			g:led(5, i + 2, level)
 		end
@@ -320,21 +315,16 @@ local function grid_redraw()
 			for y = 1, 8 do
 				local n = keyboard:get_key_note(x, y)
 				local level = 0
-				if n == 36 then
-					level = 3
-				elseif n % 12 == 0 then
+				-- highlight octaves
+				if n % 12 == 0 then
 					level = 2
 				end
 				for i = 1, 4 do
 					if n - 36 == transpositions[i] then
 						if grid_mode == grid_mode_transpose and output_selected[i] then
-							if blink_fast and (grid_shift or i == output_to_edit) then
-								level = 8
-							else
-								level = math.max(level, 7)
-							end
+							level = math.max(level, 10)
 						else
-							level = math.max(level, 4)
+							level = math.max(level, 5)
 						end
 					end
 				end
@@ -419,8 +409,8 @@ local function grid_key(x, y, z)
 		end
 	elseif grid_mode == grid_mode_transpose then
 		if x == 5 and y > 2 and y < 7 then
-			-- TODO: make it easy to select all
 			-- TODO: move these output buttons to the left so they can apply to other grid modes
+			-- TODO: would it be better to select multiples using shift?
 			local output = y - 2
 			local other_held = false
 			for i = 1, 4 do
@@ -431,7 +421,6 @@ local function grid_key(x, y, z)
 			end
 			if z == 1 then
 				output_selected[output] = true
-				output_to_edit = output
 			end
 			output_button_held[output] = z == 1
 		elseif x > 5 and x < 16 and z == 1 then
@@ -442,18 +431,10 @@ local function grid_key(x, y, z)
 			end
 			if any_selected then
 				local transpose = math.min(72, math.max(0, keyboard:get_key_note(x, y))) - 36
-				if grid_shift then
-					for o = 1, 4 do
-						if output_selected[o] then
-							params:set('output_' .. o .. '_transpose', transpose)
-						end
+				for o = 1, 4 do
+					if output_selected[o] then
+						params:set('output_' .. o .. '_transpose', transpose)
 					end
-				else
-					params:set('output_' .. output_to_edit .. '_transpose', transpose)
-				end
-				output_to_edit = output_to_edit % 4 + 1
-				while not output_selected[output_to_edit] do
-					output_to_edit = output_to_edit % 4 + 1
 				end
 			end
 		end
@@ -893,12 +874,12 @@ function redraw()
 	for o = 1, 4 do
 		local y_transposed = 63 + keyboard.scroll * 2 - output_note[o]
 		local level = 7
+		-- in transpose mode, blink selected output(s)
 		if grid_mode == grid_mode_transpose and output_selected[o] then
-			if o == output_to_edit or grid_shift then
-				level = blink_fast and 15 or 7
+			if blink_fast then
+				level = 15
 			else
-				-- TODO: differentiate better between selected and non-selected outputs
-				level = 10
+				level = 7
 			end
 		end
 		if output_source[o] == output_source_head_1 or output_source[o] == output_source_head_2 or output_source[o] == output_source_head_3 or output_source[o] == output_source_head_4 then
@@ -914,9 +895,19 @@ function redraw()
 			screen.stroke()
 			-- draw a line connecting transposed output with original note
 			screen.level(1)
-			screen.move(x + 2, math.min(y_transposed + 1, y_original))
-			screen.line_rel(0, math.max(0, math.abs(y_transposed - y_original) - 2))
-			screen.stroke()
+			local transpose_distance = y_transposed - y_original
+			if transpose_distance < -2 or transpose_distance > 2 then
+				local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
+				screen.pixel(x + 1, transpose_point_y)
+				screen.fill()
+				local transpose_line_length = math.abs(y_transposed - y_original) - 4
+				if transpose_line_length > 0 then
+					local transpose_line_top = math.min(y_transposed + 3, y_original)
+					screen.move(x + 2, transpose_line_top)
+					screen.line_rel(0, transpose_line_length)
+					screen.stroke()
+				end
+			end
 		elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
 			-- draw output pitch
 			screen.pixel(127, y_transposed - 1)
