@@ -16,6 +16,10 @@ function Control.get_key_id_coords(id)
 	return x, y
 end
 
+function Control.get_key_id(x, y)
+	return x + y * 16
+end
+
 function Control:should_handle_key(x, y)
 	return x >= self.x and x < self.x + self.width and y >= self.y and y < self.y + self.height
 end
@@ -63,7 +67,7 @@ function Keyboard:note(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return
 	end
-	local key_id = x + y * 16
+	local key_id = self.get_key_id(x, y)
 	if z == 1 then
 		local n = self:get_key_note(x, y)
 		table.insert(self.held_keys, key_id)
@@ -89,6 +93,20 @@ end
 function Keyboard:reset()
 	self.held_keys = {}
 	self:set_gate()
+end
+
+function Keyboard:is_key_held(x, y)
+	local key_id = self.get_key_id(x, y)
+	for i = 1, #self.held_keys do
+		if self.held_keys[i] == key_id then
+			return true
+		end
+	end
+	return false
+end
+
+function Keyboard:is_key_last(x, y)
+	return self.get_key_id(x, y) == self.last_key
 end
 
 return {

@@ -223,10 +223,10 @@ end
 local function grid_redraw()
 
 	-- mode buttons
-	g:led(1, 1, grid_mode == grid_mode_play and 4 or 1)
-	g:led(2, 1, grid_mode == grid_mode_mask and 4 or 1)
-	g:led(3, 1, grid_mode == grid_mode_transpose and 4 or 1)
-	g:led(4, 1, grid_mode == grid_mode_memory and 4 or 1)
+	g:led(1, 1, grid_mode == grid_mode_play and 7 or 2)
+	g:led(2, 1, grid_mode == grid_mode_mask and 7 or 2)
+	g:led(3, 1, grid_mode == grid_mode_transpose and 7 or 2)
+	g:led(4, 1, grid_mode == grid_mode_memory and 7 or 2)
 
 	-- recall buttons
 	for x = 1, 4 do
@@ -234,9 +234,9 @@ local function grid_redraw()
 			local m = get_grid_mask(x, y)
 			if active_mask == m then
 				if mask_dirty and blink_slow then
-					g:led(x, y, 5)
+					g:led(x, y, 8)
 				else
-					g:led(x, y, 4)
+					g:led(x, y, 7)
 				end
 			else
 				g:led(x, y, 2)
@@ -245,13 +245,13 @@ local function grid_redraw()
 	end
 
 	-- shift + ctrl
-	g:led(1, 7, grid_shift and 4 or 2)
-	g:led(1, 8, grid_ctrl and 4 or 2)
+	g:led(1, 7, grid_shift and 15 or 2)
+	g:led(1, 8, grid_ctrl and 15 or 2)
 	
 	-- scrollbar
 	for y = 1, 8 do
 		if 9 - y == keyboard.scroll or 8 - y == keyboard.scroll then
-			g:led(16, y, 4)
+			g:led(16, y, 7)
 		else
 			g:led(16, y, 2)
 		end
@@ -266,27 +266,30 @@ local function grid_redraw()
 			for y = 1, 8 do
 				-- keyboard
 				local n = keyboard:get_key_note(x, y)
-				local pitch = (n - 1) % 12 + 1
-				if mask[n] then
-					g:led(x, y, grid_mode == grid_mode_mask and 4 or 3)
-				elseif pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12 then
-					g:led(x, y, grid_mode == grid_mode_mask and 2 or 1)
-				else
-					g:led(x, y, 0)
-				end
+				local level = 0
 				if grid_mode == grid_mode_play or grid_mode == grid_mode_mask then
-					if output_note[1] == n then
-						g:led(x, y, 7)
-					elseif output_note[2] == n then
-						g:led(x, y, 7)
-					elseif output_note[3] == n then
-						g:led(x, y, 7)
-					elseif output_note[4] == n then
-						g:led(x, y, 7)
+					if grid_mode == grid_mode_play then
+						if keyboard.gate and keyboard:is_key_last(x, y) then
+							level = 15
+						end
+					elseif grid_mode == grid_mode_mask then
+						local pitch = (n - 1) % 12 + 1
+						if (pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12) then
+							level = 2
+						end
 					end
-				elseif grid_mode == grid_mode_memory and n == offset_to_edit_note then
-					g:led(x, y, blink_fast and 8 or 7)
+					if output_note[1] == n or output_note[2] == n or output_note[3] == n or output_note[4] == n then
+						level = math.max(level, 10)
+					end
+				elseif grid_mode == grid_mode_memory then
+					if n == offset_to_edit_note then
+						level = blink_fast and 15 or 10
+					end
 				end
+				if mask[n] then
+					level = math.max(level, grid_mode == grid_mode_mask and 5 or 4)
+				end
+				g:led(x, y, level)
 			end
 		end
 	elseif grid_mode == grid_mode_transpose then
