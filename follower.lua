@@ -81,8 +81,8 @@ local grid_mode_transpose = 3
 local grid_mode_memory = 4
 local grid_mode = grid_mode_play
 
-local output_selected = { true, true, true, true }
-local output_button_held = { false, false, false, false }
+local output_selector = grid_controls.multi_select.new(5, 3, 4)
+output_selector:reset(true) -- TODO: move to init()?
 
 local head_selected = 1
 
@@ -91,7 +91,7 @@ local g = grid.connect()
 local grid_shift = false
 local grid_ctrl = false
 local scroll = 4
-local keyboard = grid_controls.keyboard.new(5, 1, 12, 8)
+local keyboard = grid_controls.keyboard.new(6, 1, 10, 8)
 
 local blink_slow = false
 local blink_fast = false
@@ -247,7 +247,10 @@ local function grid_redraw()
 	-- shift + ctrl
 	g:led(1, 7, grid_shift and 15 or 2)
 	g:led(1, 8, grid_ctrl and 15 or 2)
-	
+
+	-- output buttons
+	output_selector:draw(g)
+
 	-- scrollbar
 	for y = 1, 8 do
 		if 9 - y == keyboard.scroll or 8 - y == keyboard.scroll then
@@ -262,8 +265,8 @@ local function grid_redraw()
 	-- ^ not sure a highlight_note method could be implemented efficiently, unless all it did was write to an internal array of notes to highlight just like what you'd pass in in my first idea
 	if grid_mode == grid_mode_play or grid_mode == grid_mode_mask or grid_mode == grid_mode_memory then
 		local offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
-		for x = 5, 15 do
-			for y = 1, 8 do
+		for x = keyboard.x, keyboard.x2 do
+			for y = keyboard.y, keyboard.y2 do
 				-- keyboard
 				local n = keyboard:get_key_note(x, y)
 				local level = 0
@@ -282,7 +285,9 @@ local function grid_redraw()
 						level = math.max(level, 10)
 					end
 				elseif grid_mode == grid_mode_memory then
+					-- TODO: draw trails / other notes in loop
 					if n == offset_to_edit_note then
+						-- TODO: maybe make this blinking a little more relaxed
 						level = blink_fast and 15 or 10
 					end
 				end
@@ -299,23 +304,9 @@ local function grid_redraw()
 			params:get('output_3_transpose'),
 			params:get('output_4_transpose')
 		}
-		-- clear
-		for x = 5, 15 do
-			for y = 1, 8 do
-				g:led(x, y, 0)
-			end
-		end
-		-- output buttons
-		for i = 1, 4 do
-			local level = 5
-			if output_selected[i] then
-				level = 10
-			end
-			g:led(5, i + 2, level)
-		end
 		-- transposition keyboard
-		for x = 6, 15 do
-			for y = 1, 8 do
+		for x = keyboard.x, keyboard.x2 do
+			for y = keyboard.y, keyboard.y2 do
 				local n = keyboard:get_key_note(x, y)
 				local level = 0
 				-- highlight octaves
@@ -324,7 +315,7 @@ local function grid_redraw()
 				end
 				for i = 1, 4 do
 					if n - 36 == transpositions[i] then
-						if grid_mode == grid_mode_transpose and output_selected[i] then
+						if grid_mode == grid_mode_transpose and output_selector:is_selected(i) then
 							level = math.max(level, 10)
 						else
 							level = math.max(level, 5)
@@ -339,43 +330,66 @@ local function grid_redraw()
 end
 
 local function grid_key(x, y, z)
-	if x < 5 then
-		if y == 1 and z == 1 then
-			-- grid mode buttons
-			if x == 1 then
-				grid_mode = grid_mode_play
-			elseif x == 2 then
-				grid_mode = grid_mode_mask
-			elseif x == 3 then
-				grid_mode = grid_mode_transpose
-			elseif x == 4 then
-				grid_mode = grid_mode_memory
-			end
-			-- clear held note stack
-			-- this prevents held notes from getting stuck when switching to a mode that doesn't call
-			-- keyboard:note()
-			keyboard:reset()
-		elseif y > 2 and y < 7 and z == 1 then
-			-- recall buttons
-			local m = get_grid_mask(x, y)
-			if grid_shift then
-				save_mask(m)
-			else
-				recall_mask(m)
-			end
-			if grid_ctrl then
+	if keyboard:should_handle_key(x, y) then
+		if grid_mode == grid_mode_play then
+			keyboard:note(x, y, z)
+			if keyboard.gate then
+				if clock_mode ~= clock_mode_trig then
+					sample_pitch()
+				end
 				for out = 1, 4 do
-					update_output(out)
+					if output_source[out] == output_source_grid and output_stream[out] then
+						update_output(out)
+					end
 				end
 			end
-		elseif y == 7 and x == 1 then
-			grid_shift = z == 1
-		elseif y == 8 then
-			if x == 1 then
-				grid_ctrl = z == 1
+		elseif grid_mode == grid_mode_mask then
+			if z == 1 then
+				local n = keyboard:get_key_note(x, y)
+				local enable = not mask[n]
+				local pitch = (n - 1 ) % 12 + 1
+				for octave = 0, 7 do
+					mask[pitch + octave * 12] = enable
+				end
+				mask_dirty = true
+				if grid_ctrl then
+					for out = 1, 4 do
+						update_output(out)
+					end
+				end
+			end
+		elseif grid_mode == grid_mode_transpose then
+			keyboard:note(x, y, z)
+			if keyboard.gate then
+				local transpose = math.min(72, math.max(0, keyboard:get_last_note())) - 36
+				for o = 1, 4 do
+					if output_selector:is_selected(o) then
+						params:set('output_' .. o .. '_transpose', transpose)
+					end
+				end
+			end
+		elseif grid_mode == grid_mode_memory then
+			keyboard:note(x, y, z)
+			if keyboard.gate then
+				local note = keyboard:get_last_note()
+				memory[get_offset_pos(offset_to_edit)] = note
+				-- update outputs immediately, if appropriate
+				for h = 1, 4 do
+					if heads[h].offset == offset_to_edit then
+						for o = 1, 4 do
+							if output_source[o] == h then
+								update_output(o)
+							end
+						end
+					end
+				end
 			end
 		end
+	elseif output_selector:should_handle_key(x, y) then
+		-- output select buttons
+		output_selector:key(x, y, z)
 	elseif x == 16 then
+		-- scroll
 		if z == 1 then
 			if 9 - y < keyboard.scroll and keyboard.scroll > 1 then
 				keyboard.scroll = 9 - y
@@ -383,78 +397,41 @@ local function grid_key(x, y, z)
 				keyboard.scroll = 8 - y
 			end
 		end
-	elseif grid_mode == grid_mode_play then
-		keyboard:note(x, y, z)
-		if keyboard.gate then
-			if clock_mode ~= clock_mode_trig then
-				sample_pitch()
-			end
+	elseif x < 5 and y == 1 and z == 1 then
+		-- grid mode buttons
+		if x == 1 then
+			grid_mode = grid_mode_play
+		elseif x == 2 then
+			grid_mode = grid_mode_mask
+		elseif x == 3 then
+			grid_mode = grid_mode_transpose
+		elseif x == 4 then
+			grid_mode = grid_mode_memory
+		end
+		-- clear held note stack
+		-- this prevents held notes from getting stuck when switching to a mode that doesn't call
+		-- keyboard:note()
+		keyboard:reset()
+	elseif x < 5 and y > 2 and y < 7 and z == 1 then
+		-- recall buttons
+		local m = get_grid_mask(x, y)
+		if grid_shift then
+			save_mask(m)
+		else
+			recall_mask(m)
+		end
+		if grid_ctrl then
 			for out = 1, 4 do
-				if output_source[out] == output_source_grid and output_stream[out] then
-					update_output(out)
-				end
+				update_output(out)
 			end
 		end
-	elseif grid_mode == grid_mode_mask then
-		if z == 1 then
-			local n = keyboard:get_key_note(x, y)
-			local enable = not mask[n]
-			local pitch = (n - 1 ) % 12 + 1
-			for octave = 0, 7 do
-				mask[pitch + octave * 12] = enable
-			end
-			mask_dirty = true
-			if grid_ctrl then
-				for out = 1, 4 do
-					update_output(out)
-				end
-			end
-		end
-	elseif grid_mode == grid_mode_transpose then
-		if x == 5 and y > 2 and y < 7 then
-			-- TODO: move these output buttons to the left so they can apply to other grid modes
-			-- TODO: would it be better to select multiples using shift?
-			local output = y - 2
-			local other_held = false
-			for i = 1, 4 do
-				other_held = other_held or output_button_held[i]
-			end
-			if not other_held then
-				output_selected = { false, false, false, false }
-			end
-			if z == 1 then
-				output_selected[output] = true
-			end
-			output_button_held[output] = z == 1
-		elseif x > 5 and x < 16 and z == 1 then
-			-- TODO: track held keys so you can legato lines, like play mode
-			local any_selected = false
-			for i = 1, 4 do
-				any_selected = any_selected or output_selected[i]
-			end
-			if any_selected then
-				local transpose = math.min(72, math.max(0, keyboard:get_key_note(x, y))) - 36
-				for o = 1, 4 do
-					if output_selected[o] then
-						params:set('output_' .. o .. '_transpose', transpose)
-					end
-				end
-			end
-		end
-	elseif grid_mode == grid_mode_memory then
-		if x > 4 and x < 16 and z == 1 then
-			local note = keyboard:get_key_note(x, y)
-			memory[get_offset_pos(offset_to_edit)] = note
-			-- update outputs immediately, if appropriate
-			for h = 1, 4 do
-				if heads[h].offset == offset_to_edit then
-					for o = 1, 4 do
-						if output_source[o] == h then
-							update_output(o)
-						end
-					end
-				end
-			end
+	elseif x == 1 and y == 7 then
+		-- shift key
+		grid_shift = z == 1
+	elseif x == 1 and y == 8 then
+		-- ctrl key
+		if x == 1 then
+			grid_ctrl = z == 1
 		end
 	end
 	dirty = true
@@ -878,7 +855,7 @@ function redraw()
 		local y_transposed = 63 + keyboard.scroll * 2 - output_note[o]
 		local level = 7
 		-- in transpose mode, blink selected output(s)
-		if grid_mode == grid_mode_transpose and output_selected[o] then
+		if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
 			if blink_fast then
 				level = 15
 			else
