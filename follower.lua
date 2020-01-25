@@ -317,9 +317,9 @@ key_level_callbacks[grid_mode_transpose] = function(x, y, n)
 	-- highlight transposition settings
 	for i = 1, 4 do
 		if n - 36 == params:get('output_' .. i .. '_transpose') then
-			if grid_mode == grid_mode_transpose and output_selector:is_selected(i) then
+			if output_selector:is_selected(i) then
 				level = 10
-			else
+			elseif level < 5 then
 				level = 5
 			end
 		end
