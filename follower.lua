@@ -20,6 +20,7 @@ local mask_dirty = false
 local max_pitch = 96
 
 -- TODO: save/recall memory/loop contents like masks
+-- transposition settings too
 local memory = {}
 local mem_size = 32
 local loop_length = mem_size
