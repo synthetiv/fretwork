@@ -24,7 +24,7 @@ function Control:should_handle_key(x, y)
 	return x >= self.x and x < self.x + self.width and y >= self.y and y < self.y + self.height
 end
 
-local Keyboard = {table.unpack(Control)}
+local Keyboard = {}
 setmetatable(Keyboard, Control)
 Keyboard.__index = Keyboard
 
