@@ -4,22 +4,24 @@ ReadHead.__index = ReadHead
 ReadHead.new = function(offset, parent)
 	local instance = {}
 	setmetatable(instance, ReadHead)
+	instance.offset_base = offset
 	instance.offset = offset
-	instance.offset_min = offset
-	instance.offset_random = 0
+	instance.randomness = 0
+	instance.offset_offset = 0
 	instance.parent = parent
-	instance.pos = 1
-	instance.active = false
+	instance.pos = 0
 	return instance
 end
 
-function ReadHead:move()
-	local offset_random = math.min(self.offset_random, self.offset_min * -1)
-	if offset_random > 0 then
-		self.offset = self.offset_min + math.random(0, offset_random)
-	else
-		self.offset = self.offset_min
+function ReadHead:update(randomize)
+	if randomize then
+		if self.randomness > 0 then
+			self.offset_offset = math.random(0, self.randomness)
+		else
+			self.offset_offset = 0
+		end
 	end
+	self.offset = self.offset_base + self.offset_offset
 	self.pos = self.parent:get_loop_pos(self.offset)
 end
 
@@ -33,16 +35,17 @@ ShiftRegister.new = function(length)
 	local instance = {}
 	setmetatable(instance, ShiftRegister)
 	instance.cursor = 0
-	instance:set_length(length)
 	instance.head = 1
 	instance.buffer = {}
-	instance.read_heads = {}
 	for i = 1, instance.buffer_size do
 		instance.buffer[i] = 0
 	end
+	instance.read_heads = {}
 	for i = 1, instance.n_read_heads do
-		instance.read_heads[i] = ReadHead.new(i * 3, instance)
+		instance.read_heads[i] = ReadHead.new(i * -3, instance)
 	end
+	instance:set_length(length)
+	instance:update_read_heads(true)
 	return instance
 end
 
@@ -68,8 +71,12 @@ function ShiftRegister:shift(delta)
 		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1))
 	end
 	self:move_cursor(delta * -1)
+	self:update_read_heads(true)
+end
+
+function ShiftRegister:update_read_heads(randomize)
 	for i = 1, self.n_read_heads do
-		self.read_heads[i]:move()
+		self.read_heads[i]:update(randomize)
 	end
 end
 
@@ -85,7 +92,7 @@ function ShiftRegister:read_head(head)
 	if head == nil or head < 1 then
 		return self:read_absolute(self.head)
 	end
-	return self:read_absolute(self.read_heads[head].pos)
+	return self:read_loop_offset(self.read_heads[head].offset)
 end
 
 function ShiftRegister:read_cursor()
@@ -125,8 +132,9 @@ function ShiftRegister:set_length(length)
 	self.start_offset = math.ceil(length / -2) + 1
 	self.end_offset = self.start_offset + length - 1
 	self.length = length
-	-- constrain cursor to new length
+	-- constrain cursor and heads to new length
 	self:move_cursor(0)
+	self:update_read_heads(false)
 end
 
 function ShiftRegister:set_contents(memory)

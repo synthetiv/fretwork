@@ -91,14 +91,16 @@ local grid_mode = grid_mode_play
 
 local output_selector = grid_multi_select.new(5, 3, 4)
 
-local head_selected = 1
-
 local g = grid.connect()
 
 local grid_shift = false
 local grid_ctrl = false
 local scroll = 4
 local keyboard = grid_keyboard.new(6, 1, 10, 8)
+
+local screen_note_width = 4
+local n_screen_notes = 128 / screen_note_width
+local screen_note_center = math.floor((n_screen_notes - 1) / 2)
 
 local blink_slow = false
 local blink_fast = false
@@ -376,7 +378,7 @@ local function grid_key(x, y, z)
 				cursor_note = snap(note)
 				-- update outputs immediately, if appropriate
 				for h = 1, memory.n_read_heads do
-					if memory.read_heads[h].pos == memory.cursor then
+					if memory.read_heads[h].offset == memory.cursor then
 						for o = 1, 4 do
 							if output_source[o] == h then
 								update_output(o)
@@ -582,15 +584,22 @@ function init()
 	params:add_separator()
 	
 	for i = 1, memory.n_read_heads do
+		local head = memory.read_heads[i]
 		params:add{
 			type = 'number',
 			id = 'head_' .. i .. '_offset',
 			name = 'head ' .. i .. ' offset',
-			min = 0,
-			max = 31, -- TODO
-			default = i * 3,
+			min = -15,
+			max = 16,
+			default = i * -3,
 			action = function(value)
-				memory.read_heads[i].offset_min = value * -1
+				head.offset_base = value
+				head:update(true)
+				for o = 1, 4 do
+					if output_source[o] == i then
+						update_output(o)
+					end
+				end
 				dirty = true
 			end
 		}
@@ -599,10 +608,16 @@ function init()
 			id = 'head_' .. i .. '_offset_random',
 			name = 'head ' .. i .. ' offset random',
 			min = 0,
-			max = 31, -- TODO
+			max = 31,
 			default = 0,
 			action = function(value)
-				memory.read_heads[i].offset_random = value
+				head.randomness = value
+				head:update(true)
+				for o = 1, 4 do
+					if output_source[o] == i then
+						update_output(o)
+					end
+				end
 				dirty = true
 			end
 		}
@@ -618,6 +633,17 @@ function init()
 		action = function(value)
 			memory:set_length(value)
 			cursor_note = snap(memory:read_cursor())
+			for o = 1, 4 do
+				-- TODO: this nil comparison is only necessary because of the order of params; should they
+				-- be reordered anyway?
+				-- TODO: actually... this isn't working, possibly because outputs' 'pos' isn't updated
+				if output_source[o] ~= nil and output_source[o] < 5 then
+					-- local head = memory.read_heads[output_source[o]]
+					-- if head.offset ~= memory:clamp_loop_offset(head.offset) then
+						update_output(o)
+					-- end
+				end
+			end
 			dirty = true
 		end
 	}
@@ -634,13 +660,6 @@ function init()
 			action = function(value)
 				output_source[out] = value
 				update_output(out)
-				for h = 1, memory.n_read_heads do
-					local active = false
-					for o = 1, 4 do
-						active = active or output_source[o] == h
-					end
-					memory.read_heads[h].active = active
-				end
 			end
 		}
 		params:add{
@@ -700,17 +719,6 @@ local function key_shift_clock(n)
 	end
 end
 
-local function key_select_head(n)
-	-- TODO: select heads based on offsets (i.e. visually) instead of by index
-	if n == 2 then
-		head_selected = head_selected % 4 + 1
-		dirty = true
-	elseif n == 3 then
-		head_selected = (head_selected - 2) % 4 + 1
-		dirty = true
-	end
-end
-
 local function key_select_pos(n)
 	if n == 2 then
 		memory:move_cursor(-1)
@@ -728,23 +736,11 @@ function key(n, z)
 		key_shift = z == 1
 	elseif z == 1 then
 		if grid_mode == grid_mode_play then
-			if key_shift then
-				key_select_head(n)
-			else
-				key_shift_clock(n)
-			end
+			key_shift_clock(n)
 		elseif grid_mode == grid_mode_mask then
-			if key_shift then
-				key_shift_clock(n)
-			else
-				key_select_head(n)
-			end
+			key_shift_clock(n)
 		elseif grid_mode == grid_mode_transpose then
-			if key_shift then
-				key_shift_clock(n)
-			else
-				key_select_head(n)
-			end
+			key_shift_clock(n)
 		elseif grid_mode == grid_mode_memory then
 			if key_shift then
 				key_shift_clock(n)
@@ -759,29 +755,56 @@ function enc(n, d)
 	if n == 1 then
 		params:delta('loop_length', d)
 	elseif n == 2 then
-		params:delta('head_' .. head_selected .. '_offset_max', d * -1)
+		for o = 1, 4 do
+			if output_selector:is_selected(o) then
+				if output_source[o] < 5 then
+					-- TODO: this will behave weirdly if more than one output reads from the same head
+					params:delta('head_' .. o .. '_offset', d)
+				end
+			end
+		end
 	elseif n == 3 then
-		params:delta('head_' .. head_selected .. '_offset_random', d)
+		for o = 1, 4 do
+			if output_selector:is_selected(o) then
+				if output_source[o] < 5 then
+					params:delta('head_' .. o .. '_offset_random', d)
+				end
+			end
+		end
 	end
 end
 
-local function draw_head_brackets(h)
-	-- TODO
-	-- if not memory.read_heads[h].active then
-		return
-	-- end
-	-- local x1 = (mem_size - heads[h].offset_max - 1) * 4 + 2
-	-- local x2 = x1 + 2 + (math.min(heads[h].offset_max, heads[h].offset_random)) * 4
-	-- screen.move(x2, 2)
-	-- screen.line(x2, 1)
-	-- screen.line(x1, 1)
-	-- screen.line(x1, 2)
-	-- screen.stroke()
-	-- screen.move(x2, 62)
-	-- screen.line(x2, 64)
-	-- screen.line(x1, 64)
-	-- screen.line(x1, 62)
-	-- screen.stroke()
+local function get_screen_offset_x(offset)
+	return screen_note_width * (screen_note_center + offset)
+end
+
+local function get_screen_note_y(note)
+	return 63 + keyboard.scroll * 2 - note
+end
+
+local function draw_head_brackets(h, level)
+	local head = memory.read_heads[h]
+	local x1 = get_screen_offset_x(head.offset_base) + 1
+	local x2 = get_screen_offset_x(math.min(16, head.offset_base + head.randomness)) + 3
+	screen.level(0)
+	screen.rect(x1 - 2, 0, 3, 3)
+	screen.rect(x2 - 2, 0, 3, 3)
+	screen.fill()
+	screen.rect(x1 - 2, 61, 3, 3)
+	screen.rect(x2 - 2, 61, 3, 3)
+	screen.fill()
+	screen.move(x2, 2)
+	screen.line(x2, 1)
+	screen.line(x1, 1)
+	screen.line(x1, 2)
+	screen.level(level)
+	screen.stroke()
+	screen.move(x2, 62)
+	screen.line(x2, 64)
+	screen.line(x1, 64)
+	screen.line(x1, 62)
+	screen.level(level)
+	screen.stroke()
 end
 
 function redraw()
@@ -789,37 +812,33 @@ function redraw()
 	screen.stroke()
 	screen.line_width(1)
 
-	local screen_note_width = 4
-	local n_screen_notes = 128 / screen_note_width
-	local screen_note_center = math.floor((n_screen_notes - 1) / 2)
-
-	-- draw head/range indicators
-	-- for h = 1, memory.n_read_heads do
-		-- if h ~= head_selected then
-			-- screen.level(1)
-			-- -- draw_head_brackets(h)
-		-- end
-	-- end
-	-- screen.level(3)
-	-- draw_head_brackets(head_selected)
-
 	-- draw loop region
-	-- local x = (mem_size - loop_length) * 4
-	-- screen.level(1)
-	-- for y = 4, 60 do
-		-- if y % 2 == 0 then
-			-- screen.level(2)
-			-- screen.pixel(x, y)
-			-- screen.fill()
-		-- end
-	-- end
-
+	local loop_start_x = get_screen_offset_x(memory.start_offset)
+	local loop_end_x = get_screen_offset_x(memory.end_offset) + 2
+	for x = loop_start_x, loop_end_x do
+		if x == loop_start_x or x == loop_end_x then
+			screen.pixel(x, 1)
+			screen.pixel(x, 3)
+			screen.pixel(x, 5)
+			-- screen.pixel(x, 7)
+			-- screen.pixel(x, 56)
+			screen.pixel(x, 58)
+			screen.pixel(x, 60)
+			screen.pixel(x, 62)
+		elseif x % 2 == 1 then
+			screen.pixel(x, 0)
+			screen.pixel(x, 63)
+		end
+	end
+	screen.level(1)
+	screen.fill()
+	
 	-- draw memory contents
 	for n = 1, n_screen_notes do
-		local offset = n - screen_note_center
+		local offset = n - screen_note_center - 1
 		local loop_pos = memory:get_loop_pos(offset)
 		local x = (n - 1) * screen_note_width
-		local y = 63 + keyboard.scroll * 2 - snap(memory:read_absolute(loop_pos))
+		local y = get_screen_note_y(snap(memory:read_absolute(loop_pos)))
 		if grid_mode == grid_mode_memory and offset == memory.cursor then
 			-- blink the cursor in edit mode
 			if blink_fast then
@@ -845,9 +864,9 @@ function redraw()
 	-- for o = 1, 4 do
 		-- local y = -1
 		-- if output_source[o] == output_source_grid then
-			-- y = 63 + keyboard.scroll * 2 - snap(keyboard:get_last_note())
+			-- y = get_screen_note_y(snap(keyboard:get_last_note()))
 		-- elseif pitch_in_detected and (output_source[o] == output_source_audio_in) then
-			-- y = 63 + keyboard.scroll * 2 - snap(quantize(pitch_in))
+			-- y = get_screen_note_y(snap(quantize(pitch_in)))
 		-- end
 		-- if y > -1 then
 			-- screen.pixel(127, y - 1)
@@ -856,53 +875,76 @@ function redraw()
 		-- end
 	-- end
 
+	local active_heads = { false, false, false, false }
+	local selected_heads = { false, false, false, false }
+
 	-- draw output states
-	-- for o = 1, 4 do
-		-- local y_transposed = 63 + keyboard.scroll * 2 - output_note[o]
-		-- local level = 7
-		-- -- in transpose mode, blink selected output(s)
-		-- if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
-			-- if blink_fast then
-				-- level = 15
-			-- else
-				-- level = 7
-			-- end
-		-- end
-		-- if output_source[o] == output_source_head_1 or output_source[o] == output_source_head_2 or output_source[o] == output_source_head_3 or output_source[o] == output_source_head_4 then
-			-- local output_head = output_source[o]
-			-- local x = 129 - ((heads[output_head].offset + 1) % mem_size * 4)
-			-- local y_original = y_memory[heads[output_head].pos]
-			-- if grid_mode == grid_mode_memory and heads[output_head].offset == offset_to_edit then
-				-- level = blink_fast and 15 or 7
-			-- end
-			-- screen.level(level)
-			-- screen.move(x, y_transposed)
-			-- screen.line_rel(3, 0)
-			-- screen.stroke()
-			-- -- draw a line connecting transposed output with original note
-			-- screen.level(1)
-			-- local transpose_distance = y_transposed - y_original
-			-- if transpose_distance < -2 or transpose_distance > 2 then
-				-- local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
-				-- screen.pixel(x + 1, transpose_point_y)
-				-- screen.fill()
-				-- local transpose_line_length = math.abs(y_transposed - y_original) - 4
-				-- -- if transpose_line_length > 0 then
-					-- local transpose_line_top = math.min(y_transposed + 3, y_original)
-					-- screen.move(x + 2, transpose_line_top)
-					-- screen.line_rel(0, transpose_line_length)
-					-- screen.stroke()
-				-- end
-			-- end
+	for o = 1, 4 do
+		local y_transposed = get_screen_note_y(output_note[o])
+		local level = 7
+		-- in transpose mode, blink selected output(s)
+		if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
+			if blink_fast then
+				level = 15
+			else
+				level = 7
+			end
+		end
+		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
+			local head_index = output_source[o]
+			local head = memory.read_heads[head_index]
+			local x = get_screen_offset_x(head.offset)
+			local y_original = get_screen_note_y(snap(memory:read_loop_offset(head.offset)))
+			-- TODO: how do I make sure the selected head is drawn over the others?
+			if output_selector:is_selected(o) then
+				selected_heads[head_index] = true
+			else
+				active_heads[head_index] = true
+			end
+			-- blink if cursor overlaps and not transposed (if transposed, the original pitch will blink)
+			if grid_mode == grid_mode_memory and head.offset == memory.cursor and y_original == y_transposed then
+				level = blink_fast and 15 or 7
+			end
+			screen.level(level)
+			screen.move(x, y_transposed)
+			screen.line_rel(3, 0)
+			screen.stroke()
+			-- draw a line connecting transposed output with original note
+			screen.level(1)
+			local transpose_distance = y_transposed - y_original
+			if transpose_distance < -2 or transpose_distance > 2 then
+				local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
+				screen.pixel(x + 1, transpose_point_y)
+				screen.fill()
+				local transpose_line_length = math.abs(y_transposed - y_original) - 4
+				if transpose_line_length > 0 then
+					local transpose_line_top = math.min(y_transposed + 3, y_original)
+					screen.move(x + 2, transpose_line_top)
+					screen.line_rel(0, transpose_line_length)
+					screen.stroke()
+				end
+			end
 		-- elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
 			-- -- draw output pitch
 			-- screen.pixel(127, y_transposed - 1)
 			-- screen.level(level)
 			-- screen.fill()
-		-- end
-	-- end
+		end
+	end
+
+	for i = 1, 4 do
+		if active_heads[i] and not selected_heads[i] then
+			draw_head_brackets(i, 1)
+		end
+	end
+	for i = 1, 4 do
+		if selected_heads[i] then
+			draw_head_brackets(i, 3)
+		end
+	end
 
 	-- DEBUG: draw minibuffer, loop region, head
+	--[[
 	screen.move(0, 1)
 	screen.line_rel(memory.buffer_size, 0)
 	screen.level(1)
@@ -918,6 +960,7 @@ function redraw()
 		end
 		screen.fill()
 	end
+	]]
 
 	screen.update()
 end
