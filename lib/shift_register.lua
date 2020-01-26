@@ -32,7 +32,7 @@ ShiftRegister.buffer_size = 32
 ShiftRegister.new = function(length)
 	local instance = {}
 	setmetatable(instance, ShiftRegister)
-	instance.length = length
+	instance:set_length(length)
 	instance.head = 1
 	instance.cursor = 1
 	instance.buffer = {}
@@ -47,7 +47,7 @@ ShiftRegister.new = function(length)
 end
 
 function ShiftRegister:get_loop_pos(offset)
-	offset = offset % self.length
+	offset = (offset - self.start_offset) % self.length + self.start_offset
 	-- TODO: is it better to return to the old paradigm where the loop ENDS at the head instead of starting there? can the loop be made to surround the head? would that even be good?
 	return self:get_buffer_pos(offset)
 end
@@ -59,13 +59,13 @@ end
 function ShiftRegister:shift(delta)
 	-- TODO: wouldn't mind understanding better _why_ this works the way it does
 	if delta > 0 then
-		self:write_buffer_offset(self.length, self:read_head())
+		self:write_buffer_offset(self.end_offset, self:read_buffer_offset(self.start_offset))
 	end
 	self.head = self:get_buffer_pos(delta)
-	self.cursor = self:get_loop_pos(self.cursor - self.head)
 	if delta < 0 then
-		self:write_head(self:read_buffer_offset(self.length))
+		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset))
 	end
+	self.cursor = self:get_loop_pos(self.cursor - self.head)
 	for i = 1, self.n_read_heads do
 		self.read_heads[i]:move()
 	end
@@ -119,7 +119,8 @@ function ShiftRegister:write_cursor(value)
 end
 
 function ShiftRegister:set_length(length)
-	-- TODO: how do I make it feel/look as though the head is in the middle of the loop when adjusting length?
+	self.start_offset = math.ceil(length / -2)
+	self.end_offset = self.start_offset + length
 	self.length = length
 end
 

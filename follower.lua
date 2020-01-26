@@ -820,10 +820,18 @@ function redraw()
 	-- local n_ghost_notes_left = math.floor(n_ghost_notes / 2)
 	-- local x = 1
 	for n = 1, n_screen_notes do
+		local offset = n - screen_note_center
+		local loop_pos = memory:get_loop_pos(offset)
 		local x = (n - 1) * screen_note_width
-		local y = 63 + keyboard.scroll * 2 - snap(memory:read_loop_offset(n - screen_note_center))
-		if n == screen_note_center then
-			screen.level(4)
+		local y = 63 + keyboard.scroll * 2 - snap(memory:read_absolute(loop_pos))
+		if loop_pos == memory.cursor then
+			if blink_fast then
+				screen.level(15)
+			else
+				screen.level(7)
+			end
+		elseif offset == 0 then
+			screen.level(15)
 		else
 			screen.level(1)
 		end
@@ -914,15 +922,13 @@ function redraw()
 	screen.line_rel(memory.buffer_size, 0)
 	screen.level(1)
 	screen.stroke()
-	screen.pixel(memory:get_loop_pos(0) - 1, 0)
-	screen.level(15)
-	screen.fill()
-	screen.pixel(memory:get_loop_pos(memory.length - 1) - 1, 0)
-	screen.level(15)
-	screen.fill()
-	for offset = 1, memory.length - 2 do
+	for offset = memory.start_offset, memory.end_offset do
 		screen.pixel(memory:get_loop_pos(offset) - 1, 0)
-		screen.level(7)
+		if offset == memory.start_offset or offset == memory.end_offset or offset == 0 then
+			screen.level(15)
+		else
+			screen.level(7)
+		end
 		screen.fill()
 	end
 
