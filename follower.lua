@@ -24,14 +24,6 @@ local max_pitch = 96
 -- TODO: save/recall memory/loop contents like masks
 -- transposition settings too
 
--- local memory = {}
--- local mem_size = 32
--- local loop_length = mem_size
--- local head = 1
--- local heads = {}
--- local n_heads = 4
--- local offset_to_edit = 0
--- local offset_to_edit_note = 0
 local memory = shift_register.new(32)
 local cursor_note = 0
 
@@ -97,6 +89,7 @@ local grid_shift = false
 local grid_ctrl = false
 local scroll = 4
 local keyboard = grid_keyboard.new(6, 1, 10, 8)
+local keyboard_note = 0
 
 local screen_note_width = 4
 local n_screen_notes = 128 / screen_note_width
@@ -169,7 +162,7 @@ local function update_output(out)
 	if output_source == output_source_audio_in then
 		output_note[out] = snap(quantize(pitch_in) + output_transpose[out])
 	elseif output_source == output_source_grid then
-		output_note[out] = snap(keyboard:get_last_note() + output_transpose[out])
+		output_note[out] = snap(keyboard_note + output_transpose[out])
 	else
 		local output_head = output_source
 		output_note[out] = snap(memory:read_head(output_head) + output_transpose[out])
@@ -185,13 +178,13 @@ local function sample_pitch()
 		if source == source_crow then
 			memory:write_head(crow_pitch_in)
 		elseif keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
-			memory:write_head(keyboard:get_last_note())
+			memory:write_head(keyboard_note)
 		elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
 			memory:write_head(pitch_in)
 		elseif source == source_grid_crow then
 			memory:write_head(crow_pitch_in)
 		elseif keyboard.gate and source == source_pitch_grid then
-			memory:write_head(keyboard:get_last_note())
+			memory:write_head(keyboard_note)
 		end
 	end
 	for out = 1, 4 do
@@ -335,6 +328,7 @@ local function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		if grid_mode == grid_mode_play then
 			keyboard:note(x, y, z)
+			keyboard_note = keyboard:get_last_note()
 			if keyboard.gate then
 				if clock_mode ~= clock_mode_trig then
 					sample_pitch()
@@ -636,12 +630,8 @@ function init()
 			for o = 1, 4 do
 				-- TODO: this nil comparison is only necessary because of the order of params; should they
 				-- be reordered anyway?
-				-- TODO: actually... this isn't working, possibly because outputs' 'pos' isn't updated
 				if output_source[o] ~= nil and output_source[o] < 5 then
-					-- local head = memory.read_heads[output_source[o]]
-					-- if head.offset ~= memory:clamp_loop_offset(head.offset) then
-						update_output(o)
-					-- end
+					update_output(o)
 				end
 			end
 			dirty = true
@@ -861,6 +851,7 @@ function redraw()
 	end
 
 	-- draw incoming grid pitch
+	-- TODO
 	-- for o = 1, 4 do
 		-- local y = -1
 		-- if output_source[o] == output_source_grid then
@@ -924,11 +915,18 @@ function redraw()
 					screen.stroke()
 				end
 			end
-		-- elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
-			-- -- draw output pitch
-			-- screen.pixel(127, y_transposed - 1)
-			-- screen.level(level)
-			-- screen.fill()
+		elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
+			-- draw output pitch
+			screen.pixel(62, y_transposed - 2)
+			screen.pixel(63, y_transposed - 2)
+			screen.pixel(64, y_transposed - 2)
+			screen.pixel(64, y_transposed - 1)
+			screen.pixel(64, y_transposed)
+			screen.pixel(63, y_transposed)
+			screen.pixel(62, y_transposed)
+			screen.pixel(62, y_transposed - 1)
+			screen.level(level)
+			screen.fill()
 		end
 	end
 
