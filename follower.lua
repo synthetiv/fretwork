@@ -789,7 +789,9 @@ function redraw()
 	screen.stroke()
 	screen.line_width(1)
 
-	-- local y_memory = {}
+	local screen_note_width = 4
+	local n_screen_notes = 128 / screen_note_width
+	local screen_note_center = math.floor((n_screen_notes - 1) / 2)
 
 	-- draw head/range indicators
 	-- for h = 1, memory.n_read_heads do
@@ -813,15 +815,12 @@ function redraw()
 	-- end
 
 	-- draw memory contents
-	local screen_note_width = 4
-	local n_screen_notes = 128 / screen_note_width
-	local screen_note_center = math.floor((n_screen_notes - 1) / 2)
 	for n = 1, n_screen_notes do
 		local offset = n - screen_note_center
 		local loop_pos = memory:get_loop_pos(offset)
 		local x = (n - 1) * screen_note_width
 		local y = 63 + keyboard.scroll * 2 - snap(memory:read_absolute(loop_pos))
-		if grid_mode == grid_mode_memory and loop_pos == memory.cursor then
+		if grid_mode == grid_mode_memory and offset == memory.cursor then
 			-- blink the cursor in edit mode
 			if blink_fast then
 				screen.level(15)
@@ -841,22 +840,6 @@ function redraw()
 		screen.line_rel(3, 0)
 		screen.stroke()
 	end
-
-	-- for offset = 0, mem_size - 1 do
-		-- local x = (mem_size - offset - 1) * 4 + 1
-		-- local pos = get_offset_pos(offset)
-		-- if grid_mode == grid_mode_memory and offset == offset_to_edit then
-			-- screen.level(blink_fast and 15 or 7)
-		-- elseif offset > loop_length - 1 then
-			-- screen.level(1)
-		-- else
-			-- screen.level(2)
-		-- end
-		-- y_memory[pos] = 63 + keyboard.scroll * 2 - snap(memory[pos])
-		-- screen.move(x, y_memory[pos])
-		-- screen.line_rel(3, 0)
-		-- screen.stroke()
-	-- end
 
 	-- draw incoming grid pitch
 	-- for o = 1, 4 do
@@ -919,14 +902,16 @@ function redraw()
 		-- end
 	-- end
 
-	-- DEBUG: positions
+	-- DEBUG: draw minibuffer, loop region, head
 	screen.move(0, 1)
 	screen.line_rel(memory.buffer_size, 0)
 	screen.level(1)
 	screen.stroke()
 	for offset = memory.start_offset, memory.end_offset do
 		screen.pixel(memory:get_loop_pos(offset) - 1, 0)
-		if offset == memory.start_offset or offset == memory.end_offset or offset == 0 then
+		if grid_mode == grid_mode_memory and offset == memory.cursor then
+			screen.level(blink_fast and 15 or 7)
+		elseif offset == memory.start_offset or offset == memory.end_offset or offset == 0 then
 			screen.level(15)
 		else
 			screen.level(7)

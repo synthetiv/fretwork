@@ -32,9 +32,9 @@ ShiftRegister.buffer_size = 32
 ShiftRegister.new = function(length)
 	local instance = {}
 	setmetatable(instance, ShiftRegister)
+	instance.cursor = 0
 	instance:set_length(length)
 	instance.head = 1
-	instance.cursor = 1
 	instance.buffer = {}
 	instance.read_heads = {}
 	for i = 1, instance.buffer_size do
@@ -67,14 +67,14 @@ function ShiftRegister:shift(delta)
 	if delta < 0 then
 		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1))
 	end
-	self.cursor = self:get_loop_pos(self.cursor - self.head)
+	self:move_cursor(delta * -1)
 	for i = 1, self.n_read_heads do
 		self.read_heads[i]:move()
 	end
 end
 
 function ShiftRegister:move_cursor(delta)
-	self.cursor = self:get_loop_pos(self.cursor - self.head + delta)
+	self.cursor = self:clamp_loop_offset(self.cursor + delta)
 end
 
 function ShiftRegister:read_absolute(pos)
@@ -89,7 +89,7 @@ function ShiftRegister:read_head(head)
 end
 
 function ShiftRegister:read_cursor()
-	return self:read_absolute(self.cursor)
+	return self:read_loop_offset(self.cursor)
 end
 
 function ShiftRegister:read_loop_offset(offset)
@@ -116,14 +116,17 @@ function ShiftRegister:write_head(value)
 	self:write_absolute(self.head, value)
 end
 
+-- TODO: insert/delete (changing loop length)
 function ShiftRegister:write_cursor(value)
-	self:write_absolute(self.cursor, value)
+	self:write_loop_offset(self.cursor, value)
 end
 
 function ShiftRegister:set_length(length)
 	self.start_offset = math.ceil(length / -2) + 1
 	self.end_offset = self.start_offset + length - 1
 	self.length = length
+	-- constrain cursor to new length
+	self:move_cursor(0)
 end
 
 function ShiftRegister:set_contents(memory)
@@ -131,8 +134,8 @@ function ShiftRegister:set_contents(memory)
 	self.memory = memory
 	self.length = #memory
 	-- constrain cursor & head to new length
-	self.cursor = self:get_loop_pos(self.cursor - self.head)
 	self.head = self:get_loop_pos(0)
+	self:move_cursor(0)
 end
 
 function ShiftRegister:get_contents()
