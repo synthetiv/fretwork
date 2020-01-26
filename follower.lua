@@ -21,6 +21,13 @@ local active_mask = 0
 local mask_dirty = false
 local max_pitch = 96
 
+local saved_loops = {}
+local active_loop = 0
+
+local recall_mode_mask = 1
+local recall_mode_loop = 2
+local recall_mode = recall_mode_loop
+
 -- TODO: save/recall memory/loop contents like masks
 -- transposition settings too
 
@@ -133,8 +140,10 @@ local function snap(pitch)
 	return 0
 end
 
--- TODO: allow undo??
 local function recall_mask(m)
+	if saved_masks[m] == nil then
+		return
+	end
 	for i = 1, max_pitch do
 		mask[i] = saved_masks[m][i]
 	end
@@ -142,13 +151,27 @@ local function recall_mask(m)
 	mask_dirty = false
 end
 
--- TODO: allow undo??
 local function save_mask(m)
 	for i = 1, max_pitch do
 		saved_masks[m][i] = mask[i]
 	end
 	active_mask = m
 	mask_dirty = false
+end
+
+local function recall_loop(l)
+	if saved_loops[l] == nil then
+		return
+	end
+	memory:set_loop(saved_loops[l])
+	active_loop = l
+	-- loop_dirty = false -- TODO
+end
+
+local function save_loop(l)
+	saved_loops[l] = memory:get_loop()
+	active_loop = l
+	-- loop_dirty = false -- TODO
 end
 
 -- TODO: make this into a 'grid bank' control
@@ -213,18 +236,31 @@ local function grid_redraw()
 	g:led(3, 1, grid_mode == grid_mode_transpose and 7 or 2)
 	g:led(4, 1, grid_mode == grid_mode_memory and 7 or 2)
 
+	-- recall mode buttons
+	g:led(2, 2, recall_mode == recall_mode_mask and 7 or 2)
+	g:led(4, 2, recall_mode == recall_mode_loop and 7 or 2)
+
 	-- recall buttons
 	for x = 1, 4 do
 		for y = 3, 6 do
-			local m = get_grid_mask(x, y)
-			if active_mask == m then
-				if mask_dirty and blink_slow then
-					g:led(x, y, 8)
+			if recall_mode == recall_mode_mask then
+				local m = get_grid_mask(x, y)
+				if active_mask == m then
+					if mask_dirty and blink_slow then
+						g:led(x, y, 8)
+					else
+						g:led(x, y, 7)
+					end
 				else
-					g:led(x, y, 7)
+					g:led(x, y, 2)
 				end
-			else
-				g:led(x, y, 2)
+			elseif recall_mode == recall_mode_loop then
+				local l = get_grid_mask(x, y) -- TODO: silly; make this a grid control
+				if active_loop == l then
+					g:led(x, y, 7) -- TODO: track dirty/not?
+				else
+					g:led(x, y, 2)
+				end
 			end
 		end
 	end
@@ -311,15 +347,17 @@ end
 
 key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	local level = 0
-	-- highlight mask
-	if mask[n] then
-		level = 4
+	-- highlight other notes in the sequence
+	-- TODO: this is probably ridiculously inefficient
+	for offset = memory.start_offset, memory.end_offset do
+		if n == memory:read_loop_offset(offset) then
+			-- notes that fall on the mask are brighter
+			level = mask[n] and 4 or 2
+		end
 	end
-	-- TODO: draw trails / other notes in loop
 	-- highlight the note we're editing
 	if n == cursor_note then
-		-- TODO: maybe make this blinking a little more relaxed
-		level = blink_fast and 15 or 10
+		level = blink_fast and 15 or 14
 	end
 	return level
 end
@@ -413,17 +451,33 @@ local function grid_key(x, y, z)
 		-- this prevents held notes from getting stuck when switching to a mode that doesn't call
 		-- keyboard:note()
 		keyboard:reset()
+	elseif x == 2 and y == 2 and z == 1 then
+		recall_mode = recall_mode_mask
+	elseif x == 4 and y == 2 and z == 1 then
+		recall_mode = recall_mode_loop
 	elseif x < 5 and y > 2 and y < 7 and z == 1 then
 		-- recall buttons
-		local m = get_grid_mask(x, y)
-		if grid_shift then
-			save_mask(m)
-		else
-			recall_mask(m)
-		end
-		if grid_ctrl then
-			for out = 1, 4 do
-				update_output(out)
+		if recall_mode == recall_mode_mask then
+			local m = get_grid_mask(x, y)
+			if grid_shift then
+				save_mask(m)
+			else
+				recall_mask(m)
+			end
+			if grid_ctrl then
+				for out = 1, 4 do
+					update_output(out)
+				end
+			end
+		elseif recall_mode == recall_mode_loop then
+			local l = get_grid_mask(x, y) -- TODO
+			if grid_shift then
+				save_loop(l)
+			else
+				recall_loop(l)
+				for out = 1, 4 do
+					update_output(out)
+				end
 			end
 		end
 	elseif x == 1 and y == 7 then
@@ -515,6 +569,17 @@ function init()
 		mask[i] = pitch_class == 2 or pitch_class == 4 or pitch_class == 7 or pitch_class == 9 or pitch_class == 12
 	end
 	save_mask(1)
+
+	for l = 1, 16 do
+		saved_loops[l] = {}
+		for i = 1, 16 do
+			saved_loops[l][i] = 24
+		end
+	end
+	for i = 1, 16 do
+		saved_loops[1][i] = 24 + i * 3
+	end
+	recall_loop(1)
 	
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control

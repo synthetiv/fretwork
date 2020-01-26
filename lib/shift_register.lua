@@ -137,22 +137,22 @@ function ShiftRegister:set_length(length)
 	self:update_read_heads(false)
 end
 
-function ShiftRegister:set_contents(memory)
-	-- TODO: do better
-	self.memory = memory
-	self.length = #memory
-	-- constrain cursor & head to new length
-	self.head = self:get_loop_pos(0)
+function ShiftRegister:set_loop(loop)
+	self:set_length(#loop)
+	for i = 1, self.length do
+		self:write_loop_offset(i - 1, loop[i])
+	end
+	-- constrain cursor and heads to new length
 	self:move_cursor(0)
+	self:update_read_heads(false)
 end
 
-function ShiftRegister:get_contents()
-	-- TODO: do better
-	local memory = {}
+function ShiftRegister:get_loop()
+	local loop = {}
 	for i = 1, self.length do
-		memory[i] = self:read_loop_offset(i - 1)
+		loop[i] = self:read_loop_offset(i - 1)
 	end
-	return memory
+	return loop
 end
 
 return ShiftRegister
