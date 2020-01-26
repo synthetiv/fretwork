@@ -62,6 +62,7 @@ function ShiftRegister:shift(delta)
 		self:write_buffer_offset(self.length, self:read_head())
 	end
 	self.head = self:get_buffer_pos(delta)
+	self.cursor = self:get_loop_pos(self.cursor - self.head)
 	if delta < 0 then
 		self:write_head(self:read_buffer_offset(self.length))
 	end
@@ -83,6 +84,10 @@ function ShiftRegister:read_head(head)
 		return self:read_absolute(self.head)
 	end
 	return self:read_absolute(self.read_heads[head].pos)
+end
+
+function ShiftRegister:read_cursor()
+	return self:read_absolute(self.cursor)
 end
 
 function ShiftRegister:read_loop_offset(offset)
@@ -107,6 +112,10 @@ end
 
 function ShiftRegister:write_head(value)
 	self:write_absolute(self.head, value)
+end
+
+function ShiftRegister:write_cursor(value)
+	self:write_absolute(self.cursor, value)
 end
 
 function ShiftRegister:set_length(length)

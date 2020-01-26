@@ -617,7 +617,7 @@ function init()
 		default = 16,
 		action = function(value)
 			memory:set_length(value)
-			cursor_note = snap(memory:read_absolute(memory.cursor))
+			cursor_note = snap(memory:read_cursor())
 			dirty = true
 		end
 	}
@@ -714,10 +714,12 @@ end
 local function key_select_pos(n)
 	if n == 2 then
 		memory:move_cursor(-1)
-		cursor_note = snap(memory:read_absolute(memory.cursor))
+		cursor_note = snap(memory:read_cursor())
+		dirty = true
 	elseif n == 3 then
 		memory:move_cursor(1)
-		cursor_note = snap(memory:read_absolute(memory.cursor))
+		cursor_note = snap(memory:read_cursor())
+		dirty = true
 	end
 end
 
