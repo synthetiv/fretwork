@@ -3,9 +3,11 @@
 
 engine.name = 'Analyst'
 
+local musicutil = require 'musicutil'
+
 local grid_keyboard = include 'lib/grid_keyboard'
 local grid_multi_select = include 'lib/grid_multi_select'
-local musicutil = require 'musicutil'
+local shift_register = include 'lib/shift_register'
 
 local pitch_poll_l
 local pitch_in = 0
@@ -21,14 +23,17 @@ local max_pitch = 96
 
 -- TODO: save/recall memory/loop contents like masks
 -- transposition settings too
-local memory = {}
-local mem_size = 32
-local loop_length = mem_size
-local head = 1
-local heads = {}
-local n_heads = 4
-local offset_to_edit = 0
-local offset_to_edit_note = 0
+
+-- local memory = {}
+-- local mem_size = 32
+-- local loop_length = mem_size
+-- local head = 1
+-- local heads = {}
+-- local n_heads = 4
+-- local offset_to_edit = 0
+-- local offset_to_edit_note = 0
+local memory = shift_register.new(32)
+local cursor_note = 0
 
 local source
 local source_names = {
@@ -165,41 +170,28 @@ local function update_output(out)
 		output_note[out] = snap(keyboard:get_last_note() + output_transpose[out])
 	else
 		local output_head = output_source
-		output_note[out] = snap(memory[heads[output_head].pos] + output_transpose[out])
+		output_note[out] = snap(memory:read_head(output_head) + output_transpose[out])
 	end
 	volts = output_note[out] / 12 - 1
 	dirty = true
 	crow.output[out].volts = volts
 end
 
-local function get_offset_pos(offset)
-	return (head - offset - 1) % mem_size + 1
-end
-
 local function sample_pitch()
-	head = head % mem_size + 1
-	for i = 1, 4 do
-		heads[i]:move()
-	end
-	offset_to_edit = (offset_to_edit + 1) % loop_length
-	offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)]) -- TODO: use a function for this
-	local grid_pitch = keyboard:get_last_note()
-	local loop_pitch = memory[get_offset_pos(loop_length)] -- feed back an un-snapped value
-	local pitch = loop_pitch
+	memory:shift(1)
 	if loop_probability <= math.random(1, 100) then
 		if source == source_crow then
-			pitch = crow_pitch_in
+			memory:write_head(crow_pitch_in)
 		elseif keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
-			pitch = grid_pitch
+			memory:write_head(keyboard:get_last_note())
 		elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
-			pitch = pitch_in
+			memory:write_head(pitch_in)
 		elseif source == source_grid_crow then
-			pitch = crow_pitch_in
+			memory:write_head(crow_pitch_in)
 		elseif keyboard.gate and source == source_pitch_grid then
-			pitch = grid_pitch
+			memory:write_head(keyboard:get_last_note())
 		end
 	end
-	memory[head] = pitch
 	for out = 1, 4 do
 		if not output_stream[out] then
 			update_output(out)
@@ -209,13 +201,7 @@ local function sample_pitch()
 end
 
 local function rewind()
-	memory[get_offset_pos(loop_length)] = memory[head]
-	head = (head - 2) % mem_size + 1
-	offset_to_edit = (offset_to_edit - 1) % loop_length
-	offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
-	for i = 1, 4 do
-		heads[i]:move()
-	end
+	memory:shift(-1)
 	for out = 1, 4 do
 		if not output_stream[out] then
 			update_output(out)
@@ -336,7 +322,7 @@ key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	end
 	-- TODO: draw trails / other notes in loop
 	-- highlight the note we're editing
-	if n == offset_to_edit_note then
+	if n == cursor_note then
 		-- TODO: maybe make this blinking a little more relaxed
 		level = blink_fast and 15 or 10
 	end
@@ -386,11 +372,11 @@ local function grid_key(x, y, z)
 			keyboard:note(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
-				memory[get_offset_pos(offset_to_edit)] = note
-				offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
+				memory:write_cursor(note)
+				cursor_note = snap(note)
 				-- update outputs immediately, if appropriate
-				for h = 1, 4 do
-					if heads[h].offset == offset_to_edit then
+				for h = 1, memory.n_read_heads do
+					if memory.read_heads[h].pos == memory.cursor then
 						for o = 1, 4 do
 							if output_source[o] == h then
 								update_output(o)
@@ -534,10 +520,6 @@ function init()
 	end
 	save_mask(1)
 	
-	for i = 1, mem_size do
-		memory[i] = 0
-	end
-	
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control
 	params:add{
@@ -599,33 +581,16 @@ function init()
 	
 	params:add_separator()
 	
-	for i = 1, n_heads do
-		-- TODO: make this a 'real' class
-		heads[i] = {
-			pos = 1,
-			offset_max = i * 3,
-			offset_random = 0,
-			offset = 0,
-			active = false,
-			move = function(self)
-				local offset_random = math.min(self.offset_random, self.offset_max)
-				if offset_random > 0 then
-					self.offset = self.offset_max - math.random(0, offset_random)
-				else
-					self.offset = self.offset_max
-				end
-				self.pos = get_offset_pos(self.offset)
-			end
-		}
+	for i = 1, memory.n_read_heads do
 		params:add{
 			type = 'number',
-			id = 'head_' .. i .. '_offset_max',
-			name = 'head ' .. i .. ' offset max',
+			id = 'head_' .. i .. '_offset',
+			name = 'head ' .. i .. ' offset',
 			min = 0,
-			max = mem_size - 1,
+			max = 31, -- TODO
 			default = i * 3,
 			action = function(value)
-				heads[i].offset_max = value
+				memory.read_heads[i].offset_min = value * -1
 				dirty = true
 			end
 		}
@@ -634,10 +599,10 @@ function init()
 			id = 'head_' .. i .. '_offset_random',
 			name = 'head ' .. i .. ' offset random',
 			min = 0,
-			max = mem_size - 1,
+			max = 31, -- TODO
 			default = 0,
 			action = function(value)
-				heads[i].offset_random = value
+				memory.read_heads[i].offset_random = value
 				dirty = true
 			end
 		}
@@ -648,12 +613,11 @@ function init()
 		id = 'loop_length',
 		name = 'loop length',
 		min = 2,
-		max = mem_size,
-		default = mem_size,
+		max = 32,
+		default = 16,
 		action = function(value)
-			loop_length = value
-			offset_to_edit = math.min(loop_length, offset_to_edit)
-			offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
+			memory:set_length(value)
+			cursor_note = snap(memory:read_absolute(memory.cursor))
 			dirty = true
 		end
 	}
@@ -670,12 +634,12 @@ function init()
 			action = function(value)
 				output_source[out] = value
 				update_output(out)
-				for h = 1, 4 do
+				for h = 1, memory.n_read_heads do
 					local active = false
 					for o = 1, 4 do
 						active = active or output_source[o] == h
 					end
-					heads[h].active = active
+					memory.read_heads[h].active = active
 				end
 			end
 		}
@@ -749,11 +713,11 @@ end
 
 local function key_select_pos(n)
 	if n == 2 then
-		offset_to_edit = (offset_to_edit + 1) % loop_length
-		offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
+		memory:move_cursor(-1)
+		cursor_note = snap(memory:read_absolute(memory.cursor))
 	elseif n == 3 then
-		offset_to_edit = (offset_to_edit - 1) % loop_length
-		offset_to_edit_note = snap(memory[get_offset_pos(offset_to_edit)])
+		memory:move_cursor(1)
+		cursor_note = snap(memory:read_absolute(memory.cursor))
 	end
 end
 
@@ -791,7 +755,7 @@ end
 
 function enc(n, d)
 	if n == 1 then
-		params:delta('loop_length', d * -1)
+		params:delta('loop_length', d)
 	elseif n == 2 then
 		params:delta('head_' .. head_selected .. '_offset_max', d * -1)
 	elseif n == 3 then
@@ -800,21 +764,22 @@ function enc(n, d)
 end
 
 local function draw_head_brackets(h)
-	if not heads[h].active then
+	-- TODO
+	-- if not memory.read_heads[h].active then
 		return
-	end
-	local x1 = (mem_size - heads[h].offset_max - 1) * 4 + 2
-	local x2 = x1 + 2 + (math.min(heads[h].offset_max, heads[h].offset_random)) * 4
-	screen.move(x2, 2)
-	screen.line(x2, 1)
-	screen.line(x1, 1)
-	screen.line(x1, 2)
-	screen.stroke()
-	screen.move(x2, 62)
-	screen.line(x2, 64)
-	screen.line(x1, 64)
-	screen.line(x1, 62)
-	screen.stroke()
+	-- end
+	-- local x1 = (mem_size - heads[h].offset_max - 1) * 4 + 2
+	-- local x2 = x1 + 2 + (math.min(heads[h].offset_max, heads[h].offset_random)) * 4
+	-- screen.move(x2, 2)
+	-- screen.line(x2, 1)
+	-- screen.line(x1, 1)
+	-- screen.line(x1, 2)
+	-- screen.stroke()
+	-- screen.move(x2, 62)
+	-- screen.line(x2, 64)
+	-- screen.line(x1, 64)
+	-- screen.line(x1, 62)
+	-- screen.stroke()
 end
 
 function redraw()
@@ -822,105 +787,141 @@ function redraw()
 	screen.stroke()
 	screen.line_width(1)
 
-	local y_memory = {}
+	-- local y_memory = {}
 
 	-- draw head/range indicators
-	for h = 1, n_heads do
-		if h ~= head_selected then
-			screen.level(1)
-			draw_head_brackets(h)
-		end
-	end
-	screen.level(3)
-	draw_head_brackets(head_selected)
+	-- for h = 1, memory.n_read_heads do
+		-- if h ~= head_selected then
+			-- screen.level(1)
+			-- -- draw_head_brackets(h)
+		-- end
+	-- end
+	-- screen.level(3)
+	-- draw_head_brackets(head_selected)
 
 	-- draw loop region
-	local x = (mem_size - loop_length) * 4
-	screen.level(1)
-	for y = 4, 60 do
-		if y % 2 == 0 then
-			screen.level(2)
-			screen.pixel(x, y)
-			screen.fill()
-		end
-	end
+	-- local x = (mem_size - loop_length) * 4
+	-- screen.level(1)
+	-- for y = 4, 60 do
+		-- if y % 2 == 0 then
+			-- screen.level(2)
+			-- screen.pixel(x, y)
+			-- screen.fill()
+		-- end
+	-- end
 
 	-- draw memory contents
-	for offset = 0, mem_size - 1 do
-		local x = (mem_size - offset - 1) * 4 + 1
-		local pos = get_offset_pos(offset)
-		if grid_mode == grid_mode_memory and offset == offset_to_edit then
-			screen.level(blink_fast and 15 or 7)
-		elseif offset > loop_length - 1 then
-			screen.level(1)
+	local screen_note_width = 4
+	local n_screen_notes = 128 / screen_note_width
+	local screen_note_center = math.floor((n_screen_notes - 1) / 2)
+	-- local n_ghost_notes = n_screen_notes - memory.length
+	-- local n_ghost_notes_left = math.floor(n_ghost_notes / 2)
+	-- local x = 1
+	for n = 1, n_screen_notes do
+		local x = (n - 1) * screen_note_width
+		local y = 63 + keyboard.scroll * 2 - snap(memory:read_loop_offset(n - screen_note_center))
+		if n == screen_note_center then
+			screen.level(4)
 		else
-			screen.level(2)
+			screen.level(1)
 		end
-		y_memory[pos] = 63 + keyboard.scroll * 2 - snap(memory[pos])
-		screen.move(x, y_memory[pos])
+		screen.move(x, y)
 		screen.line_rel(3, 0)
 		screen.stroke()
 	end
 
+	-- for offset = 0, mem_size - 1 do
+		-- local x = (mem_size - offset - 1) * 4 + 1
+		-- local pos = get_offset_pos(offset)
+		-- if grid_mode == grid_mode_memory and offset == offset_to_edit then
+			-- screen.level(blink_fast and 15 or 7)
+		-- elseif offset > loop_length - 1 then
+			-- screen.level(1)
+		-- else
+			-- screen.level(2)
+		-- end
+		-- y_memory[pos] = 63 + keyboard.scroll * 2 - snap(memory[pos])
+		-- screen.move(x, y_memory[pos])
+		-- screen.line_rel(3, 0)
+		-- screen.stroke()
+	-- end
+
 	-- draw incoming grid pitch
-	for o = 1, 4 do
-		local y = -1
-		if output_source[o] == output_source_grid then
-			y = 63 + keyboard.scroll * 2 - snap(keyboard:get_last_note())
-		elseif pitch_in_detected and (output_source[o] == output_source_audio_in) then
-			y = 63 + keyboard.scroll * 2 - snap(quantize(pitch_in))
-		end
-		if y > -1 then
-			screen.pixel(127, y - 1)
-			screen.level(2)
-			screen.fill()
-		end
-	end
+	-- for o = 1, 4 do
+		-- local y = -1
+		-- if output_source[o] == output_source_grid then
+			-- y = 63 + keyboard.scroll * 2 - snap(keyboard:get_last_note())
+		-- elseif pitch_in_detected and (output_source[o] == output_source_audio_in) then
+			-- y = 63 + keyboard.scroll * 2 - snap(quantize(pitch_in))
+		-- end
+		-- if y > -1 then
+			-- screen.pixel(127, y - 1)
+			-- screen.level(2)
+			-- screen.fill()
+		-- end
+	-- end
 
 	-- draw output states
-	for o = 1, 4 do
-		local y_transposed = 63 + keyboard.scroll * 2 - output_note[o]
-		local level = 7
-		-- in transpose mode, blink selected output(s)
-		if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
-			if blink_fast then
-				level = 15
-			else
-				level = 7
-			end
-		end
-		if output_source[o] == output_source_head_1 or output_source[o] == output_source_head_2 or output_source[o] == output_source_head_3 or output_source[o] == output_source_head_4 then
-			local output_head = output_source[o]
-			local x = 129 - ((heads[output_head].offset + 1) % mem_size * 4)
-			local y_original = y_memory[heads[output_head].pos]
-			if grid_mode == grid_mode_memory and heads[output_head].offset == offset_to_edit then
-				level = blink_fast and 15 or 7
-			end
-			screen.level(level)
-			screen.move(x, y_transposed)
-			screen.line_rel(3, 0)
-			screen.stroke()
-			-- draw a line connecting transposed output with original note
-			screen.level(1)
-			local transpose_distance = y_transposed - y_original
-			if transpose_distance < -2 or transpose_distance > 2 then
-				local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
-				screen.pixel(x + 1, transpose_point_y)
-				screen.fill()
-				local transpose_line_length = math.abs(y_transposed - y_original) - 4
-				if transpose_line_length > 0 then
-					local transpose_line_top = math.min(y_transposed + 3, y_original)
-					screen.move(x + 2, transpose_line_top)
-					screen.line_rel(0, transpose_line_length)
-					screen.stroke()
-				end
-			end
-		elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
-			-- draw output pitch
-			screen.pixel(127, y_transposed - 1)
-			screen.level(level)
-			screen.fill()
-		end
+	-- for o = 1, 4 do
+		-- local y_transposed = 63 + keyboard.scroll * 2 - output_note[o]
+		-- local level = 7
+		-- -- in transpose mode, blink selected output(s)
+		-- if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
+			-- if blink_fast then
+				-- level = 15
+			-- else
+				-- level = 7
+			-- end
+		-- end
+		-- if output_source[o] == output_source_head_1 or output_source[o] == output_source_head_2 or output_source[o] == output_source_head_3 or output_source[o] == output_source_head_4 then
+			-- local output_head = output_source[o]
+			-- local x = 129 - ((heads[output_head].offset + 1) % mem_size * 4)
+			-- local y_original = y_memory[heads[output_head].pos]
+			-- if grid_mode == grid_mode_memory and heads[output_head].offset == offset_to_edit then
+				-- level = blink_fast and 15 or 7
+			-- end
+			-- screen.level(level)
+			-- screen.move(x, y_transposed)
+			-- screen.line_rel(3, 0)
+			-- screen.stroke()
+			-- -- draw a line connecting transposed output with original note
+			-- screen.level(1)
+			-- local transpose_distance = y_transposed - y_original
+			-- if transpose_distance < -2 or transpose_distance > 2 then
+				-- local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
+				-- screen.pixel(x + 1, transpose_point_y)
+				-- screen.fill()
+				-- local transpose_line_length = math.abs(y_transposed - y_original) - 4
+				-- -- if transpose_line_length > 0 then
+					-- local transpose_line_top = math.min(y_transposed + 3, y_original)
+					-- screen.move(x + 2, transpose_line_top)
+					-- screen.line_rel(0, transpose_line_length)
+					-- screen.stroke()
+				-- end
+			-- end
+		-- elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
+			-- -- draw output pitch
+			-- screen.pixel(127, y_transposed - 1)
+			-- screen.level(level)
+			-- screen.fill()
+		-- end
+	-- end
+
+	-- DEBUG: positions
+	screen.move(0, 1)
+	screen.line_rel(memory.buffer_size, 0)
+	screen.level(1)
+	screen.stroke()
+	screen.pixel(memory:get_loop_pos(0) - 1, 0)
+	screen.level(15)
+	screen.fill()
+	screen.pixel(memory:get_loop_pos(memory.length - 1) - 1, 0)
+	screen.level(15)
+	screen.fill()
+	for offset = 1, memory.length - 2 do
+		screen.pixel(memory:get_loop_pos(offset) - 1, 0)
+		screen.level(7)
+		screen.fill()
 	end
 
 	screen.update()
