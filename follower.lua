@@ -816,22 +816,24 @@ function redraw()
 	local screen_note_width = 4
 	local n_screen_notes = 128 / screen_note_width
 	local screen_note_center = math.floor((n_screen_notes - 1) / 2)
-	-- local n_ghost_notes = n_screen_notes - memory.length
-	-- local n_ghost_notes_left = math.floor(n_ghost_notes / 2)
-	-- local x = 1
 	for n = 1, n_screen_notes do
 		local offset = n - screen_note_center
 		local loop_pos = memory:get_loop_pos(offset)
 		local x = (n - 1) * screen_note_width
 		local y = 63 + keyboard.scroll * 2 - snap(memory:read_absolute(loop_pos))
-		if loop_pos == memory.cursor then
+		if grid_mode == grid_mode_memory and loop_pos == memory.cursor then
+			-- blink the cursor in edit mode
 			if blink_fast then
 				screen.level(15)
 			else
 				screen.level(7)
 			end
 		elseif offset == 0 then
+			-- highlight head
 			screen.level(15)
+		elseif offset >= memory.start_offset and offset <= memory.end_offset then
+			-- highlight content between loop points (center of screen)
+			screen.level(2)
 		else
 			screen.level(1)
 		end

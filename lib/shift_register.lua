@@ -46,24 +46,26 @@ ShiftRegister.new = function(length)
 	return instance
 end
 
-function ShiftRegister:get_loop_pos(offset)
-	offset = (offset - self.start_offset) % self.length + self.start_offset
-	-- TODO: is it better to return to the old paradigm where the loop ENDS at the head instead of starting there? can the loop be made to surround the head? would that even be good?
-	return self:get_buffer_pos(offset)
-end
-
 function ShiftRegister:get_buffer_pos(offset)
 	return (self.head + offset - 1) % self.buffer_size + 1
+end
+
+function ShiftRegister:clamp_loop_offset(offset)
+	return (offset - self.start_offset) % self.length + self.start_offset
+end
+
+function ShiftRegister:get_loop_pos(offset)
+	return self:get_buffer_pos(self:clamp_loop_offset(offset))
 end
 
 function ShiftRegister:shift(delta)
 	-- TODO: wouldn't mind understanding better _why_ this works the way it does
 	if delta > 0 then
-		self:write_buffer_offset(self.end_offset, self:read_buffer_offset(self.start_offset))
+		self:write_buffer_offset(self.end_offset + 1, self:read_buffer_offset(self.start_offset))
 	end
 	self.head = self:get_buffer_pos(delta)
 	if delta < 0 then
-		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset))
+		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1))
 	end
 	self.cursor = self:get_loop_pos(self.cursor - self.head)
 	for i = 1, self.n_read_heads do
@@ -119,8 +121,8 @@ function ShiftRegister:write_cursor(value)
 end
 
 function ShiftRegister:set_length(length)
-	self.start_offset = math.ceil(length / -2)
-	self.end_offset = self.start_offset + length
+	self.start_offset = math.ceil(length / -2) + 1
+	self.end_offset = self.start_offset + length - 1
 	self.length = length
 end
 
