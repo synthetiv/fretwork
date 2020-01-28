@@ -4,8 +4,9 @@ local Keyboard = {}
 setmetatable(Keyboard, Control)
 Keyboard.__index = Keyboard
 
-function Keyboard.new(x, y, width, height)
+function Keyboard.new(x, y, width, height, scale)
 	local instance = Control.new(x, y, width, height)
+	instance.scale = scale
 	instance.octave = 0
 	instance.held_keys = {}
 	instance.last_key = 0
@@ -28,7 +29,7 @@ function Keyboard:get_key_note(x, y)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	return x + 1 - self.x + self.row_offsets[y] + self.octave * 12
+	return x + 1 - self.x + self.row_offsets[y] + self.octave * self.scale.length
 end
 
 function Keyboard:get_key_id_note(id)
@@ -102,6 +103,7 @@ function Keyboard:draw(g)
 	end
 end
 
+-- TODO: obviously this won't be accurate for non-12TET scales
 function Keyboard:is_white_key(n)
 	local pitch = (n - 1) % 12 + 1
 	return (pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12)

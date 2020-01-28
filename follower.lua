@@ -5,16 +5,17 @@ engine.name = 'Analyst'
 
 local musicutil = require 'musicutil'
 
-local grid_keyboard = include 'lib/grid_keyboard'
-local grid_multi_select = include 'lib/grid_multi_select'
-local shift_register = include 'lib/shift_register'
+local Keyboard = include 'lib/grid_keyboard'
+local MultiSelect = include 'lib/grid_multi_select'
+local ShiftRegister = include 'lib/shift_register'
+local Scale = include 'lib/scale'
 
 local pitch_poll_l
 local pitch_in = 0
 local pitch_in_detected = false
 local pitch_in_octave = 0
 local crow_pitch_in = 0
-local mask = {}
+local scale = Scale.new(12)
 local saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
 local active_mask = 0
@@ -31,7 +32,7 @@ local recall_mode = recall_mode_loop
 -- TODO: save/recall memory/loop contents like masks
 -- transposition settings too
 
-local memory = shift_register.new(32)
+local memory = ShiftRegister.new(32)
 local cursor_note = 0
 
 local source
@@ -88,14 +89,14 @@ local grid_mode_transpose = 3
 local grid_mode_memory = 4
 local grid_mode = grid_mode_play
 
-local output_selector = grid_multi_select.new(5, 3, 4)
+local output_selector = MultiSelect.new(5, 3, 4)
 
 local g = grid.connect()
 
 local grid_shift = false
 local grid_ctrl = false
 local grid_octave_key_held = false
-local keyboard = grid_keyboard.new(6, 1, 11, 8)
+local keyboard = Keyboard.new(6, 1, 11, 8, scale)
 local keyboard_note = 0
 
 local screen_note_width = 4
@@ -116,7 +117,7 @@ local function snap(pitch)
 	local quantized = quantize(pitch)
 	-- print(string.format('quantize %f to %d', pitch, quantized))
 	local low = quantized < pitch
-	if mask[quantized] then
+	if scale:contains(quantized) then
 		-- print('pitch enabled')
 		return quantized
 	end
@@ -124,15 +125,15 @@ local function snap(pitch)
 		local up = math.min(96, quantized + i)
 		local down = math.max(1, quantized - i)
 		if low then
-			if mask[down] then
+			if scale:contains(down) then
 				return down
-			elseif mask[up] then
+			elseif scale:contains(up) then
 				return up
 			end
 		else
-			if mask[up] then
+			if scale:contains(up) then
 				return up
-			elseif mask[down] then
+			elseif scale:contains(down) then
 				return down
 			end
 		end
@@ -144,17 +145,13 @@ local function recall_mask(m)
 	if saved_masks[m] == nil then
 		return
 	end
-	for i = 1, max_pitch do
-		mask[i] = saved_masks[m][i]
-	end
+	scale:set_mask(saved_masks[m])
 	active_mask = m
 	mask_dirty = false
 end
 
 local function save_mask(m)
-	for i = 1, max_pitch do
-		saved_masks[m][i] = mask[i]
-	end
+	saved_masks[m] = scale:get_mask()
 	active_mask = m
 	mask_dirty = false
 end
@@ -286,7 +283,7 @@ local key_level_callbacks = {}
 key_level_callbacks[grid_mode_play] = function(x, y, n)
 	local level = 0
 	-- highlight mask
-	if mask[n] then
+	if scale:contains(n) then
 		level = 4
 	end
 	-- highlight output notes
@@ -309,7 +306,7 @@ key_level_callbacks[grid_mode_mask] = function(x, y, n)
 		level = 2
 	end
 	-- highlight mask
-	if mask[n] then
+	if scale:contains(n) then
 		level = 5
 	end
 	-- highlight output notes
@@ -324,7 +321,7 @@ end
 key_level_callbacks[grid_mode_transpose] = function(x, y, n)
 	local level = 0
 	-- highlight octaves
-	if n % 12 == 0 then
+	if n % scale.length == 0 then
 		level = 2
 	end
 	-- highlight transposition settings
@@ -347,7 +344,7 @@ key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	for offset = memory.start_offset, memory.end_offset do
 		if n == memory:read_loop_offset(offset) then
 			-- notes that fall on the mask are brighter
-			level = mask[n] and 4 or 2
+			level = scale:contains(n) and 4 or 2
 		end
 	end
 	-- highlight the note we're editing
@@ -355,15 +352,6 @@ key_level_callbacks[grid_mode_memory] = function(x, y, n)
 		level = blink_fast and 15 or 14
 	end
 	return level
-end
-
--- enable/disable the given note in all octaves
-local function mask_set_pitch_class(note, enable)
-	local pitch = (note - 1 ) % 12 + 1
-	for octave = 0, 7 do
-		mask[pitch + octave * 12] = enable
-	end
-	mask_dirty = true
 end
 
 local function grid_key(x, y, z)
@@ -384,7 +372,8 @@ local function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
 			if z == 1 then
 				local n = keyboard:get_key_note(x, y)
-				mask_set_pitch_class(n, not mask[n])
+				scale:toggle_class(n)
+				mask_dirty = true
 				if grid_ctrl then
 					for out = 1, 4 do
 						update_output(out)
@@ -502,7 +491,8 @@ end
 local function update_freq(value)
 	pitch_in_detected = value > 0
 	if pitch_in_detected then
-		pitch_in = musicutil.freq_to_note_num(value) + (pitch_in_octave - 2) * 12
+		-- TODO: accommodate non-12TET scales
+		pitch_in = musicutil.freq_to_note_num(value) + (pitch_in_octave - 2) * scale.length
 		for out = 1, 4 do
 			if output_source[out] == output_source_audio_in and output_stream[out] then
 				update_output(out)
@@ -521,7 +511,8 @@ local function crow_setup()
 		end
 	end
 	crow.input[2].stream = function(value)
-		crow_pitch_in = math.floor(value * 12 + 0.5)
+		-- TODO: accommodate non-12TET scales
+		crow_pitch_in = math.floor(value * scale.length + 0.5)
 		print(string.format('crow input 2: %fV = %d', value, crow_pitch_in))
 	end
 	params:bang()
@@ -570,10 +561,9 @@ function init()
 			saved_masks[m][i] = false
 		end
 	end
-	for i = 1, max_pitch do
-		local pitch_class = (i - 1) % 12 + 1
+	for pitch = 1, 12 do
 		-- C maj pentatonic
-		mask[i] = pitch_class == 2 or pitch_class == 4 or pitch_class == 7 or pitch_class == 9 or pitch_class == 12
+		scale:set_class(pitch, pitch == 2 or pitch == 4 or pitch == 7 or pitch == 9 or pitch == 12)
 	end
 	save_mask(1)
 
@@ -841,7 +831,7 @@ local function get_screen_offset_x(offset)
 end
 
 local function get_screen_note_y(note)
-	return 63 + keyboard.octave * 12 - note
+	return 63 + keyboard.octave * scale.length - note
 end
 
 local function draw_head_brackets(h, level)
