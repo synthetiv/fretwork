@@ -362,9 +362,18 @@ key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	return level
 end
 
+-- enable/disable the given note in all octaves
+local function mask_set_pitch_class(note, enable)
+	local pitch = (note - 1 ) % 12 + 1
+	for octave = 0, 7 do
+		mask[pitch + octave * 12] = enable
+	end
+	mask_dirty = true
+end
+
 local function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
-		if grid_mode == grid_mode_play then
+		if grid_mode == grid_mode_play and not grid_shift then
 			keyboard:note(x, y, z)
 			keyboard_note = keyboard:get_last_note()
 			if keyboard.gate then
@@ -377,15 +386,10 @@ local function grid_key(x, y, z)
 					end
 				end
 			end
-		elseif grid_mode == grid_mode_mask then
+		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
 			if z == 1 then
 				local n = keyboard:get_key_note(x, y)
-				local enable = not mask[n]
-				local pitch = (n - 1 ) % 12 + 1
-				for octave = 0, 7 do
-					mask[pitch + octave * 12] = enable
-				end
-				mask_dirty = true
+				mask_set_pitch_class(n, not mask[n])
 				if grid_ctrl then
 					for out = 1, 4 do
 						update_output(out)
