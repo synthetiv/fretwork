@@ -141,14 +141,14 @@ end
 function ShiftRegister:set_loop(loop)
 	self:set_length(#loop)
 	for i = 1, self.length do
-		self:write_loop_offset(i - 1, loop[i])
+		self:write_loop_offset(self.cursor + i - 1, loop[i])
 	end
 end
 
 function ShiftRegister:get_loop()
 	local loop = {}
 	for i = 1, self.length do
-		loop[i] = self:read_loop_offset(i - 1)
+		loop[i] = self:read_loop_offset(self.cursor + i - 1)
 	end
 	return loop
 end
