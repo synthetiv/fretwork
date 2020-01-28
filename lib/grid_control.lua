@@ -13,8 +13,8 @@ function Control.new(x, y, width, height)
 end
 
 function Control.get_key_id_coords(id)
-	local x = id % 16
-	local y = math.floor(id / 16)
+	local x = (id - 1) % 16 + 1
+	local y = math.floor((id - x) / 16)
 	return x, y
 end
 

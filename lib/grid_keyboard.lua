@@ -7,6 +7,7 @@ Keyboard.__index = Keyboard
 function Keyboard.new(x, y, width, height)
 	local instance = Control.new(x, y, width, height)
 	instance.scroll = 4
+	instance.octave = 0
 	instance.held_keys = {}
 	instance.last_key = 0
 	instance.gate = false
@@ -23,7 +24,7 @@ function Keyboard:get_key_note(x, y)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	return x + 1 - self.x + (7 + self.scroll - y) * 5
+	return x + 1 - self.x + (7 + self.scroll - y) * 5 + self.octave * 12
 end
 
 function Keyboard:get_key_id_note(id)

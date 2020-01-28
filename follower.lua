@@ -94,8 +94,7 @@ local g = grid.connect()
 
 local grid_shift = false
 local grid_ctrl = false
-local scroll = 4
-local keyboard = grid_keyboard.new(6, 1, 10, 8)
+local keyboard = grid_keyboard.new(6, 1, 11, 8)
 local keyboard_note = 0
 
 local screen_note_width = 4
@@ -272,14 +271,9 @@ local function grid_redraw()
 	-- output buttons
 	output_selector:draw(g)
 
-	-- scrollbar
-	for y = 1, 8 do
-		if 9 - y == keyboard.scroll or 8 - y == keyboard.scroll then
-			g:led(16, y, 7)
-		else
-			g:led(16, y, 2)
-		end
-	end
+	-- keyboard octaves
+	g:led(3, 8, 2 - math.min(keyboard.octave, 0))
+	g:led(4, 8, 2 + math.max(keyboard.octave, 0))
 
 	-- keyboard
 	keyboard:draw(g)
@@ -428,16 +422,10 @@ local function grid_key(x, y, z)
 		-- output select buttons
 		-- TODO: what should these do in modes other than transpose?
 		output_selector:key(x, y, z)
-	elseif x == 16 then
-		-- scroll
-		-- TODO: no more scroll; use octave buttons
-		if z == 1 then
-			if 9 - y < keyboard.scroll and keyboard.scroll > 1 then
-				keyboard.scroll = 9 - y
-			elseif 8 - y > keyboard.scroll and keyboard.scroll < 7 then
-				keyboard.scroll = 8 - y
-			end
-		end
+	elseif x == 3 and y == 8 and z == 1 then
+		keyboard.octave = keyboard.octave - 1
+	elseif x == 4 and y == 8 and z == 1 then
+		keyboard.octave = keyboard.octave + 1
 	elseif x < 5 and y == 1 and z == 1 then
 		-- grid mode buttons
 		if x == 1 then
@@ -838,7 +826,7 @@ local function get_screen_offset_x(offset)
 end
 
 local function get_screen_note_y(note)
-	return 63 + keyboard.scroll * 2 - note
+	return 63 + keyboard.octave * 12 - note
 end
 
 local function draw_head_brackets(h, level)
