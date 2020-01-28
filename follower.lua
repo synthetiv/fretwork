@@ -31,6 +31,7 @@ local recall_mode_loop = 2
 local recall_mode = recall_mode_loop
 
 -- TODO: save/recall transposition settings too
+-- TODO: save/recall mask, loop, and transposition all at once
 
 local memory = ShiftRegister.new(32)
 local cursor_note = 0
@@ -162,12 +163,12 @@ local function recall_loop()
 		return
 	end
 	memory:set_loop(saved_loops[loop_selector.selected])
-	-- loop_dirty = false -- TODO
+	memory.dirty = false
 end
 
 local function save_loop()
 	saved_loops[loop_selector.selected] = memory:get_loop()
-	-- loop_dirty = false -- TODO
+	memory.dirty = false
 end
 
 local function update_output(out)
@@ -249,7 +250,7 @@ local function grid_redraw()
 	if recall_mode == recall_mode_mask then
 		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
 	else
-		loop_selector:draw(g, 7, 2)
+		loop_selector:draw(g, memory.dirty and blink_slow and 8 or 7, 2)
 	end
 
 	-- shift + ctrl

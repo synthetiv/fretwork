@@ -45,6 +45,7 @@ ShiftRegister.new = function(length)
 		instance.read_heads[i] = ReadHead.new(i * -3, instance)
 	end
 	instance:set_length(length)
+	instance.dirty = false
 	instance:update_read_heads(true)
 	return instance
 end
@@ -64,11 +65,11 @@ end
 function ShiftRegister:shift(delta)
 	-- TODO: wouldn't mind understanding better _why_ this works the way it does
 	if delta > 0 then
-		self:write_buffer_offset(self.end_offset + 1, self:read_buffer_offset(self.start_offset))
+		self:write_buffer_offset(self.end_offset + 1, self:read_buffer_offset(self.start_offset), true)
 	end
 	self.head = self:get_buffer_pos(delta)
 	if delta < 0 then
-		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1))
+		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1), true)
 	end
 	self:move_cursor(delta * -1)
 	self:update_read_heads(true)
@@ -107,24 +108,29 @@ function ShiftRegister:read_buffer_offset(offset)
 	return self:read_absolute(self:get_buffer_pos(offset))
 end
 
-function ShiftRegister:write_absolute(pos, value)
+function ShiftRegister:write_absolute(pos, value, clean)
 	self.buffer[pos] = value
+	-- slightly weird hack since we use this method internally for looping: sometimes we're writing to
+	-- _preserve_ the loop contents, in which case this doesn't 'dirty' the loop
+	if not clean then
+		self.dirty = true
+	end
 end
 
-function ShiftRegister:write_loop_offset(offset, value)
-	self:write_absolute(self:get_loop_pos(offset), value)
+function ShiftRegister:write_loop_offset(offset, value, clean)
+	self:write_absolute(self:get_loop_pos(offset), value, clean)
 end
 
-function ShiftRegister:write_buffer_offset(offset, value)
-	self:write_absolute(self:get_buffer_pos(offset), value)
+function ShiftRegister:write_buffer_offset(offset, value, clean)
+	self:write_absolute(self:get_buffer_pos(offset), value, clean)
 end
 
-function ShiftRegister:write_head(value)
-	self:write_absolute(self.head, value)
+function ShiftRegister:write_head(value, clean)
+	self:write_absolute(self.head, value, clean)
 end
 
-function ShiftRegister:write_cursor(value)
-	self:write_loop_offset(self.cursor, value)
+function ShiftRegister:write_cursor(value, clean)
+	self:write_loop_offset(self.cursor, value, clean)
 end
 
 -- TODO: insert/delete (changing loop length)
@@ -136,6 +142,7 @@ function ShiftRegister:set_length(length)
 	-- constrain cursor and heads to new length
 	self:move_cursor(0)
 	self:update_read_heads(false)
+	self.dirty = true
 end
 
 function ShiftRegister:set_loop(loop)
@@ -143,6 +150,7 @@ function ShiftRegister:set_loop(loop)
 	for i = 1, self.length do
 		self:write_loop_offset(self.cursor + i - 1, loop[i])
 	end
+	self.dirty = true
 end
 
 function ShiftRegister:get_loop()
