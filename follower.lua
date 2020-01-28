@@ -815,7 +815,7 @@ local function get_screen_offset_x(offset)
 end
 
 local function get_screen_note_y(note)
-	return 63 + keyboard.octave * scale.length - note
+	return 71 + keyboard.octave * scale.length - note
 end
 
 local function draw_head_brackets(h, level)
