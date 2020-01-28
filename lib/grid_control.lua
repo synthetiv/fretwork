@@ -12,14 +12,14 @@ function Control.new(x, y, width, height)
 	return instance
 end
 
-function Control.get_key_id_coords(id)
-	local x = (id - 1) % 16 + 1
-	local y = math.floor((id - x) / 16)
-	return x, y
+function Control:get_key_id_coords(id)
+	local x = id % self.width
+	local y = math.floor((id - x) / self.width)
+	return self.x + x, self.y + y
 end
 
-function Control.get_key_id(x, y)
-	return x + y * 16
+function Control:get_key_id(x, y)
+	return (x - self.x) + (y - self.y) * self.width
 end
 
 function Control:should_handle_key(x, y)

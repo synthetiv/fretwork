@@ -33,7 +33,7 @@ function Keyboard:get_key_note(x, y)
 end
 
 function Keyboard:get_key_id_note(id)
-	local x, y = self.get_key_id_coords(id)
+	local x, y = self:get_key_id_coords(id)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
@@ -53,7 +53,7 @@ function Keyboard:note(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return
 	end
-	local key_id = self.get_key_id(x, y)
+	local key_id = self:get_key_id(x, y)
 	if z == 1 then
 		local n = self:get_key_note(x, y)
 		table.insert(self.held_keys, key_id)
@@ -81,7 +81,7 @@ function Keyboard:reset()
 end
 
 function Keyboard:is_key_held(x, y)
-	local key_id = self.get_key_id(x, y)
+	local key_id = self:get_key_id(x, y)
 	for i = 1, #self.held_keys do
 		if self.held_keys[i] == key_id then
 			return true
@@ -91,7 +91,7 @@ function Keyboard:is_key_held(x, y)
 end
 
 function Keyboard:is_key_last(x, y)
-	return self.get_key_id(x, y) == self.last_key
+	return self:get_key_id(x, y) == self.last_key
 end
 
 function Keyboard:draw(g)
