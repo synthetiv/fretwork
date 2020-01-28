@@ -30,8 +30,7 @@ local recall_mode_mask = 1
 local recall_mode_loop = 2
 local recall_mode = recall_mode_loop
 
--- TODO: save/recall memory/loop contents like masks
--- transposition settings too
+-- TODO: save/recall transposition settings too
 
 local memory = ShiftRegister.new(32)
 local cursor_note = 0
@@ -933,7 +932,6 @@ function redraw()
 			local head = memory.read_heads[head_index]
 			local x = get_screen_offset_x(head.offset)
 			local y_original = get_screen_note_y(snap(memory:read_loop_offset(head.offset)))
-			-- TODO: how do I make sure the selected head is drawn over the others?
 			if output_selector:is_selected(o) then
 				selected_heads[head_index] = true
 			else
