@@ -465,8 +465,12 @@ local function grid_key(x, y, z)
 			save_loop()
 		else
 			recall_loop()
-			for out = 1, 4 do
-				update_output(out)
+			if grid_ctrl then
+				for out = 1, 4 do
+					if output_source[out] >= output_source_head_1 and output_source[out] <= output_source_head_4 then
+						update_output(out)
+					end
+				end
 			end
 		end
 	elseif x == 1 and y == 7 then
