@@ -6,11 +6,15 @@ Keyboard.__index = Keyboard
 
 function Keyboard.new(x, y, width, height)
 	local instance = Control.new(x, y, width, height)
-	instance.scroll = 4
 	instance.octave = 0
 	instance.held_keys = {}
 	instance.last_key = 0
 	instance.gate = false
+	-- set offset interval per row, rather than calculating it dynamically, so that "open tunings" are possible
+	instance.row_offsets = {}
+	for row = 1, height do
+		instance.row_offsets[row] = (11 - row) * 5
+	end
 	-- this method can be redefined on the fly
 	instance.get_key_level = function(x, y, n)
 		return instance:is_white_key(n) and 2 or 0
@@ -24,7 +28,7 @@ function Keyboard:get_key_note(x, y)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	return x + 1 - self.x + (7 + self.scroll - y) * 5 + self.octave * 12
+	return x + 1 - self.x + self.row_offsets[y] + self.octave * 12
 end
 
 function Keyboard:get_key_id_note(id)
@@ -56,7 +60,6 @@ function Keyboard:note(x, y, z)
 	else
 		if self.held_keys[#self.held_keys] == key_id then
 			table.remove(self.held_keys)
-			-- TODO: if scroll value has changed since previous key down, the key id and original note value won't match. we need to track both.
 			if #self.held_keys > 0 then
 				self.last_key = self.held_keys[#self.held_keys]
 			end
