@@ -440,9 +440,8 @@ local function grid_key(x, y, z)
 		end
 		-- set the grid drawing routine based on new mode
 		keyboard.get_key_level = key_level_callbacks[grid_mode]
-		-- clear held note stack
-		-- this prevents held notes from getting stuck when switching to a mode that doesn't call
-		-- keyboard:note()
+		-- clear held note stack, in order to prevent held notes from getting stuck when switching to a
+		-- mode that doesn't call `keyboard:note()`
 		keyboard:reset()
 	elseif x == 2 and y == 2 and z == 1 then
 		recall_mode = recall_mode_mask
