@@ -94,6 +94,7 @@ local g = grid.connect()
 
 local grid_shift = false
 local grid_ctrl = false
+local grid_octave_key_held = false
 local keyboard = grid_keyboard.new(6, 1, 11, 8)
 local keyboard_note = 0
 
@@ -422,10 +423,24 @@ local function grid_key(x, y, z)
 		-- output select buttons
 		-- TODO: what should these do in modes other than transpose?
 		output_selector:key(x, y, z)
-	elseif x == 3 and y == 8 and z == 1 then
-		keyboard.octave = keyboard.octave - 1
-	elseif x == 4 and y == 8 and z == 1 then
-		keyboard.octave = keyboard.octave + 1
+	elseif x == 3 and y == 8 then
+		if z == 1 then
+			if grid_octave_key_held then
+				keyboard.octave = 0
+			else
+				keyboard.octave = keyboard.octave - 1
+			end
+		end
+		grid_octave_key_held = z == 1
+	elseif x == 4 and y == 8 then
+		if z == 1 then
+			if grid_octave_key_held then
+				keyboard.octave = 0
+			else
+				keyboard.octave = keyboard.octave + 1
+			end
+		end
+		grid_octave_key_held = z == 1
 	elseif x < 5 and y == 1 and z == 1 then
 		-- grid mode buttons
 		if x == 1 then
