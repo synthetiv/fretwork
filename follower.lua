@@ -330,17 +330,29 @@ end
 
 key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	local level = 0
-	-- highlight other notes in the sequence
-	-- TODO: this is probably ridiculously inefficient
-	for offset = memory.start_offset, memory.end_offset do
-		if n == memory:read_loop_offset(offset) then
-			-- notes that fall on the mask are brighter
-			level = scale:contains(n) and 4 or 2
+	-- highlight mask
+	if scale:contains(n) then
+		level = 3
+	end
+	-- highlight un-transposed output notes
+	for o = 1, 4 do
+		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
+			if n == snap(memory:read_head(output_source[o])) then
+				level = 7
+			end
 		end
 	end
-	-- highlight the note we're editing
+	-- highlight snapped version of the note at the cursor
 	if n == cursor_note then
-		level = blink_fast and 15 or 14
+		level = 10
+	end
+	-- highlight + blink the un-snapped note we're editing
+	if n == memory:read_cursor() then
+		if blink_fast then
+			level = 15
+		else
+			level = 14
+		end
 	end
 	return level
 end
