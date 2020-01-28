@@ -167,11 +167,6 @@ local function save_loop()
 	-- loop_dirty = false -- TODO
 end
 
--- TODO: make this into a 'grid bank' control
-local function get_grid_mask(x, y)
-	return x + (y - 3) * 4
-end
-
 local function update_output(out)
 	local output_source = output_source[out]
 	local volts = 0
