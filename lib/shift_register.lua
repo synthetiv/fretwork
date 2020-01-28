@@ -123,10 +123,11 @@ function ShiftRegister:write_head(value)
 	self:write_absolute(self.head, value)
 end
 
--- TODO: insert/delete (changing loop length)
 function ShiftRegister:write_cursor(value)
 	self:write_loop_offset(self.cursor, value)
 end
+
+-- TODO: insert/delete (changing loop length)
 
 function ShiftRegister:set_length(length)
 	self.start_offset = math.ceil(length / -2) + 1
@@ -142,9 +143,6 @@ function ShiftRegister:set_loop(loop)
 	for i = 1, self.length do
 		self:write_loop_offset(i - 1, loop[i])
 	end
-	-- constrain cursor and heads to new length
-	self:move_cursor(0)
-	self:update_read_heads(false)
 end
 
 function ShiftRegister:get_loop()
