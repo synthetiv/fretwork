@@ -83,6 +83,9 @@ local output_source_audio_in = 5
 local output_source_grid = 6
 local output_stream = { false, false, false, false }
 
+local active_heads = { false, false, false, false }
+local selected_heads = { false, false, false, false }
+
 local grid_mode_play = 1
 local grid_mode_mask = 2
 local grid_mode_transpose = 3
@@ -214,6 +217,20 @@ local function rewind()
 		end
 	end
 	dirty = true
+end
+
+local function update_active_heads()
+	active_heads = { false, false, false, false }
+	selected_heads = { false, false, false, false }
+	for o = 1, 4 do
+		local source = output_source[o]
+		if source ~= nil and source >= output_source_head_1 and source <= output_source_head_4 then
+			active_heads[source] = true
+			if output_selector:is_selected(o) then
+				selected_heads[source] = true
+			end
+		end
+	end
 end
 
 local function grid_redraw()
@@ -403,9 +420,9 @@ local function grid_key(x, y, z)
 			end
 		end
 	elseif output_selector:should_handle_key(x, y) then
-		-- output select buttons
 		-- TODO: what should these do in modes other than transpose?
 		output_selector:key(x, y, z)
+		update_active_heads()
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
@@ -690,6 +707,7 @@ function init()
 			default = out,
 			action = function(value)
 				output_source[out] = value
+				update_active_heads()
 				update_output(out)
 			end
 		}
@@ -786,20 +804,15 @@ function enc(n, d)
 	if n == 1 then
 		params:delta('loop_length', d)
 	elseif n == 2 then
-		for o = 1, 4 do
-			if output_selector:is_selected(o) then
-				if output_source[o] < 5 then
-					-- TODO: this will behave weirdly if more than one output reads from the same head
-					params:delta('head_' .. o .. '_offset', d)
-				end
+		for h = 1, 4 do
+			if selected_heads[h] then
+				params:delta('head_' .. h .. '_offset', d)
 			end
 		end
 	elseif n == 3 then
-		for o = 1, 4 do
-			if output_selector:is_selected(o) then
-				if output_source[o] < 5 then
-					params:delta('head_' .. o .. '_offset_random', d)
-				end
+		for h = 1, 4 do
+			if selected_heads[h] then
+				params:delta('head_' .. h .. '_offset_random', d)
 			end
 		end
 	end
@@ -907,9 +920,6 @@ function redraw()
 		-- end
 	-- end
 
-	local active_heads = { false, false, false, false }
-	local selected_heads = { false, false, false, false }
-
 	-- draw output states
 	for o = 1, 4 do
 		local y_transposed = get_screen_note_y(output_note[o])
@@ -927,11 +937,6 @@ function redraw()
 			local head = memory.read_heads[head_index]
 			local x = get_screen_offset_x(head.offset)
 			local y_original = get_screen_note_y(snap(memory:read_loop_offset(head.offset)))
-			if output_selector:is_selected(o) then
-				selected_heads[head_index] = true
-			else
-				active_heads[head_index] = true
-			end
 			-- blink if cursor overlaps and not transposed (if transposed, the original pitch will blink)
 			if grid_mode == grid_mode_memory and head.offset == memory.cursor and y_original == y_transposed then
 				level = blink_fast and 15 or 7
