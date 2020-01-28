@@ -354,6 +354,27 @@ key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	return level
 end
 
+local function grid_octave_key(z, d)
+	if z == 1 then
+		if grid_octave_key_held then
+			keyboard.octave = 0
+		else
+			keyboard.octave = keyboard.octave + d
+		end
+		if grid_mode == grid_mode_play and keyboard.gate then
+			-- change octave of current note
+			keyboard_note = keyboard:get_last_note()
+		end
+		-- update streaming outputs
+		for out = 1, 4 do
+			if output_source[out] == output_source_grid and output_stream[out] then
+				update_output(out)
+			end
+		end
+	end
+	grid_octave_key_held = z == 1
+end
+
 local function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		if grid_mode == grid_mode_play and not grid_shift then
@@ -413,23 +434,9 @@ local function grid_key(x, y, z)
 		-- TODO: what should these do in modes other than transpose?
 		output_selector:key(x, y, z)
 	elseif x == 3 and y == 8 then
-		if z == 1 then
-			if grid_octave_key_held then
-				keyboard.octave = 0
-			else
-				keyboard.octave = keyboard.octave - 1
-			end
-		end
-		grid_octave_key_held = z == 1
+		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
-		if z == 1 then
-			if grid_octave_key_held then
-				keyboard.octave = 0
-			else
-				keyboard.octave = keyboard.octave + 1
-			end
-		end
-		grid_octave_key_held = z == 1
+		grid_octave_key(z, 1)
 	elseif x < 5 and y == 1 and z == 1 then
 		-- grid mode buttons
 		if x == 1 then
