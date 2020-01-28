@@ -1,15 +1,14 @@
-local Control = include 'lib/grid_control'
+local Select = include 'lib/grid_select'
 
 local MultiSelect = {}
-setmetatable(MultiSelect, Control)
+setmetatable(MultiSelect, Select)
 MultiSelect.__index = MultiSelect
 
-function MultiSelect.new(x, y, height)
-	local instance = Control.new(x, y, 1, height)
-	instance.count = height
+function MultiSelect.new(x, y, width, height)
+	local instance = Select.new(x, y, width, height)
+	setmetatable(instance, MultiSelect)
 	instance.held = {}
 	instance.selected = {}
-	setmetatable(instance, MultiSelect)
 	instance:reset()
 	return instance
 end
@@ -19,17 +18,6 @@ function MultiSelect:reset(selected)
 		self.held[i] = false
 		self.selected[i] = selected == true
 	end
-end
-
-function MultiSelect:get_key_option(x, y)
-	if not self:should_handle_key(x, y) then
-		return 0
-	end
-	return y - self.y + 1
-end
-
-function MultiSelect:has_option(option)
-	return option >= 1 and option <= self.count
 end
 
 function MultiSelect:is_held(option)
@@ -76,16 +64,6 @@ function MultiSelect:key(x, y, z)
 		self.selected[option] = true
 	end
 	self.held[option] = z == 1
-end
-
-function MultiSelect:get_option_y(option)
-	return self.y + option - 1
-end
-
-function MultiSelect:draw(g)
-	for option = 1, self.count do
-		g:led(self.x, self:get_option_y(option), self:is_selected(option) and 10 or 5)
-	end
 end
 
 return MultiSelect

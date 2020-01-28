@@ -6,6 +6,7 @@ engine.name = 'Analyst'
 local musicutil = require 'musicutil'
 
 local Keyboard = include 'lib/grid_keyboard'
+local Select = include 'lib/grid_select'
 local MultiSelect = include 'lib/grid_multi_select'
 local ShiftRegister = include 'lib/shift_register'
 local Scale = include 'lib/scale'
@@ -18,12 +19,12 @@ local crow_pitch_in = 0
 local scale = Scale.new(12)
 local saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
-local active_mask = 0
 local mask_dirty = false
+local mask_selector = Select.new(1, 3, 4, 4)
 local max_pitch = 96
 
 local saved_loops = {}
-local active_loop = 0
+local loop_selector = Select.new(1, 3, 4, 4)
 
 local recall_mode_mask = 1
 local recall_mode_loop = 2
@@ -89,7 +90,7 @@ local grid_mode_transpose = 3
 local grid_mode_memory = 4
 local grid_mode = grid_mode_play
 
-local output_selector = MultiSelect.new(5, 3, 4)
+local output_selector = MultiSelect.new(5, 3, 1, 4)
 
 local g = grid.connect()
 
@@ -141,33 +142,29 @@ local function snap(pitch)
 	return 0
 end
 
-local function recall_mask(m)
-	if saved_masks[m] == nil then
+local function recall_mask()
+	if saved_masks[mask_selector.selected] == nil then
 		return
 	end
-	scale:set_mask(saved_masks[m])
-	active_mask = m
+	scale:set_mask(saved_masks[mask_selector.selected])
 	mask_dirty = false
 end
 
-local function save_mask(m)
-	saved_masks[m] = scale:get_mask()
-	active_mask = m
+local function save_mask()
+	saved_masks[mask_selector.selected] = scale:get_mask()
 	mask_dirty = false
 end
 
-local function recall_loop(l)
-	if saved_loops[l] == nil then
+local function recall_loop()
+	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	memory:set_loop(saved_loops[l])
-	active_loop = l
+	memory:set_loop(saved_loops[loop_selector.selected])
 	-- loop_dirty = false -- TODO
 end
 
-local function save_loop(l)
-	saved_loops[l] = memory:get_loop()
-	active_loop = l
+local function save_loop()
+	saved_loops[loop_selector.selected] = memory:get_loop()
 	-- loop_dirty = false -- TODO
 end
 
@@ -238,28 +235,10 @@ local function grid_redraw()
 	g:led(4, 2, recall_mode == recall_mode_loop and 7 or 2)
 
 	-- recall buttons
-	for x = 1, 4 do
-		for y = 3, 6 do
-			if recall_mode == recall_mode_mask then
-				local m = get_grid_mask(x, y)
-				if active_mask == m then
-					if mask_dirty and blink_slow then
-						g:led(x, y, 8)
-					else
-						g:led(x, y, 7)
-					end
-				else
-					g:led(x, y, 2)
-				end
-			elseif recall_mode == recall_mode_loop then
-				local l = get_grid_mask(x, y) -- TODO: silly; make this a grid control
-				if active_loop == l then
-					g:led(x, y, 7) -- TODO: track dirty/not?
-				else
-					g:led(x, y, 2)
-				end
-			end
-		end
+	if recall_mode == recall_mode_mask then
+		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
+	else
+		loop_selector:draw(g, 7, 2)
 	end
 
 	-- shift + ctrl
@@ -267,7 +246,7 @@ local function grid_redraw()
 	g:led(1, 8, grid_ctrl and 15 or 2)
 
 	-- output buttons
-	output_selector:draw(g)
+	output_selector:draw(g, 10, 5)
 
 	-- keyboard octaves
 	g:led(3, 8, 2 - math.min(keyboard.octave, 0))
@@ -458,29 +437,26 @@ local function grid_key(x, y, z)
 		recall_mode = recall_mode_mask
 	elseif x == 4 and y == 2 and z == 1 then
 		recall_mode = recall_mode_loop
-	elseif x < 5 and y > 2 and y < 7 and z == 1 then
-		-- recall buttons
-		if recall_mode == recall_mode_mask then
-			local m = get_grid_mask(x, y)
-			if grid_shift then
-				save_mask(m)
-			else
-				recall_mask(m)
+	elseif recall_mode == recall_mode_mask and mask_selector:should_handle_key(x, y) then
+		mask_selector:key(x, y, z)
+		if grid_shift then
+			save_mask()
+		else
+			recall_mask()
+		end
+		if grid_ctrl then
+			for out = 1, 4 do
+				update_output(out)
 			end
-			if grid_ctrl then
-				for out = 1, 4 do
-					update_output(out)
-				end
-			end
-		elseif recall_mode == recall_mode_loop then
-			local l = get_grid_mask(x, y) -- TODO
-			if grid_shift then
-				save_loop(l)
-			else
-				recall_loop(l)
-				for out = 1, 4 do
-					update_output(out)
-				end
+		end
+	elseif recall_mode == recall_mode_loop and loop_selector:should_handle_key(x, y) then
+		loop_selector:key(x, y, z)
+		if grid_shift then
+			save_loop()
+		else
+			recall_loop()
+			for out = 1, 4 do
+				update_output(out)
 			end
 		end
 	elseif x == 1 and y == 7 then
@@ -572,7 +548,8 @@ function init()
 		-- C maj pentatonic
 		scale:set_class(pitch, pitch == 2 or pitch == 4 or pitch == 7 or pitch == 9 or pitch == 12)
 	end
-	save_mask(1)
+	mask_selector.selected = 1
+	save_mask()
 
 	for l = 1, 16 do
 		saved_loops[l] = {}
@@ -583,7 +560,8 @@ function init()
 	for i = 1, 16 do
 		saved_loops[1][i] = 24 + i * 3
 	end
-	recall_loop(1)
+	loop_selector.selected = 1
+	recall_loop()
 	
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control
