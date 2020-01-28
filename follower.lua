@@ -453,10 +453,10 @@ local function grid_key(x, y, z)
 			save_mask()
 		else
 			recall_mask()
-		end
-		if grid_ctrl then
-			for out = 1, 4 do
-				update_output(out)
+			if grid_ctrl then
+				for out = 1, 4 do
+					update_output(out)
+				end
 			end
 		end
 	elseif recall_mode == recall_mode_loop and loop_selector:should_handle_key(x, y) then
