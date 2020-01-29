@@ -100,8 +100,9 @@ local g = grid.connect()
 local grid_shift = false
 local grid_ctrl = false
 local grid_octave_key_held = false
-local keyboard = Keyboard.new(6, 1, 11, 8, scale)
-local keyboard_note = 0
+local input_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+local control_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+local keyboard = input_keyboard
 
 local screen_note_width = 4
 local n_screen_notes = 128 / screen_note_width
@@ -177,7 +178,7 @@ local function update_output(out)
 	if output_source == output_source_audio_in then
 		output_note[out] = snap(quantize(pitch_in) + output_transpose[out])
 	elseif output_source == output_source_grid then
-		output_note[out] = snap(keyboard_note + output_transpose[out])
+		output_note[out] = snap(input_keyboard:get_last_note() + output_transpose[out])
 	else
 		local output_head = output_source
 		output_note[out] = snap(memory:read_head(output_head) + output_transpose[out])
@@ -192,14 +193,14 @@ local function sample_pitch()
 	if loop_probability <= math.random(1, 100) then
 		if source == source_crow then
 			memory:write_head(crow_pitch_in)
-		elseif keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
-			memory:write_head(keyboard_note)
+		elseif input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+			memory:write_head(input_keyboard:get_last_note())
 		elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
 			memory:write_head(pitch_in)
 		elseif source == source_grid_crow then
 			memory:write_head(crow_pitch_in)
-		elseif keyboard.gate and source == source_pitch_grid then
-			memory:write_head(keyboard_note)
+		elseif input_keyboard.gate and source == source_pitch_grid then
+			memory:write_head(input_keyboard:get_last_note())
 		end
 	end
 	for out = 1, 4 do
@@ -444,12 +445,16 @@ local function grid_key(x, y, z)
 		-- grid mode buttons
 		if x == 1 then
 			grid_mode = grid_mode_play
+			keyboard = input_keyboard
 		elseif x == 2 then
 			grid_mode = grid_mode_mask
+			keyboard = control_keyboard
 		elseif x == 3 then
 			grid_mode = grid_mode_transpose
+			keyboard = control_keyboard
 		elseif x == 4 then
 			grid_mode = grid_mode_memory
+			keyboard = control_keyboard
 		end
 		-- set the grid drawing routine based on new mode
 		keyboard.get_key_level = key_level_callbacks[grid_mode]
