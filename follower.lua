@@ -651,12 +651,6 @@ function init()
 			default = 0,
 			action = function(value)
 				head.randomness = value
-				head:update(true)
-				for o = 1, 4 do
-					if output_source[o] == i then
-						update_output(o)
-					end
-				end
 				dirty = true
 			end
 		}
