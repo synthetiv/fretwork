@@ -83,6 +83,7 @@ end
 
 function ShiftRegister:move_cursor(delta)
 	self.cursor = self:clamp_loop_offset(self.cursor + delta)
+	self.dirty = true
 end
 
 function ShiftRegister:read_absolute(pos)
