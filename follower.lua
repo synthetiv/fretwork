@@ -21,7 +21,6 @@ local saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
 local mask_dirty = false
 local mask_selector = Select.new(1, 3, 4, 4)
-local max_pitch = 96
 
 local saved_loops = {}
 local loop_selector = Select.new(1, 3, 4, 4)
@@ -113,39 +112,6 @@ local blink_fast = false
 local dirty = false
 local redraw_metro
 
-local function quantize(pitch)
-	return math.floor(pitch + 0.5)
-end
-
-local function snap(pitch)
-	pitch = math.max(1, math.min(max_pitch, pitch))
-	local quantized = quantize(pitch)
-	-- print(string.format('quantize %f to %d', pitch, quantized))
-	local low = quantized < pitch
-	if scale:contains(quantized) then
-		-- print('pitch enabled')
-		return quantized
-	end
-	for i = 1, 96 do
-		local up = math.min(96, quantized + i)
-		local down = math.max(1, quantized - i)
-		if low then
-			if scale:contains(down) then
-				return down
-			elseif scale:contains(up) then
-				return up
-			end
-		else
-			if scale:contains(up) then
-				return up
-			elseif scale:contains(down) then
-				return down
-			end
-		end
-	end
-	return 0
-end
-
 local function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
@@ -176,12 +142,12 @@ local function update_output(out)
 	local output_source = output_source[out]
 	local volts = 0
 	if output_source == output_source_audio_in then
-		output_note[out] = snap(quantize(pitch_in) + output_transpose[out])
+		output_note[out] = scale:snap(quantize(pitch_in) + output_transpose[out])
 	elseif output_source == output_source_grid then
-		output_note[out] = snap(input_keyboard:get_last_note() + output_transpose[out])
+		output_note[out] = scale:snap(input_keyboard:get_last_note() + output_transpose[out])
 	else
 		local output_head = output_source
-		output_note[out] = snap(memory:read_head(output_head) + output_transpose[out])
+		output_note[out] = scale:snap(memory:read_head(output_head) + output_transpose[out])
 	end
 	volts = output_note[out] / 12 - 1
 	dirty = true
@@ -338,7 +304,7 @@ key_level_callbacks[grid_mode_memory] = function(x, y, n)
 	-- highlight un-transposed output notes
 	for o = 1, 4 do
 		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
-			if n == snap(memory:read_head(output_source[o])) then
+			if n == scale:snap(memory:read_head(output_source[o])) then
 				level = 7
 			end
 		end
@@ -420,7 +386,7 @@ local function grid_key(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
 				memory:write_cursor(note)
-				cursor_note = snap(note)
+				cursor_note = scale:snap(note)
 				-- update outputs immediately, if appropriate
 				for h = 1, memory.n_read_heads do
 					if memory.read_heads[h].offset == memory.cursor then
@@ -572,7 +538,7 @@ function init()
 	
 	for m = 1, 16 do
 		saved_masks[m] = {}
-		for i = 1, max_pitch do
+		for i = 1, 12 do
 			saved_masks[m][i] = false
 		end
 	end
@@ -705,7 +671,7 @@ function init()
 		default = 16,
 		action = function(value)
 			memory:set_length(value)
-			cursor_note = snap(memory:read_cursor())
+			cursor_note = scale:snap(memory:read_cursor())
 			for o = 1, 4 do
 				-- TODO: this nil comparison is only necessary because of the order of params; should they
 				-- be reordered anyway?
@@ -792,11 +758,11 @@ end
 local function key_select_pos(n)
 	if n == 2 then
 		memory:move_cursor(-1)
-		cursor_note = snap(memory:read_cursor())
+		cursor_note = scale:snap(memory:read_cursor())
 		dirty = true
 	elseif n == 3 then
 		memory:move_cursor(1)
-		cursor_note = snap(memory:read_cursor())
+		cursor_note = scale:snap(memory:read_cursor())
 		dirty = true
 	end
 end
@@ -903,7 +869,7 @@ function redraw()
 		local offset = n - screen_note_center - 1
 		local loop_pos = memory:get_loop_pos(offset)
 		local x = (n - 1) * screen_note_width
-		local y = get_screen_note_y(snap(memory:read_absolute(loop_pos)))
+		local y = get_screen_note_y(scale:snap(memory:read_absolute(loop_pos)))
 		if grid_mode == grid_mode_memory and offset == memory.cursor then
 			-- blink the cursor in edit mode
 			if blink_fast then
@@ -930,9 +896,9 @@ function redraw()
 	-- for o = 1, 4 do
 		-- local y = -1
 		-- if output_source[o] == output_source_grid then
-			-- y = get_screen_note_y(snap(keyboard:get_last_note()))
+			-- y = get_screen_note_y(scale:snap(keyboard:get_last_note()))
 		-- elseif pitch_in_detected and (output_source[o] == output_source_audio_in) then
-			-- y = get_screen_note_y(snap(quantize(pitch_in)))
+			-- y = get_screen_note_y(scale:snap(pitch_in))
 		-- end
 		-- if y > -1 then
 			-- screen.pixel(127, y - 1)
@@ -957,7 +923,7 @@ function redraw()
 			local head_index = output_source[o]
 			local head = memory.read_heads[head_index]
 			local x = get_screen_offset_x(head.offset)
-			local y_original = get_screen_note_y(snap(memory:read_loop_offset(head.offset)))
+			local y_original = get_screen_note_y(scale:snap(memory:read_loop_offset(head.offset)))
 			-- blink if cursor overlaps and not transposed (if transposed, the original pitch will blink)
 			if grid_mode == grid_mode_memory and head.offset == memory.cursor and y_original == y_transposed then
 				level = blink_fast and 15 or 7

@@ -45,4 +45,35 @@ function Scale:toggle_class(pitch)
 	self.mask[pitch_class] = not self.mask[pitch_class]
 end
 
+function Scale:quantize(pitch)
+	-- TODO: what about non-12TET scales? probably worth looking at Emilie's code for Braids
+	return math.floor(pitch + 0.5)
+end
+
+function Scale:snap(pitch)
+	local quantized = self:quantize(pitch)
+	local low = quantized < pitch -- TODO: shouldn't this be the other way around?
+	if self:contains(quantized) then
+		return quantized
+	end
+	for i = 1, 96 do
+		local up = math.min(96, quantized + i)
+		local down = math.max(1, quantized - i)
+		if low then
+			if self:contains(down) then
+				return down
+			elseif self:contains(up) then
+				return up
+			end
+		else
+			if self:contains(up) then
+				return up
+			elseif self:contains(down) then
+				return down
+			end
+		end
+	end
+	return 0
+end
+
 return Scale
