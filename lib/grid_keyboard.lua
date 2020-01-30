@@ -17,7 +17,7 @@ function Keyboard.new(x, y, width, height, scale)
 		instance.row_offsets[row] = (11 - row) * 5
 	end
 	-- this method can be redefined on the fly
-	instance.get_key_level = function(x, y, n)
+	instance.get_key_level = function(self, x, y, n)
 		return instance:is_white_key(n) and 2 or 0
 	end
 	setmetatable(instance, Keyboard)
@@ -98,7 +98,7 @@ function Keyboard:draw(g)
 	for x = self.x, self.x2 do
 		for y = self.y, self.y2 do
 			local n = self:get_key_note(x, y)
-			g:led(x, y, self.get_key_level(x, y, n))
+			g:led(x, y, self:get_key_level(x, y, n))
 		end
 	end
 end

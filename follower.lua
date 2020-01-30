@@ -238,10 +238,10 @@ end
 
 local key_level_callbacks = {}
 
-key_level_callbacks[grid_mode_play] = function(x, y, n)
+key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	local level = 0
 	-- highlight mask
-	if scale:contains(n) then
+	if self.scale:contains(n) then
 		level = 4
 	end
 	-- highlight output notes
@@ -251,20 +251,20 @@ key_level_callbacks[grid_mode_play] = function(x, y, n)
 		end
 	end
 	-- highlight current note
-	if keyboard.gate and keyboard:is_key_last(x, y) then
+	if self.gate and self:is_key_last(x, y) then
 		level = 15
 	end
 	return level
 end
 
-key_level_callbacks[grid_mode_mask] = function(x, y, n)
+key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	local level = 0
 	-- highlight white keys
-	if keyboard:is_white_key(n) then
+	if self:is_white_key(n) then
 		level = 2
 	end
 	-- highlight mask
-	if scale:contains(n) then
+	if self.scale:contains(n) then
 		level = 5
 	end
 	-- highlight output notes
@@ -276,10 +276,10 @@ key_level_callbacks[grid_mode_mask] = function(x, y, n)
 	return level
 end
 
-key_level_callbacks[grid_mode_transpose] = function(x, y, n)
+key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	local level = 0
 	-- highlight octaves
-	if n % scale.length == 0 then
+	if n % self.scale.length == 0 then
 		level = 2
 	end
 	-- highlight transposition settings
@@ -295,16 +295,16 @@ key_level_callbacks[grid_mode_transpose] = function(x, y, n)
 	return level
 end
 
-key_level_callbacks[grid_mode_memory] = function(x, y, n)
+key_level_callbacks[grid_mode_memory] = function(self, x, y, n)
 	local level = 0
 	-- highlight mask
-	if scale:contains(n) then
+	if self.scale:contains(n) then
 		level = 3
 	end
 	-- highlight un-transposed output notes
 	for o = 1, 4 do
 		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
-			if n == scale:snap(memory:read_head(output_source[o])) then
+			if n == self.scale:snap(memory:read_head(output_source[o])) then
 				level = 7
 			end
 		end
