@@ -815,25 +815,25 @@ end
 
 local function draw_head_brackets(h, level)
 	local head = memory.read_heads[h]
-	local x1 = get_screen_offset_x(head.offset_base) + 1
-	local x2 = get_screen_offset_x(math.min(16, head.offset_base + head.randomness)) + 3
+	local x_low = get_screen_offset_x(head.offset_base + head:get_min_offset_offset()) + 1
+	local x_high = get_screen_offset_x(head.offset_base + head:get_max_offset_offset()) + 3
 	screen.level(0)
-	screen.rect(x1 - 2, 0, 3, 3)
-	screen.rect(x2 - 2, 0, 3, 3)
+	screen.rect(x_low - 2, 0, 3, 3)
+	screen.rect(x_high - 2, 0, 3, 3)
 	screen.fill()
-	screen.rect(x1 - 2, 61, 3, 3)
-	screen.rect(x2 - 2, 61, 3, 3)
+	screen.rect(x_low - 2, 61, 3, 3)
+	screen.rect(x_high - 2, 61, 3, 3)
 	screen.fill()
-	screen.move(x2, 2)
-	screen.line(x2, 1)
-	screen.line(x1, 1)
-	screen.line(x1, 2)
+	screen.move(x_high, 2)
+	screen.line(x_high, 1)
+	screen.line(x_low, 1)
+	screen.line(x_low, 2)
 	screen.level(level)
 	screen.stroke()
-	screen.move(x2, 62)
-	screen.line(x2, 64)
-	screen.line(x1, 64)
-	screen.line(x1, 62)
+	screen.move(x_high, 62)
+	screen.line(x_high, 64)
+	screen.line(x_low, 64)
+	screen.line(x_low, 62)
 	screen.level(level)
 	screen.stroke()
 end

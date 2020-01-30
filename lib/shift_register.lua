@@ -13,10 +13,18 @@ ReadHead.new = function(offset, parent)
 	return instance
 end
 
+function ReadHead:get_min_offset_offset()
+	return math.ceil(self.randomness / -2)
+end
+
+function ReadHead:get_max_offset_offset()
+	return math.ceil(self.randomness / 2)
+end
+
 function ReadHead:update(randomize)
 	if randomize then
 		if self.randomness > 0 then
-			self.offset_offset = math.random(0, self.randomness)
+			self.offset_offset = math.random(self:get_min_offset_offset(), self:get_max_offset_offset())
 		else
 			self.offset_offset = 0
 		end
@@ -46,7 +54,6 @@ ShiftRegister.new = function(length)
 	end
 	instance:set_length(length)
 	instance.dirty = false
-	instance:update_read_heads(true)
 	return instance
 end
 
