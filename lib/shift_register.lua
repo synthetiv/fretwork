@@ -78,7 +78,7 @@ function ShiftRegister:shift(delta)
 	if delta < 0 then
 		self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1), true)
 	end
-	self:move_cursor(delta * -1)
+	self:move_cursor(delta * -1, true)
 	self:update_read_heads(true)
 end
 
@@ -88,9 +88,11 @@ function ShiftRegister:update_read_heads(randomize)
 	end
 end
 
-function ShiftRegister:move_cursor(delta)
+function ShiftRegister:move_cursor(delta, clean)
 	self.cursor = self:clamp_loop_offset(self.cursor + delta)
-	self.dirty = true
+	if not clean then
+		self.dirty = true
+	end
 end
 
 function ShiftRegister:read_absolute(pos)
