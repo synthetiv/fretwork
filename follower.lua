@@ -33,7 +33,6 @@ local recall_mode = recall_mode_loop
 -- TODO: save/recall mask, loop, and transposition all at once
 
 local memory = ShiftRegister.new(32)
-local cursor_note = 0
 
 local source
 local source_names = {
@@ -310,7 +309,7 @@ key_level_callbacks[grid_mode_memory] = function(self, x, y, n)
 		end
 	end
 	-- highlight snapped version of the note at the cursor
-	if n == cursor_note then
+	if n == scale:snap(memory:read_cursor()) then
 		level = 10
 	end
 	-- highlight + blink the un-snapped note we're editing
@@ -386,7 +385,6 @@ local function grid_key(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
 				memory:write_cursor(note)
-				cursor_note = scale:snap(note)
 				-- update outputs immediately, if appropriate
 				for h = 1, memory.n_read_heads do
 					if memory.read_heads[h].offset == memory.cursor then
@@ -403,6 +401,15 @@ local function grid_key(x, y, z)
 		-- TODO: what should these do in modes other than transpose?
 		output_selector:key(x, y, z)
 		update_active_heads()
+		-- in edit mode, jump to the selected output's offset
+		-- TODO: make the cursor follow this output until it's explicitly moved?
+		if grid_mode == grid_mode_memory and z == 1 then
+			local output = output_selector:get_key_option(x, y)
+			local source = output_source[output]
+			if source >= output_source_head_1 and source <= output_source_head_4 then
+				memory.cursor = memory:clamp_loop_offset(memory.read_heads[source].offset)
+			end
+		end
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
@@ -665,7 +672,6 @@ function init()
 		default = 16,
 		action = function(value)
 			memory:set_length(value)
-			cursor_note = scale:snap(memory:read_cursor())
 			for o = 1, 4 do
 				-- TODO: this nil comparison is only necessary because of the order of params; should they
 				-- be reordered anyway?
@@ -752,11 +758,9 @@ end
 local function key_select_pos(n)
 	if n == 2 then
 		memory:move_cursor(-1)
-		cursor_note = scale:snap(memory:read_cursor())
 		dirty = true
 	elseif n == 3 then
 		memory:move_cursor(1)
-		cursor_note = scale:snap(memory:read_cursor())
 		dirty = true
 	end
 end
@@ -785,15 +789,34 @@ function enc(n, d)
 	if n == 1 then
 		params:delta('loop_length', d)
 	elseif n == 2 then
-		for h = 1, 4 do
-			if selected_heads[h] then
-				params:delta('head_' .. h .. '_offset', d)
+		if grid_mode == grid_mode_memory and not key_shift then
+			-- move cursor
+			memory:move_cursor(d)
+		else
+			-- move head(s)
+			for h = 1, 4 do
+				if selected_heads[h] then
+					params:delta('head_' .. h .. '_offset', d)
+				end
 			end
 		end
 	elseif n == 3 then
-		for h = 1, 4 do
-			if selected_heads[h] then
-				params:delta('head_' .. h .. '_offset_random', d)
+		if grid_mode == grid_mode_memory and not key_shift then
+			-- change note at cursor
+			memory:write_cursor(memory:read_cursor() + d)
+			for out = 1, 4 do
+				if output_source[out] >= output_source_head_1 and output_source[out] <= output_source_head_4 then
+					if memory.read_heads[output_source[out]].offset == memory.cursor then
+						update_output(out)
+					end
+				end
+			end
+		else
+			-- change head randomness
+			for h = 1, 4 do
+				if selected_heads[h] then
+					params:delta('head_' .. h .. '_offset_random', d)
+				end
 			end
 		end
 	end
