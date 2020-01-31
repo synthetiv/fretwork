@@ -857,30 +857,26 @@ function redraw()
 	end
 	screen.level(1)
 	screen.fill()
+
+	local screen_notes = {}
 	
-	-- draw memory contents
+	-- build table of all visible notes and draw them
 	for n = 1, n_screen_notes do
-		local offset = n - screen_note_center - 1
-		local loop_pos = memory:get_loop_pos(offset)
-		local x = (n - 1) * screen_note_width
-		local y = get_screen_note_y(scale:snap(memory:read_absolute(loop_pos)))
-		if grid_mode == grid_mode_memory and offset == memory.cursor then
-			-- blink the cursor in edit mode
-			if blink_fast then
-				screen.level(15)
-			else
-				screen.level(7)
-			end
-		elseif offset == 0 then
+		local note = {}
+		note.offset = n - screen_note_center - 1
+		note.x = (n - 1) * screen_note_width
+		note.y = get_screen_note_y(scale:snap(memory:read_loop_offset(note.offset)))
+		screen_notes[n] = note
+		if note.offset == 0 then
 			-- highlight head
 			screen.level(15)
-		elseif offset >= memory.start_offset and offset <= memory.end_offset then
+		elseif note.offset >= memory.start_offset and note.offset <= memory.end_offset then
 			-- highlight content between loop points (center of screen)
 			screen.level(2)
 		else
 			screen.level(1)
 		end
-		screen.move(x, y)
+		screen.move(note.x, note.y)
 		screen.line_rel(3, 0)
 		screen.stroke()
 	end
@@ -916,27 +912,23 @@ function redraw()
 		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
 			local head_index = output_source[o]
 			local head = memory.read_heads[head_index]
-			local x = get_screen_offset_x(head.offset)
-			local y_original = get_screen_note_y(scale:snap(memory:read_loop_offset(head.offset)))
-			-- blink if cursor overlaps and not transposed (if transposed, the original pitch will blink)
-			if grid_mode == grid_mode_memory and head.offset == memory.cursor and y_original == y_transposed then
-				level = blink_fast and 15 or 7
-			end
+			local note = screen_notes[screen_note_center + head.offset + 1]
+			note.y_transposed = y_transposed
 			screen.level(level)
-			screen.move(x, y_transposed)
+			screen.move(note.x, y_transposed)
 			screen.line_rel(3, 0)
 			screen.stroke()
 			-- draw a line connecting transposed output with original note
 			screen.level(1)
-			local transpose_distance = y_transposed - y_original
+			local transpose_distance = y_transposed - note.y
 			if transpose_distance < -2 or transpose_distance > 2 then
 				local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
-				screen.pixel(x + 1, transpose_point_y)
+				screen.pixel(note.x + 1, transpose_point_y)
 				screen.fill()
-				local transpose_line_length = math.abs(y_transposed - y_original) - 4
+				local transpose_line_length = math.abs(y_transposed - note.y) - 4
 				if transpose_line_length > 0 then
-					local transpose_line_top = math.min(y_transposed + 3, y_original)
-					screen.move(x + 2, transpose_line_top)
+					local transpose_line_top = math.min(y_transposed + 3, note.y)
+					screen.move(note.x + 2, transpose_line_top)
 					screen.line_rel(0, transpose_line_length)
 					screen.stroke()
 				end
@@ -954,6 +946,32 @@ function redraw()
 			screen.level(level)
 			screen.fill()
 		end
+	end
+
+	-- draw cursor
+	if grid_mode == grid_mode_memory then
+		local note = screen_notes[screen_note_center + memory.cursor + 1]
+		local x = note.x
+		local y1 = math.min(note.y, note.y_transposed and note.y_transposed or note.y) - 6
+		local y2 = math.max(note.y, note.y_transposed and note.y_transposed or note.y) + 4
+		screen.pixel(x - 1, y1 - 1)
+		screen.pixel(x, y1)
+		screen.pixel(x + 1, y1 + 1)
+		screen.pixel(x + 1, y1 + 2)
+		screen.pixel(x + 2, y1)
+		screen.pixel(x + 3, y1 - 1)
+		screen.pixel(x - 1, y2 + 1)
+		screen.pixel(x, y2)
+		screen.pixel(x + 1, y2 - 2)
+		screen.pixel(x + 1, y2 - 1)
+		screen.pixel(x + 2, y2)
+		screen.pixel(x + 3, y2 + 1)
+		if blink_fast then
+			screen.level(15)
+		else
+			screen.level(7)
+		end
+		screen.fill()
 	end
 
 	for i = 1, 4 do
