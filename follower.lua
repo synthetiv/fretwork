@@ -755,14 +755,13 @@ local function key_shift_clock(n)
 	end
 end
 
-local function key_select_pos(n)
+local function key_memory_insert(n)
 	if n == 2 then
-		memory:move_cursor(-1)
-		dirty = true
+		memory:delete()
 	elseif n == 3 then
-		memory:move_cursor(1)
-		dirty = true
+		memory:insert()
 	end
+	params:set('loop_length', memory.length) -- keep param value up to date
 end
 
 function key(n, z)
@@ -779,10 +778,11 @@ function key(n, z)
 			if key_shift then
 				key_shift_clock(n)
 			else
-				key_select_pos(n)
+				key_memory_insert(n)
 			end
 		end
 	end
+	dirty = true
 end
 
 function enc(n, d)

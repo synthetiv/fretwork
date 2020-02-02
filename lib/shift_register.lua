@@ -143,9 +143,73 @@ function ShiftRegister:write_cursor(value, clean)
 	self:write_loop_offset(self.cursor, value, clean)
 end
 
--- TODO: insert/delete (changing loop length)
+function ShiftRegister:shift_range(min, max, delta)
+	if delta > 0 then
+		for offset = min, max do
+			self:write_buffer_offset(offset, self:read_buffer_offset(offset + delta))
+		end
+	elseif delta < 0 then
+		for offset = max, min, -1 do
+			self:write_buffer_offset(offset, self:read_buffer_offset(offset + delta))
+		end
+	end
+end
+
+function ShiftRegister:insert()
+	-- TODO: this is destructive when start/end offsets are at max, but could be made less so by increasing buffer size. is that worth it / interesting?
+	-- keep track of which offset set_length() changes
+	local old_start_offset = self.start_offset
+	local old_end_offset = self.end_offset
+	self:set_length(self.length + 1)
+	if self.cursor <= 0 then
+		-- replace values before the cursor with later values
+		self:shift_range(self.buffer_size / -2, self.cursor - 1, 1)
+		-- if loop end has moved, then it has a garbage value -- replace with shifted value from before loop start
+		if self.end_offset > old_end_offset then
+			self:write_buffer_offset(self.end_offset, self:read_buffer_offset(self.start_offset - 1))
+		end
+	else
+		-- replace values after the cursor with earlier values, then move the cursor forward
+		self:shift_range(self.cursor + 1, self.buffer_size / 2, -1)
+		self:move_cursor(1)
+		-- if loop start has moved, then it has a garbage value -- replace with shifted value from after loop end
+		if self.start_offset < old_start_offset then
+			self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1))
+		end
+	end
+end
+
+function ShiftRegister:delete()
+	-- refuse to delete if the loop size is already at the minimum
+	if self.length <= 2 then
+		return
+	end
+	local old_start_offset = self.start_offset
+	local old_end_offset = self.end_offset
+	local old_cursor = self.cursor
+	self:set_length(self.length - 1)
+	if old_cursor <= 0 then
+		-- replace the cursor value and everything before it with earlier values
+		self:shift_range(self.buffer_size / -2, old_cursor, -1)
+		-- if loop start hasn't moved, then it has a garbage value -- replace with old loop end value
+		if self.start_offset == old_start_offset then
+			self:write_buffer_offset(self.start_offset, self:read_buffer_offset(self.end_offset + 1))
+		end
+	else
+		-- replace the cursor value and everything after it with later values, then move the cursor backward
+		self:shift_range(old_cursor, self.buffer_size / 2, 1)
+		self:move_cursor(-1)
+		-- if loop end hasn't moved, then it has a garbage value -- replace with old loop start value
+		if self.end_offset == old_end_offset then
+			self:write_buffer_offset(self.end_offset, self:read_buffer_offset(self.start_offset - 1))
+		end
+	end
+end
 
 function ShiftRegister:set_length(length)
+	if length < 2 or length > self.buffer_size then
+		return
+	end
 	self.start_offset = math.ceil(length / -2) + 1
 	self.end_offset = self.start_offset + length - 1
 	self.length = length
