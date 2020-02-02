@@ -820,6 +820,7 @@ function enc(n, d)
 			end
 		end
 	end
+	dirty = true
 end
 
 local function get_screen_offset_x(offset)
