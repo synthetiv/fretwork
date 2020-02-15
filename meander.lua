@@ -246,7 +246,11 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	-- highlight output notes
 	for o = 1, 4 do
 		if n == output_note[o] then
-			level = 10
+			if output_selector:is_selected(o) then
+				level = 10
+			else
+				level = math.max(level, 5)
+			end
 		end
 	end
 	-- highlight current note
@@ -269,7 +273,11 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	-- highlight output notes
 	for o = 1, 4 do
 		if n == output_note[o] then
-			level = 10
+			if output_selector:is_selected(o) then
+				level = 10
+			else
+				level = math.max(level, 5)
+			end
 		end
 	end
 	return level
