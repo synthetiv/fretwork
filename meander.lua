@@ -972,30 +972,42 @@ function redraw()
 		end
 		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
 			local head_index = output_source[o]
+			-- TODO: you could have a table of outputs and store a reference to each output's head in that table.......
 			local head = memory.read_heads[head_index]
 			local note = screen_notes[screen_note_center + head.offset + 1]
 			-- TODO: we have to check this because random head offset might point to a note that's not on
 			-- the screen. any good way to deal with that...?
 			if note ~= nil then
 				note.y_transposed = y_transposed
-				screen.level(level)
+				-- clear outline
+				screen.rect(note.x - 2, y_transposed - 2, 7, 3)
+				screen.level(0)
+				screen.fill()
+				-- draw note
 				screen.move(note.x - 1, y_transposed)
 				screen.line_rel(5, 0)
+				screen.level(level)
 				screen.stroke()
-				-- draw a line connecting transposed output with original note
-				-- TODO: draw all of these first, then draw actual values (to make sure overlaps look OK)
-				screen.level(1)
+				-- connect transposed output with original note
+				-- TODO: draw highest (+/-) transpositions first, then lower, so they look OK if they stack
 				local transpose_distance = y_transposed - note.y
-				if transpose_distance < -2 or transpose_distance > 2 then
-					local transpose_cap_y = transpose_distance < 0 and y_transposed + 2 or y_transposed - 2
-					screen.move(note.x, transpose_cap_y)
-					screen.line_rel(3, 0)
+				if transpose_distance < -1 or transpose_distance > 1 then
+					local transpose_line_length = math.abs(transpose_distance) - 2
+					local transpose_line_top = math.min(y_transposed + 1, note.y)
+					screen.move(note.x + 2, transpose_line_top)
+					screen.line_rel(0, transpose_line_length)
+					screen.level(1)
 					screen.stroke()
-					local transpose_line_length = math.abs(transpose_distance) - 4
-					if transpose_line_length > 0 then
-						local transpose_line_top = math.min(y_transposed + 3, note.y)
-						screen.move(note.x + 2, transpose_line_top)
-						screen.line_rel(0, transpose_line_length)
+					if transpose_line_length > 2 then
+						local transpose_cap_y = transpose_distance < 0 and y_transposed + 2 or y_transposed - 2
+						-- clear outline
+						screen.rect(note.x - 1, transpose_cap_y - 2, 6, 3)
+						screen.level(0)
+						screen.fill()
+						-- draw cap
+						screen.move(note.x, transpose_cap_y)
+						screen.line_rel(3, 0)
+						screen.level(2)
 						screen.stroke()
 					end
 				end
