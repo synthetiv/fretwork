@@ -785,6 +785,31 @@ function key(n, z)
 	dirty = true
 end
 
+local function heads_delta(param_format, d)
+	-- note: this assumes number params with identical range!
+	local min_value = math.huge
+	local max_value = -math.huge
+	local head_params = {}
+	for h = 1, 4 do
+		if selected_heads[h] then
+			local param_name = string.format(param_format, h)
+			local param = params:lookup_param(param_name)
+			local value = param.value
+			table.insert(head_params, param)
+			min_value = math.min(min_value, value)
+			max_value = math.max(max_value, value)
+		end
+	end
+	if d > 0 then
+		d = math.min(d,	(head_params[1].max - max_value))
+	elseif d < 0 then
+		d = math.max(d, (head_params[1].min - min_value))
+	end
+	for i, param in ipairs(head_params) do
+		param:delta(d)
+	end
+end
+
 function enc(n, d)
 	if n == 1 then
 		params:delta('loop_length', d)
@@ -793,12 +818,7 @@ function enc(n, d)
 			-- move cursor
 			memory:move_cursor(d)
 		else
-			-- move head(s)
-			for h = 1, 4 do
-				if selected_heads[h] then
-					params:delta('head_' .. h .. '_offset', d)
-				end
-			end
+			heads_delta('head_%d_offset', d)
 		end
 	elseif n == 3 then
 		if grid_mode == grid_mode_memory and not key_shift then
@@ -813,11 +833,7 @@ function enc(n, d)
 			end
 		else
 			-- change head randomness
-			for h = 1, 4 do
-				if selected_heads[h] then
-					params:delta('head_' .. h .. '_offset_random', d)
-				end
-			end
+			heads_delta('head_%d_offset_random', d)
 		end
 	end
 	dirty = true
@@ -937,24 +953,28 @@ function redraw()
 			local head_index = output_source[o]
 			local head = memory.read_heads[head_index]
 			local note = screen_notes[screen_note_center + head.offset + 1]
-			note.y_transposed = y_transposed
-			screen.level(level)
-			screen.move(note.x, y_transposed)
-			screen.line_rel(3, 0)
-			screen.stroke()
-			-- draw a line connecting transposed output with original note
-			screen.level(1)
-			local transpose_distance = y_transposed - note.y
-			if transpose_distance < -2 or transpose_distance > 2 then
-				local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
-				screen.pixel(note.x + 1, transpose_point_y)
-				screen.fill()
-				local transpose_line_length = math.abs(y_transposed - note.y) - 4
-				if transpose_line_length > 0 then
-					local transpose_line_top = math.min(y_transposed + 3, note.y)
-					screen.move(note.x + 2, transpose_line_top)
-					screen.line_rel(0, transpose_line_length)
-					screen.stroke()
+			-- TODO: we have to check this because random head offset might point to a note that's not on
+			-- the screen. any good way to deal with that...?
+			if note ~= nil then
+				note.y_transposed = y_transposed
+				screen.level(level)
+				screen.move(note.x, y_transposed)
+				screen.line_rel(3, 0)
+				screen.stroke()
+				-- draw a line connecting transposed output with original note
+				screen.level(1)
+				local transpose_distance = y_transposed - note.y
+				if transpose_distance < -2 or transpose_distance > 2 then
+					local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
+					screen.pixel(note.x + 1, transpose_point_y)
+					screen.fill()
+					local transpose_line_length = math.abs(y_transposed - note.y) - 4
+					if transpose_line_length > 0 then
+						local transpose_line_top = math.min(y_transposed + 3, note.y)
+						screen.move(note.x + 2, transpose_line_top)
+						screen.line_rel(0, transpose_line_length)
+						screen.stroke()
+					end
 				end
 			end
 		elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
