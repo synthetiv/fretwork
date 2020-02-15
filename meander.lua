@@ -785,27 +785,27 @@ function key(n, z)
 	dirty = true
 end
 
-local function heads_delta(param_format, d)
+local function params_multi_delta(param_format, selected, d)
 	-- note: this assumes number params with identical range!
 	local min_value = math.huge
 	local max_value = -math.huge
-	local head_params = {}
-	for h = 1, 4 do
-		if selected_heads[h] then
-			local param_name = string.format(param_format, h)
+	local selected_params = {}
+	for n, is_selected in ipairs(selected) do
+		if is_selected then
+			local param_name = string.format(param_format, n)
 			local param = params:lookup_param(param_name)
 			local value = param.value
-			table.insert(head_params, param)
+			table.insert(selected_params, param)
 			min_value = math.min(min_value, value)
 			max_value = math.max(max_value, value)
 		end
 	end
 	if d > 0 then
-		d = math.min(d,	(head_params[1].max - max_value))
+		d = math.min(d,	(selected_params[1].max - max_value))
 	elseif d < 0 then
-		d = math.max(d, (head_params[1].min - min_value))
+		d = math.max(d, (selected_params[1].min - min_value))
 	end
-	for i, param in ipairs(head_params) do
+	for i, param in ipairs(selected_params) do
 		param:delta(d)
 	end
 end
@@ -823,7 +823,7 @@ function enc(n, d)
 			memory:move_cursor(d)
 		else
 			-- move head(s)
-			heads_delta('head_%d_offset', d)
+			params_multi_delta('head_%d_offset', selected_heads, d)
 		end
 	elseif n == 3 then
 		if grid_mode == grid_mode_memory then
@@ -838,11 +838,10 @@ function enc(n, d)
 			end
 		elseif key_shift then
 			-- change head randomness
-			heads_delta('head_%d_offset_random', d)
+			params_multi_delta('head_%d_offset_random', selected_heads, d)
 		else
 			-- transpose head(s)
-			-- TODO: this assumes 1:1 correspondence between heads and outputs, not necessarily the case
-			heads_delta('output_%d_transpose', d);
+			params_multi_delta('output_%d_transpose', output_selector.selected, d);
 		end
 	end
 	dirty = true
