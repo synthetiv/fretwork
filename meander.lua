@@ -22,14 +22,18 @@ local saved_masks = {} -- TODO: save with params... somehow
 local mask_dirty = false
 local mask_selector = Select.new(1, 3, 4, 4)
 
+local transposition_dirty = false
+local saved_transpositions = {}
+local transposition_selector = Select.new(1, 3, 4, 4)
+
 local saved_loops = {}
 local loop_selector = Select.new(1, 3, 4, 4)
 
-local recall_mode_mask = 1
-local recall_mode_loop = 2
-local recall_mode = recall_mode_loop
+local memory_selector = Select.new(2, 2, 3, 1)
+local memory_mask = 1
+local memory_transposition = 2
+local memory_loop = 3
 
--- TODO: save/recall transposition settings too
 -- TODO: save/recall mask, loop, and transposition all at once
 
 local shift_register = ShiftRegister.new(32)
@@ -137,6 +141,26 @@ local function save_loop()
 	shift_register.dirty = false
 end
 
+local function recall_transposition()
+	local t = transposition_selector.selected
+	if saved_transpositions[t] == nil then
+		return
+	end
+	for o = 1, 4 do
+		params:set(string.format('output_%d_transpose', o), saved_transpositions[t][o])
+	end
+	transposition_dirty = false
+end
+
+local function save_transposition()
+	local transposition = {}
+	for o = 1, 4 do
+		transposition[o] = params:get(string.format('output_%d_transpose', o))
+	end
+	saved_transpositions[transposition_selector.selected] = transposition
+	transposition_dirty = false
+end
+
 local function update_output(out)
 	local output_source = output_source[out]
 	local volts = 0
@@ -209,12 +233,13 @@ local function grid_redraw()
 	g:led(4, 1, grid_mode == grid_mode_edit and 7 or 2)
 
 	-- recall mode buttons
-	g:led(2, 2, recall_mode == recall_mode_mask and 7 or 2)
-	g:led(4, 2, recall_mode == recall_mode_loop and 7 or 2)
+	memory_selector:draw(g, 7, 2)
 
 	-- recall buttons
-	if recall_mode == recall_mode_mask then
+	if memory_selector:is_selected(memory_mask) then
 		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
+	elseif memory_selector:is_selected(memory_transposition) then
+		transposition_selector:draw(g, transposition_dirty and blink_slow and 8 or 7, 2)
 	else
 		loop_selector:draw(g, shift_register.dirty and blink_slow and 8 or 7, 2)
 	end
@@ -442,11 +467,9 @@ local function grid_key(x, y, z)
 		-- clear held note stack, in order to prevent held notes from getting stuck when switching to a
 		-- mode that doesn't call `keyboard:note()`
 		keyboard:reset()
-	elseif x == 2 and y == 2 and z == 1 then
-		recall_mode = recall_mode_mask
-	elseif x == 4 and y == 2 and z == 1 then
-		recall_mode = recall_mode_loop
-	elseif recall_mode == recall_mode_mask and mask_selector:should_handle_key(x, y) then
+	elseif memory_selector:should_handle_key(x, y) then
+		memory_selector:key(x, y, z)
+	elseif memory_selector:is_selected(memory_mask) and mask_selector:should_handle_key(x, y) then
 		mask_selector:key(x, y, z)
 		if grid_shift then
 			save_mask()
@@ -458,7 +481,14 @@ local function grid_key(x, y, z)
 				end
 			end
 		end
-	elseif recall_mode == recall_mode_loop and loop_selector:should_handle_key(x, y) then
+	elseif memory_selector:is_selected(memory_transposition) and transposition_selector:should_handle_key(x, y) then
+		transposition_selector:key(x, y, z)
+		if grid_shift then
+			save_transposition()
+		else
+			recall_transposition()
+		end
+	elseif memory_selector:is_selected(memory_loop) and loop_selector:should_handle_key(x, y) then
 		loop_selector:key(x, y, z)
 		if grid_shift then
 			save_loop()
@@ -514,68 +544,7 @@ local function crow_setup()
 	params:bang()
 end
 
-function init()
-	
-	-- initialize grid controls
-	grid_mode = grid_mode_play
-	keyboard.get_key_level = key_level_callbacks[grid_mode]
-	output_selector:reset(true)
-
-	redraw_metro = metro.init()
-	redraw_metro.event = function(tick)
-		-- TODO: stop blinking after n seconds of inactivity?
-		if not blink_slow and tick % 8 > 3 then
-			blink_slow = true
-			dirty = true
-		elseif blink_slow and tick % 8 <= 3 then
-			blink_slow = false
-			dirty = true
-		end
-		if not blink_fast and tick % 4 > 1 then
-			blink_fast = true
-			dirty = true
-		elseif blink_fast and tick % 4 <= 1 then
-			blink_fast = false
-			dirty = true
-		end
-		if dirty then
-			grid_redraw(blink_slow, blink_fast)
-			redraw()
-			dirty = false
-		end
-	end
-	redraw_metro:start(1 / 15)
-	
-	engine.amp_threshold(util.dbamp(-80))
-	-- TODO: did you get rid of the 'clarity' threshold in the engine, or no?
-	pitch_poll_l = poll.set('pitch_analyst_l', update_freq)
-	pitch_poll_l.time = 1 / 8
-	
-	for m = 1, 16 do
-		saved_masks[m] = {}
-		for i = 1, 12 do
-			saved_masks[m][i] = false
-		end
-	end
-	for pitch = 1, 12 do
-		-- C maj pentatonic
-		scale:set_class(pitch, pitch == 2 or pitch == 4 or pitch == 7 or pitch == 9 or pitch == 12)
-	end
-	mask_selector.selected = 1
-	save_mask()
-
-	for l = 1, 16 do
-		saved_loops[l] = {}
-		for i = 1, 16 do
-			saved_loops[l][i] = 24
-		end
-	end
-	for i = 1, 16 do
-		saved_loops[1][i] = 24 + i * 3
-	end
-	loop_selector.selected = 1
-	recall_loop()
-	
+local function add_params()
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control
 	params:add{
@@ -742,15 +711,92 @@ function init()
 			action = function(value)
 				output_transpose[out] = value
 				update_output(out)
+				transposition_dirty = true
 			end
 		}
 	end
-	
-	pitch_poll_l:start()
-	g.key = grid_key
+end
+
+function init()
+
+	add_params()
 	
 	crow.add = crow_setup -- when crow is connected
 	crow_setup() -- calls params:bang()
+	
+	-- initialize grid controls
+	grid_mode = grid_mode_play
+	keyboard.get_key_level = key_level_callbacks[grid_mode]
+	output_selector:reset(true)
+
+	redraw_metro = metro.init()
+	redraw_metro.event = function(tick)
+		-- TODO: stop blinking after n seconds of inactivity?
+		if not blink_slow and tick % 8 > 3 then
+			blink_slow = true
+			dirty = true
+		elseif blink_slow and tick % 8 <= 3 then
+			blink_slow = false
+			dirty = true
+		end
+		if not blink_fast and tick % 4 > 1 then
+			blink_fast = true
+			dirty = true
+		elseif blink_fast and tick % 4 <= 1 then
+			blink_fast = false
+			dirty = true
+		end
+		if dirty then
+			grid_redraw()
+			redraw()
+			dirty = false
+		end
+	end
+	redraw_metro:start(1 / 15)
+	
+	engine.amp_threshold(util.dbamp(-80))
+	-- TODO: did you get rid of the 'clarity' threshold in the engine, or no?
+	pitch_poll_l = poll.set('pitch_analyst_l', update_freq)
+	pitch_poll_l.time = 1 / 8
+	
+	for m = 1, 16 do
+		saved_masks[m] = {}
+		for i = 1, 12 do
+			saved_masks[m][i] = false
+		end
+	end
+	for pitch = 1, 12 do
+		-- C maj pentatonic
+		scale:set_class(pitch, pitch == 2 or pitch == 4 or pitch == 7 or pitch == 9 or pitch == 12)
+	end
+	mask_selector.selected = 1
+	save_mask()
+
+	for l = 1, 16 do
+		saved_loops[l] = {}
+		for i = 1, 16 do
+			saved_loops[l][i] = 24
+		end
+	end
+	for i = 1, 16 do
+		saved_loops[1][i] = 24 + i * 3
+	end
+	loop_selector.selected = 1
+	recall_loop()
+
+	for t = 1, 16 do
+		saved_transpositions[t] = {}
+		for o = 1, 4 do
+			saved_transpositions[t][o] = 0
+		end
+	end
+	transposition_selector.selected = 1
+	save_transposition() -- read & save defaults from params
+	
+	memory_selector.selected = memory_loop
+
+	pitch_poll_l:start()
+	g.key = grid_key
 	
 	dirty = true
 end
