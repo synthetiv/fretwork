@@ -87,7 +87,11 @@ function ShiftRegister:update_read_heads(randomize)
 end
 
 function ShiftRegister:move_cursor(delta, clean)
-	self.cursor = self:clamp_loop_offset(self.cursor + delta)
+	local new_cursor = self:clamp_loop_offset(self.cursor + delta)
+	if self.cursor == new_cursor then
+		return
+	end
+	self.cursor = new_cursor
 	if not clean then
 		self.dirty = true
 	end
@@ -117,6 +121,9 @@ function ShiftRegister:read_buffer_offset(offset)
 end
 
 function ShiftRegister:write_absolute(pos, value, clean)
+	if self.buffer[pos] == value then
+		return
+	end
 	self.buffer[pos] = value
 	-- slightly weird hack since we use this method internally for looping: sometimes we're writing to
 	-- _preserve_ the loop contents, in which case this doesn't 'dirty' the loop
@@ -205,7 +212,7 @@ function ShiftRegister:delete()
 end
 
 function ShiftRegister:set_length(length)
-	if length < 2 or length > self.buffer_size then
+	if length < 2 or length > self.buffer_size or length == self.length then
 		return
 	end
 	self.start_offset = math.ceil(length / -2) + 1
