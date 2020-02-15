@@ -924,21 +924,14 @@ function redraw()
 			end
 			screen.stroke()
 		end
-		if note.offset == 0 then
-			-- highlight head
-			screen.level(15)
-			screen.move(note.x - 1, note.y)
-			screen.line_rel(5, 0)
+		if note.offset >= memory.start_offset and note.offset <= memory.end_offset then
+			-- highlight content between loop points (center of screen)
+			screen.level(2)
 		else
-			if note.offset >= memory.start_offset and note.offset <= memory.end_offset then
-				-- highlight content between loop points (center of screen)
-				screen.level(2)
-			else
-				screen.level(1)
-			end
-			screen.move(note.x, note.y)
-			screen.line_rel(3, 0)
+			screen.level(1)
 		end
+		screen.move(note.x, note.y)
+		screen.line_rel(3, 0)
 		screen.stroke()
 	end
 
@@ -1026,6 +1019,16 @@ function redraw()
 			screen.fill()
 		end
 	end
+
+	-- draw head indicator
+	local head_note = screen_notes[17]
+	screen.move(head_note.x, head_note.y)
+	screen.line_rel(3, 0)
+	screen.level(0)
+	screen.stroke()
+	screen.pixel(head_note.x + 1, head_note.y - 1)
+	screen.level(15)
+	screen.fill()
 
 	-- draw cursor
 	if grid_mode == grid_mode_memory then
