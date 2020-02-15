@@ -1,12 +1,10 @@
 local Control = include 'lib/grid_control'
 
-local Select = {}
-setmetatable(Select, Control)
+local Select = setmetatable({}, Control)
 Select.__index = Select
 
 function Select.new(x, y, width, height)
-	local instance = Control.new(x, y, width, height)
-	setmetatable(instance, Select)
+	local instance = setmetatable(Control.new(x, y, width, height), Select)
 	instance.count = width * height
 	instance.selected = 1
 	return instance

@@ -2,8 +2,7 @@ local Scale = {}
 Scale.__index = Scale
 
 function Scale.new(length)
-	local instance = {}
-	setmetatable(instance, Scale)
+	local instance = setmetatable({}, Scale)
 	instance.length = length
 	instance.mask = {}
 	for n = 1, instance.length do

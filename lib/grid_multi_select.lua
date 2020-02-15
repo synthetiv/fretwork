@@ -1,12 +1,11 @@
 local Select = include 'lib/grid_select'
 
-local MultiSelect = {}
-setmetatable(MultiSelect, Select)
+local MultiSelect = setmetatable({}, Select)
+
 MultiSelect.__index = MultiSelect
 
 function MultiSelect.new(x, y, width, height)
-	local instance = Select.new(x, y, width, height)
-	setmetatable(instance, MultiSelect)
+	local instance = setmetatable(Select.new(x, y, width, height), MultiSelect)
 	instance.held = {}
 	instance.selected = {}
 	instance:reset()

@@ -2,8 +2,7 @@ local ReadHead = {}
 ReadHead.__index = ReadHead
 
 ReadHead.new = function(offset, parent)
-	local instance = {}
-	setmetatable(instance, ReadHead)
+	local instance = setmetatable({}, ReadHead)
 	instance.offset_base = offset
 	instance.offset = offset
 	instance.randomness = 0
@@ -40,8 +39,7 @@ ShiftRegister.n_read_heads = 4
 ShiftRegister.buffer_size = 32
 
 ShiftRegister.new = function(length)
-	local instance = {}
-	setmetatable(instance, ShiftRegister)
+	local instance = setmetatable({}, ShiftRegister)
 	instance.cursor = 0
 	instance.head = 1
 	instance.buffer = {}

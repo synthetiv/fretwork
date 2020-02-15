@@ -1,11 +1,10 @@
 local Control = include 'lib/grid_control'
 
-local Keyboard = {}
-setmetatable(Keyboard, Control)
+local Keyboard = setmetatable({}, Control)
 Keyboard.__index = Keyboard
 
 function Keyboard.new(x, y, width, height, scale)
-	local instance = Control.new(x, y, width, height)
+	local instance = setmetatable(Control.new(x, y, width, height), Keyboard)
 	instance.scale = scale
 	instance.octave = 0
 	instance.held_keys = {}
@@ -20,7 +19,6 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.get_key_level = function(self, x, y, n)
 		return instance:is_white_key(n) and 2 or 0
 	end
-	setmetatable(instance, Keyboard)
 	return instance
 end
 
