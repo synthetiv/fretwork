@@ -812,16 +812,21 @@ end
 
 function enc(n, d)
 	if n == 1 then
-		params:delta('loop_length', d)
+		if key_shift then
+			params:delta('loop_length', d)
+		else
+			-- TODO: change "grid mode" (it affects more than the grid anyway)
+		end
 	elseif n == 2 then
-		if grid_mode == grid_mode_memory and not key_shift then
+		if grid_mode == grid_mode_memory then
 			-- move cursor
 			memory:move_cursor(d)
 		else
+			-- move head(s)
 			heads_delta('head_%d_offset', d)
 		end
 	elseif n == 3 then
-		if grid_mode == grid_mode_memory and not key_shift then
+		if grid_mode == grid_mode_memory then
 			-- change note at cursor
 			memory:write_cursor(memory:read_cursor() + d)
 			for out = 1, 4 do
@@ -831,9 +836,13 @@ function enc(n, d)
 					end
 				end
 			end
-		else
+		elseif key_shift then
 			-- change head randomness
 			heads_delta('head_%d_offset_random', d)
+		else
+			-- transpose head(s)
+			-- TODO: this assumes 1:1 correspondence between heads and outputs, not necessarily the case
+			heads_delta('output_%d_transpose', d);
 		end
 	end
 	dirty = true
