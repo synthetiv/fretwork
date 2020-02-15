@@ -32,7 +32,7 @@ local recall_mode = recall_mode_loop
 -- TODO: save/recall transposition settings too
 -- TODO: save/recall mask, loop, and transposition all at once
 
-local memory = ShiftRegister.new(32)
+local shift_register = ShiftRegister.new(32)
 
 local source
 local source_names = {
@@ -88,7 +88,7 @@ local selected_heads = { false, false, false, false }
 local grid_mode_play = 1
 local grid_mode_mask = 2
 local grid_mode_transpose = 3
-local grid_mode_memory = 4
+local grid_mode_edit = 4
 local grid_mode = grid_mode_play
 
 local output_selector = MultiSelect.new(5, 3, 1, 4)
@@ -128,13 +128,13 @@ local function recall_loop()
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	memory:set_loop(saved_loops[loop_selector.selected])
-	memory.dirty = false
+	shift_register:set_loop(saved_loops[loop_selector.selected])
+	shift_register.dirty = false
 end
 
 local function save_loop()
-	saved_loops[loop_selector.selected] = memory:get_loop()
-	memory.dirty = false
+	saved_loops[loop_selector.selected] = shift_register:get_loop()
+	shift_register.dirty = false
 end
 
 local function update_output(out)
@@ -146,7 +146,7 @@ local function update_output(out)
 		output_note[out] = scale:snap(input_keyboard:get_last_note() + output_transpose[out])
 	else
 		local output_head = output_source
-		output_note[out] = scale:snap(memory:read_head(output_head) + output_transpose[out])
+		output_note[out] = scale:snap(shift_register:read_head(output_head) + output_transpose[out])
 	end
 	volts = output_note[out] / 12 - 1
 	dirty = true
@@ -154,18 +154,18 @@ local function update_output(out)
 end
 
 local function sample_pitch()
-	memory:shift(1)
+	shift_register:shift(1)
 	if loop_probability <= math.random(1, 100) then
 		if source == source_crow then
-			memory:write_head(crow_pitch_in)
+			shift_register:write_head(crow_pitch_in)
 		elseif input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
-			memory:write_head(input_keyboard:get_last_note())
+			shift_register:write_head(input_keyboard:get_last_note())
 		elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
-			memory:write_head(pitch_in)
+			shift_register:write_head(pitch_in)
 		elseif source == source_grid_crow then
-			memory:write_head(crow_pitch_in)
+			shift_register:write_head(crow_pitch_in)
 		elseif input_keyboard.gate and source == source_pitch_grid then
-			memory:write_head(input_keyboard:get_last_note())
+			shift_register:write_head(input_keyboard:get_last_note())
 		end
 	end
 	for out = 1, 4 do
@@ -177,7 +177,7 @@ local function sample_pitch()
 end
 
 local function rewind()
-	memory:shift(-1)
+	shift_register:shift(-1)
 	for out = 1, 4 do
 		if not output_stream[out] then
 			update_output(out)
@@ -206,7 +206,7 @@ local function grid_redraw()
 	g:led(1, 1, grid_mode == grid_mode_play and 7 or 2)
 	g:led(2, 1, grid_mode == grid_mode_mask and 7 or 2)
 	g:led(3, 1, grid_mode == grid_mode_transpose and 7 or 2)
-	g:led(4, 1, grid_mode == grid_mode_memory and 7 or 2)
+	g:led(4, 1, grid_mode == grid_mode_edit and 7 or 2)
 
 	-- recall mode buttons
 	g:led(2, 2, recall_mode == recall_mode_mask and 7 or 2)
@@ -216,7 +216,7 @@ local function grid_redraw()
 	if recall_mode == recall_mode_mask then
 		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
 	else
-		loop_selector:draw(g, memory.dirty and blink_slow and 8 or 7, 2)
+		loop_selector:draw(g, shift_register.dirty and blink_slow and 8 or 7, 2)
 	end
 
 	-- shift + ctrl
@@ -302,7 +302,7 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	return level
 end
 
-key_level_callbacks[grid_mode_memory] = function(self, x, y, n)
+key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 	local level = 0
 	-- highlight mask
 	if self.scale:contains(n) then
@@ -311,17 +311,17 @@ key_level_callbacks[grid_mode_memory] = function(self, x, y, n)
 	-- highlight un-transposed output notes
 	for o = 1, 4 do
 		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
-			if n == self.scale:snap(memory:read_head(output_source[o])) then
+			if n == self.scale:snap(shift_register:read_head(output_source[o])) then
 				level = 7
 			end
 		end
 	end
 	-- highlight snapped version of the note at the cursor
-	if n == scale:snap(memory:read_cursor()) then
+	if n == scale:snap(shift_register:read_cursor()) then
 		level = 10
 	end
 	-- highlight + blink the un-snapped note we're editing
-	if n == memory:read_cursor() then
+	if n == shift_register:read_cursor() then
 		if blink_fast then
 			level = 15
 		else
@@ -388,14 +388,14 @@ local function grid_key(x, y, z)
 					end
 				end
 			end
-		elseif grid_mode == grid_mode_memory then
+		elseif grid_mode == grid_mode_edit then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
-				memory:write_cursor(note)
+				shift_register:write_cursor(note)
 				-- update outputs immediately, if appropriate
-				for h = 1, memory.n_read_heads do
-					if memory.read_heads[h].offset == memory.cursor then
+				for h = 1, shift_register.n_read_heads do
+					if shift_register.read_heads[h].offset == shift_register.cursor then
 						for o = 1, 4 do
 							if output_source[o] == h then
 								update_output(o)
@@ -411,11 +411,11 @@ local function grid_key(x, y, z)
 		update_active_heads()
 		-- in edit mode, jump to the selected output's offset
 		-- TODO: make the cursor follow this output until it's explicitly moved?
-		if grid_mode == grid_mode_memory and z == 1 then
+		if grid_mode == grid_mode_edit and z == 1 then
 			local output = output_selector:get_key_option(x, y)
 			local source = output_source[output]
 			if source >= output_source_head_1 and source <= output_source_head_4 then
-				memory.cursor = memory:clamp_loop_offset(memory.read_heads[source].offset)
+				shift_register.cursor = shift_register:clamp_loop_offset(shift_register.read_heads[source].offset)
 			end
 		end
 	elseif x == 3 and y == 8 then
@@ -434,7 +434,7 @@ local function grid_key(x, y, z)
 			grid_mode = grid_mode_transpose
 			keyboard = control_keyboard
 		elseif x == 4 then
-			grid_mode = grid_mode_memory
+			grid_mode = grid_mode_edit
 			keyboard = control_keyboard
 		end
 		-- set the grid drawing routine based on new mode
@@ -637,8 +637,8 @@ function init()
 	
 	params:add_separator()
 	
-	for i = 1, memory.n_read_heads do
-		local head = memory.read_heads[i]
+	for i = 1, shift_register.n_read_heads do
+		local head = shift_register.read_heads[i]
 		params:add{
 			type = 'number',
 			id = 'head_' .. i .. '_offset',
@@ -679,7 +679,7 @@ function init()
 		max = 32,
 		default = 16,
 		action = function(value)
-			memory:set_length(value)
+			shift_register:set_length(value)
 			for o = 1, 4 do
 				-- TODO: this nil comparison is only necessary because of the order of params; should they
 				-- be reordered anyway?
@@ -763,13 +763,13 @@ local function key_shift_clock(n)
 	end
 end
 
-local function key_memory_insert(n)
+local function key_shift_register_insert(n)
 	if n == 2 then
-		memory:delete()
+		shift_register:delete()
 	elseif n == 3 then
-		memory:insert()
+		shift_register:insert()
 	end
-	params:set('loop_length', memory.length) -- keep param value up to date
+	params:set('loop_length', shift_register.length) -- keep param value up to date
 end
 
 function key(n, z)
@@ -782,11 +782,11 @@ function key(n, z)
 			key_shift_clock(n)
 		elseif grid_mode == grid_mode_transpose then
 			key_shift_clock(n)
-		elseif grid_mode == grid_mode_memory then
+		elseif grid_mode == grid_mode_edit then
 			if key_shift then
 				key_shift_clock(n)
 			else
-				key_memory_insert(n)
+				key_shift_register_insert(n)
 			end
 		end
 	end
@@ -826,20 +826,20 @@ function enc(n, d)
 			-- TODO: change "grid mode" (it affects more than the grid anyway)
 		end
 	elseif n == 2 then
-		if grid_mode == grid_mode_memory then
+		if grid_mode == grid_mode_edit then
 			-- move cursor
-			memory:move_cursor(d)
+			shift_register:move_cursor(d)
 		else
 			-- move head(s)
 			params_multi_delta('head_%d_offset', selected_heads, d)
 		end
 	elseif n == 3 then
-		if grid_mode == grid_mode_memory then
+		if grid_mode == grid_mode_edit then
 			-- change note at cursor
-			memory:write_cursor(memory:read_cursor() + d)
+			shift_register:write_cursor(shift_register:read_cursor() + d)
 			for out = 1, 4 do
 				if output_source[out] >= output_source_head_1 and output_source[out] <= output_source_head_4 then
-					if memory.read_heads[output_source[out]].offset == memory.cursor then
+					if shift_register.read_heads[output_source[out]].offset == shift_register.cursor then
 						update_output(out)
 					end
 				end
@@ -864,7 +864,7 @@ local function get_screen_note_y(note)
 end
 
 local function draw_head_brackets(h, level)
-	local head = memory.read_heads[h]
+	local head = shift_register.read_heads[h]
 	local x_low = get_screen_offset_x(head.offset_base + head:get_min_offset_offset()) + 1
 	local x_high = get_screen_offset_x(head.offset_base + head:get_max_offset_offset()) + 3
 	screen.level(0)
@@ -894,8 +894,8 @@ function redraw()
 	screen.line_width(1)
 
 	-- draw loop region
-	local loop_start_x = get_screen_offset_x(memory.start_offset)
-	local loop_end_x = get_screen_offset_x(memory.end_offset) + 2
+	local loop_start_x = get_screen_offset_x(shift_register.start_offset)
+	local loop_end_x = get_screen_offset_x(shift_register.end_offset) + 2
 	for x = loop_start_x, loop_end_x do
 		if x == loop_start_x or x == loop_end_x then
 			screen.pixel(x, 1)
@@ -921,7 +921,7 @@ function redraw()
 		local note = {}
 		note.offset = n - screen_note_center - 1
 		note.x = (n - 1) * screen_note_width
-		note.y = get_screen_note_y(scale:snap(memory:read_loop_offset(note.offset)))
+		note.y = get_screen_note_y(scale:snap(shift_register:read_loop_offset(note.offset)))
 		screen_notes[n] = note
 		if n > 1 then
 			local previous_note = screen_notes[n - 1]
@@ -933,14 +933,14 @@ function redraw()
 				screen.move(note.x, previous_note.y)
 				screen.line_rel(0, diff - 1)
 			end
-			if note.offset > memory.start_offset and note.offset <= memory.end_offset then
+			if note.offset > shift_register.start_offset and note.offset <= shift_register.end_offset then
 				screen.level(2)
 			else
 				screen.level(1)
 			end
 			screen.stroke()
 		end
-		if note.offset >= memory.start_offset and note.offset <= memory.end_offset then
+		if note.offset >= shift_register.start_offset and note.offset <= shift_register.end_offset then
 			-- highlight content between loop points (center of screen)
 			screen.level(2)
 		else
@@ -982,7 +982,7 @@ function redraw()
 		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
 			local head_index = output_source[o]
 			-- TODO: you could have a table of outputs and store a reference to each output's head in that table.......
-			local head = memory.read_heads[head_index]
+			local head = shift_register.read_heads[head_index]
 			local note = screen_notes[screen_note_center + head.offset + 1]
 			-- TODO: we have to check this because random head offset might point to a note that's not on
 			-- the screen. any good way to deal with that...?
@@ -1047,8 +1047,8 @@ function redraw()
 	screen.fill()
 
 	-- draw cursor
-	if grid_mode == grid_mode_memory then
-		local note = screen_notes[screen_note_center + memory.cursor + 1]
+	if grid_mode == grid_mode_edit then
+		local note = screen_notes[screen_note_center + shift_register.cursor + 1]
 		local x = note.x
 		local y1 = math.min(note.y, note.y_transposed and note.y_transposed or note.y) - 5
 		local y2 = math.max(note.y, note.y_transposed and note.y_transposed or note.y) + 5
@@ -1099,14 +1099,14 @@ function redraw()
 	-- DEBUG: draw minibuffer, loop region, head
 	--[[
 	screen.move(0, 1)
-	screen.line_rel(memory.buffer_size, 0)
+	screen.line_rel(shift_register.buffer_size, 0)
 	screen.level(1)
 	screen.stroke()
-	for offset = memory.start_offset, memory.end_offset do
-		screen.pixel(memory:get_loop_pos(offset) - 1, 0)
-		if grid_mode == grid_mode_memory and offset == memory.cursor then
+	for offset = shift_register.start_offset, shift_register.end_offset do
+		screen.pixel(shift_register:get_loop_pos(offset) - 1, 0)
+		if grid_mode == grid_mode_edit and offset == shift_register.cursor then
 			screen.level(blink_fast and 15 or 7)
-		elseif offset == memory.start_offset or offset == memory.end_offset or offset == 0 then
+		elseif offset == shift_register.start_offset or offset == shift_register.end_offset or offset == 0 then
 			screen.level(15)
 		else
 			screen.level(7)
