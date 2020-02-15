@@ -1019,26 +1019,39 @@ function redraw()
 	if grid_mode == grid_mode_memory then
 		local note = screen_notes[screen_note_center + memory.cursor + 1]
 		local x = note.x
-		local y1 = math.min(note.y, note.y_transposed and note.y_transposed or note.y) - 6
-		local y2 = math.max(note.y, note.y_transposed and note.y_transposed or note.y) + 4
-		screen.pixel(x - 1, y1 - 1)
-		screen.pixel(x, y1)
-		screen.pixel(x + 1, y1 + 1)
-		screen.pixel(x + 1, y1 + 2)
-		screen.pixel(x + 2, y1)
-		screen.pixel(x + 3, y1 - 1)
-		screen.pixel(x - 1, y2 + 1)
-		screen.pixel(x, y2)
-		screen.pixel(x + 1, y2 - 2)
-		screen.pixel(x + 1, y2 - 1)
-		screen.pixel(x + 2, y2)
-		screen.pixel(x + 3, y2 + 1)
-		if blink_fast then
-			screen.level(15)
-		else
-			screen.level(7)
-		end
+		local y1 = math.min(note.y, note.y_transposed and note.y_transposed or note.y) - 5
+		local y2 = math.max(note.y, note.y_transposed and note.y_transposed or note.y) + 5
+		-- clear background around caps
+		screen.rect(x - 2, y1 - 2, 7, 3)
+		screen.rect(x - 2, y2 - 2, 7, 3)
+		screen.level(0)
 		screen.fill()
+		-- set level
+		screen.level(blink_fast and 15 or 7)
+		-- top left cap
+		screen.move(x - 1, y1)
+		screen.line_rel(2, 0)
+		screen.stroke()
+		-- top right cap
+		screen.move(x + 2, y1)
+		screen.line_rel(2, 0)
+		screen.stroke()
+		-- top stem
+		screen.move(x + 2, y1)
+		screen.line_rel(0, 3)
+		screen.stroke()
+		-- bottom stem
+		screen.move(x + 2, y2 - 4)
+		screen.line_rel(0, 3)
+		screen.stroke()
+		-- bottom left cap
+		screen.move(x - 1, y2)
+		screen.line_rel(2, 0)
+		screen.stroke()
+		-- bottom right cap
+		screen.move(x + 2, y2)
+		screen.line_rel(2, 0)
+		screen.stroke()
 	end
 
 	for i = 1, 4 do
