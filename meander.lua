@@ -907,17 +907,38 @@ function redraw()
 		note.x = (n - 1) * screen_note_width
 		note.y = get_screen_note_y(scale:snap(memory:read_loop_offset(note.offset)))
 		screen_notes[n] = note
+		if n > 1 then
+			local previous_note = screen_notes[n - 1]
+			local diff = note.y - previous_note.y
+			if diff > 0 then
+				screen.move(note.x, previous_note.y - 1)
+				screen.line_rel(0, diff + 1)
+			else
+				screen.move(note.x, previous_note.y)
+				screen.line_rel(0, diff - 1)
+			end
+			if note.offset > memory.start_offset and note.offset <= memory.end_offset then
+				screen.level(2)
+			else
+				screen.level(1)
+			end
+			screen.stroke()
+		end
 		if note.offset == 0 then
 			-- highlight head
 			screen.level(15)
-		elseif note.offset >= memory.start_offset and note.offset <= memory.end_offset then
-			-- highlight content between loop points (center of screen)
-			screen.level(2)
+			screen.move(note.x - 1, note.y)
+			screen.line_rel(5, 0)
 		else
-			screen.level(1)
+			if note.offset >= memory.start_offset and note.offset <= memory.end_offset then
+				-- highlight content between loop points (center of screen)
+				screen.level(2)
+			else
+				screen.level(1)
+			end
+			screen.move(note.x, note.y)
+			screen.line_rel(3, 0)
 		end
-		screen.move(note.x, note.y)
-		screen.line_rel(3, 0)
 		screen.stroke()
 	end
 
@@ -940,7 +961,7 @@ function redraw()
 	-- draw output states
 	for o = 1, 4 do
 		local y_transposed = get_screen_note_y(output_note[o])
-		local level = 7
+		local level = 12
 		-- in transpose mode, blink selected output(s)
 		if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
 			if blink_fast then
@@ -958,17 +979,19 @@ function redraw()
 			if note ~= nil then
 				note.y_transposed = y_transposed
 				screen.level(level)
-				screen.move(note.x, y_transposed)
-				screen.line_rel(3, 0)
+				screen.move(note.x - 1, y_transposed)
+				screen.line_rel(5, 0)
 				screen.stroke()
 				-- draw a line connecting transposed output with original note
+				-- TODO: draw all of these first, then draw actual values (to make sure overlaps look OK)
 				screen.level(1)
 				local transpose_distance = y_transposed - note.y
 				if transpose_distance < -2 or transpose_distance > 2 then
-					local transpose_point_y = transpose_distance < 0 and y_transposed + 1 or y_transposed - 3
-					screen.pixel(note.x + 1, transpose_point_y)
-					screen.fill()
-					local transpose_line_length = math.abs(y_transposed - note.y) - 4
+					local transpose_cap_y = transpose_distance < 0 and y_transposed + 2 or y_transposed - 2
+					screen.move(note.x, transpose_cap_y)
+					screen.line_rel(3, 0)
+					screen.stroke()
+					local transpose_line_length = math.abs(transpose_distance) - 4
 					if transpose_line_length > 0 then
 						local transpose_line_top = math.min(y_transposed + 3, note.y)
 						screen.move(note.x + 2, transpose_line_top)
