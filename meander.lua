@@ -65,7 +65,7 @@ local clock_mode_trig_grid = 3
 
 local output_transpose = { 0, 0, 0, 0 }
 local output_note = { 0, 0, 0, 0 }
-local output_source = {}
+local output_source = { 0, 0, 0, 0 }
 local output_source_names = {
 	'head 1',
 	'head 2',
