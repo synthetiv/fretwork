@@ -1,7 +1,10 @@
 -- follower
 -- follow pitch, quantize, etc...
 
-engine.name = 'Analyst'
+engine.name = 'Vessel'
+
+VesselWaveform = include 'vessel/lib/waveform'
+VesselEngine = include 'vessel/lib/engine'
 
 local musicutil = require 'musicutil'
 
@@ -11,7 +14,7 @@ local MultiSelect = include 'lib/grid_multi_select'
 local ShiftRegister = include 'lib/shift_register'
 local Scale = include 'lib/scale'
 
-local pitch_poll_l
+local pitch_poll
 local pitch_in = 0
 local pitch_in_detected = false
 local pitch_in_octave = 0
@@ -55,8 +58,8 @@ local source_grid_pitch = 4
 local source_grid_crow = 5
 local source_pitch_grid = 6
 
-local loop_probability = 100
 -- TODO: add internal clock using beatclock
+-- TODO: clock from MIDI notes
 local clock_mode
 local clock_mode_names = {
 	'crow input 1',
@@ -165,7 +168,7 @@ local function update_output(out)
 	local output_source = output_source[out]
 	local volts = 0
 	if output_source == output_source_audio_in then
-		output_note[out] = scale:snap(quantize(pitch_in) + output_transpose[out])
+		output_note[out] = scale:snap(pitch_in + output_transpose[out])
 	elseif output_source == output_source_grid then
 		output_note[out] = scale:snap(input_keyboard:get_last_note() + output_transpose[out])
 	else
@@ -179,12 +182,12 @@ end
 
 local function sample_pitch()
 	shift_register:shift(1)
-	if loop_probability <= math.random(1, 100) then
+	if params:get('write_probability') > math.random(1, 100) then
 		if source == source_crow then
 			shift_register:write_head(crow_pitch_in)
 		elseif input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 			shift_register:write_head(input_keyboard:get_last_note())
-		elseif pitch_in_detected and (source == source_pitch or source == source_pitch_grid) then
+		elseif pitch_in_detected and (source == source_grid_pitch or source == source_pitch or source == source_pitch_grid) then
 			shift_register:write_head(pitch_in)
 		elseif source == source_grid_crow then
 			shift_register:write_head(crow_pitch_in)
@@ -563,18 +566,12 @@ local function add_params()
 		end
 	}
 	params:add{
-		type = 'number',
-		id = 'loop_probability',
-		name = 'loop probability',
-		min = 0,
-		max = 100,
-		default = 0,
-		controlspec = controlspec.new(0, 100, 'lin', 1, 0, '%'),
+		type = 'control',
+		id = 'write_probability',
+		name = 'write probability',
+		controlspec = controlspec.new(1, 101, 'exp', 1, 1),
 		formatter = function(param)
-			return string.format('%d%%', param:get())
-		end,
-		action = function(value)
-			loop_probability = value
+			return string.format('%f%%', param:get() - 1)
 		end
 	}
 	params:add{
@@ -582,7 +579,7 @@ local function add_params()
 		id = 'shift_clock',
 		name = 'sr/s+h clock',
 		options = clock_mode_names,
-		default = clock_mode_trig_grid,
+		default = clock_mode_trig,
 		action = function(value)
 			clock_mode = value
 			if clock_mode ~= clock_mode_grid then
@@ -719,8 +716,10 @@ end
 
 function init()
 
+	VesselEngine.add_params()
+	params:add_separator()
 	add_params()
-	
+
 	crow.add = crow_setup -- when crow is connected
 	crow_setup() -- calls params:bang()
 	
@@ -754,10 +753,10 @@ function init()
 	end
 	redraw_metro:start(1 / 15)
 	
-	engine.amp_threshold(util.dbamp(-80))
-	-- TODO: did you get rid of the 'clarity' threshold in the engine, or no?
-	pitch_poll_l = poll.set('pitch_analyst_l', update_freq)
-	pitch_poll_l.time = 1 / 8
+	engine.pitchAmpThreshold(util.dbamp(-80))
+	engine.pitchConfidenceThreshold(0.8)
+	pitch_poll = poll.set('vessel_pitch', update_freq)
+	pitch_poll.time = 1 / 10 -- was 8, is 10 OK?
 	
 	for m = 1, 16 do
 		saved_masks[m] = {}
@@ -792,10 +791,12 @@ function init()
 	end
 	transposition_selector.selected = 1
 	save_transposition() -- read & save defaults from params
+	-- TODO: since we're no longer calling params:bang() at the bottom, outputs need to be updated
+	-- (...should I just call params:bang() again?)
 	
 	memory_selector.selected = memory_loop
 
-	pitch_poll_l:start()
+	pitch_poll:start()
 	g.key = grid_key
 	
 	dirty = true
@@ -818,6 +819,14 @@ local function key_shift_register_insert(n)
 	params:set('loop_length', shift_register.length) -- keep param value up to date
 end
 
+local function key_move_cursor(n)
+	if n == 2 then
+		shift_register:move_cursor(-1)
+	elseif n == 3 then
+		shift_register:move_cursor(1)
+	end
+end
+
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
@@ -830,9 +839,9 @@ function key(n, z)
 			key_shift_clock(n)
 		elseif grid_mode == grid_mode_edit then
 			if key_shift then
-				key_shift_clock(n)
-			else
 				key_shift_register_insert(n)
+			else
+				key_move_cursor(n)
 			end
 		end
 	end
@@ -854,6 +863,12 @@ local function params_multi_delta(param_format, selected, d)
 			max_value = math.max(max_value, value)
 		end
 	end
+	-- TODO: getting errors that seem to suggest this is happening -- why??
+	if selected_params[1] == nil then
+		print('params_multi_delta fail: %s (selected follows)', param_format)
+		tab.print(selected)
+		return
+	end
 	if d > 0 then
 		d = math.min(d,	(selected_params[1].max - max_value))
 	elseif d < 0 then
@@ -869,7 +884,7 @@ function enc(n, d)
 		if key_shift then
 			params:delta('loop_length', d)
 		else
-			-- TODO: change "grid mode" (it affects more than the grid anyway)
+			params:delta('write_probability', d)
 		end
 	elseif n == 2 then
 		if grid_mode == grid_mode_edit then
@@ -1142,6 +1157,15 @@ function redraw()
 		end
 	end
 
+	local write_probability = params:get('write_probability') - 1
+	local probability_level = math.ceil(write_probability / 10)
+	if probability_level > 0 then
+		screen.move(12, 10)
+		screen.level(probability_level)
+		screen.text_right(util.round(write_probability))
+		screen.text('%')
+	end
+
 	-- DEBUG: draw minibuffer, loop region, head
 	--[[
 	screen.move(0, 1)
@@ -1165,6 +1189,10 @@ function redraw()
 end
 
 function cleanup()
-  pitch_poll_l:stop()
-  redraw_metro:stop()
+	if pitch_poll ~= nil then
+		pitch_poll:stop()
+	end
+	if redraw_metro ~= nil then
+		redraw_metro:stop()
+	end
 end

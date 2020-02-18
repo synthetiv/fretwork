@@ -46,12 +46,13 @@ end
 
 function Scale:quantize(pitch)
 	-- TODO: what about non-12TET scales? probably worth looking at Emilie's code for Braids
+	-- TODO: util.round()?
 	return math.floor(pitch + 0.5)
 end
 
 function Scale:snap(pitch)
 	local quantized = self:quantize(pitch)
-	local low = quantized < pitch -- TODO: shouldn't this be the other way around?
+	local low = quantized > pitch
 	if self:contains(quantized) then
 		return quantized
 	end
