@@ -722,6 +722,51 @@ local function add_params()
 			end
 		}
 	end
+
+	params:add_separator()
+
+	params:add{
+		type = 'trigger',
+		id = 'restore_memory',
+		name = 'restore memory',
+		action = function()
+			local data_file = norns.state.data .. 'memory.lua'
+			if util.file_exists(data_file) then
+				local data, errorMessage = tab.load(data_file)
+				if errorMessage ~= nil then
+					error(errorMessage)
+				else
+					tab.print(data)
+					if data.masks ~= nil then
+						saved_masks = data.masks
+						mask_dirty = true
+					end
+					if data.transpositions ~= nil then
+						saved_transpositions = data.transpositions
+						transposition_dirty = true
+					end
+					if data.loops ~= nil then
+						saved_loops = data.loops
+						shift_register.dirty = true
+					end
+				end
+			end
+		end
+	}
+
+	params:add{
+		type = 'trigger',
+		id = 'save_memory',
+		name = 'save memory',
+		action = function()
+			local data_file = norns.state.data .. 'memory.lua'
+			local data = {}
+			data.masks = saved_masks
+			data.transpositions = saved_transpositions
+			data.loops = saved_loops
+			tab.save(data, data_file)
+		end
+	}
 end
 
 function init()
@@ -761,6 +806,7 @@ function init()
 			dirty = false
 		end
 	end
+
 	redraw_metro:start(1 / 15)
 	
 	engine.pitchAmpThreshold(util.dbamp(-80))
@@ -781,6 +827,15 @@ function init()
 	mask_selector.selected = 1
 	save_mask()
 
+	for t = 1, 16 do
+		saved_transpositions[t] = {}
+		for o = 1, 4 do
+			saved_transpositions[t][o] = 0
+		end
+	end
+	transposition_selector.selected = 1
+	save_transposition() -- read & save defaults from params
+
 	for l = 1, 16 do
 		saved_loops[l] = {}
 		for i = 1, 16 do
@@ -793,14 +848,11 @@ function init()
 	loop_selector.selected = 1
 	recall_loop()
 
-	for t = 1, 16 do
-		saved_transpositions[t] = {}
-		for o = 1, 4 do
-			saved_transpositions[t][o] = 0
-		end
-	end
-	transposition_selector.selected = 1
-	save_transposition() -- read & save defaults from params
+	params:set('restore_memory')
+	recall_mask()
+	recall_transposition()
+	recall_loop()
+
 	-- TODO: since we're no longer calling params:bang() at the bottom, outputs need to be updated
 	-- (...should I just call params:bang() again?)
 	
