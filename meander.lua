@@ -571,7 +571,7 @@ local function add_params()
 		name = 'write probability',
 		controlspec = controlspec.new(1, 101, 'exp', 1, 1),
 		formatter = function(param)
-			return string.format('%f%%', param:get() - 1)
+			return string.format('%1.f%%', param:get() - 1)
 		end
 	}
 	params:add{
