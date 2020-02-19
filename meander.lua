@@ -600,6 +600,16 @@ local function add_params()
 			pitch_in_octave = value
 		end
 	}
+	params:add{
+		type = 'option',
+		id = 'pitch_post',
+		name = 'pitch post-verb',
+		options = { 'no', 'yes' },
+		default = 1,
+		action = function(value)
+			engine.pitchPost(value - 1)
+		end
+	}
 	
 	params:add_separator()
 	
