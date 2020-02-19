@@ -696,7 +696,7 @@ local function add_params()
 			type = 'control',
 			id = 'output_' .. out .. '_slew',
 			name = 'out ' .. out .. ' slew',
-			controlspec = controlspec.new(1, 1000, 'exp', 1, 1, 'ms'),
+			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
 			action = function(value)
 				crow.output[out].slew = value / 1000
 			end
