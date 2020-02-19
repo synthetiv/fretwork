@@ -771,7 +771,7 @@ end
 
 function init()
 
-	VesselEngine.add_params()
+	VesselEngine.add_params('basic')
 	params:add_separator()
 	add_params()
 
