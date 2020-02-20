@@ -782,6 +782,7 @@ function init()
 	grid_mode = grid_mode_play
 	keyboard.get_key_level = key_level_callbacks[grid_mode]
 	output_selector:reset(true)
+	update_active_heads()
 
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
@@ -978,35 +979,35 @@ function enc(n, d)
 	dirty = true
 end
 
-local function get_screen_offset_x(offset)
+function get_screen_offset_x(offset)
 	return screen_note_width * (screen_note_center + offset)
 end
 
-local function get_screen_note_y(note)
+function get_screen_note_y(note)
 	return 71 + keyboard.octave * scale.length - note
 end
 
 local function draw_head_brackets(h, level)
 	local head = shift_register.read_heads[h]
-	local x_low = get_screen_offset_x(head.offset_base + head:get_min_offset_offset()) + 1
-	local x_high = get_screen_offset_x(head.offset_base + head:get_max_offset_offset()) + 3
+	local x_low = get_screen_offset_x(head.offset_base + head:get_min_offset_offset())
+	local x_high = get_screen_offset_x(head.offset_base + head:get_max_offset_offset()) + 4
 	screen.level(0)
-	screen.rect(x_low - 2, 0, 3, 3)
-	screen.rect(x_high - 2, 0, 3, 3)
+	screen.rect(x_low - 1, 0, 3, 3)
+	screen.rect(x_high - 1, 0, 3, 3)
 	screen.fill()
-	screen.rect(x_low - 2, 61, 3, 3)
-	screen.rect(x_high - 2, 61, 3, 3)
+	screen.rect(x_low - 1, 61, 3, 3)
+	screen.rect(x_high - 1, 61, 3, 3)
 	screen.fill()
-	screen.move(x_high, 2)
-	screen.line(x_high, 1)
-	screen.line(x_low, 1)
-	screen.line(x_low, 2)
+	screen.move(x_high + 0.5, 2)
+	screen.line(x_high + 0.5, 0.5)
+	screen.line(x_low + 0.5, 0.5)
+	screen.line(x_low + 0.5, 2)
 	screen.level(level)
 	screen.stroke()
-	screen.move(x_high, 62)
-	screen.line(x_high, 64)
-	screen.line(x_low, 64)
-	screen.line(x_low, 62)
+	screen.move(x_high + 0.5, 62)
+	screen.line(x_high + 0.5, 64)
+	screen.line(x_low + 0.5, 64)
+	screen.line(x_low + 0.5, 62)
 	screen.level(level)
 	screen.stroke()
 end
@@ -1018,14 +1019,12 @@ function redraw()
 
 	-- draw loop region
 	local loop_start_x = get_screen_offset_x(shift_register.start_offset)
-	local loop_end_x = get_screen_offset_x(shift_register.end_offset) + 2
+	local loop_end_x = get_screen_offset_x(shift_register.end_offset)
 	for x = loop_start_x, loop_end_x do
 		if x == loop_start_x or x == loop_end_x then
 			screen.pixel(x, 1)
 			screen.pixel(x, 3)
 			screen.pixel(x, 5)
-			-- screen.pixel(x, 7)
-			-- screen.pixel(x, 56)
 			screen.pixel(x, 58)
 			screen.pixel(x, 60)
 			screen.pixel(x, 62)
@@ -1046,31 +1045,32 @@ function redraw()
 		note.x = (n - 1) * screen_note_width
 		note.y = get_screen_note_y(scale:snap(shift_register:read_loop_offset(note.offset)))
 		screen_notes[n] = note
+		-- connect with previous note
 		if n > 1 then
 			local previous_note = screen_notes[n - 1]
 			local diff = note.y - previous_note.y
 			if diff > 0 then
-				screen.move(note.x, previous_note.y - 1)
-				screen.line_rel(0, diff + 1)
-			else
-				screen.move(note.x, previous_note.y)
+				screen.move(note.x + 0.5, previous_note.y + 1)
 				screen.line_rel(0, diff - 1)
+			else
+				screen.move(note.x + 0.5, previous_note.y)
+				screen.line_rel(0, diff + 1)
 			end
-			if note.offset > shift_register.start_offset and note.offset <= shift_register.end_offset then
+			if note.offset > shift_register.start_offset and note.offset < shift_register.end_offset then
 				screen.level(2)
 			else
 				screen.level(1)
 			end
 			screen.stroke()
 		end
-		if note.offset >= shift_register.start_offset and note.offset <= shift_register.end_offset then
+		if note.offset >= shift_register.start_offset and note.offset < shift_register.end_offset then
 			-- highlight content between loop points (center of screen)
 			screen.level(2)
 		else
 			screen.level(1)
 		end
-		screen.move(note.x, note.y)
-		screen.line_rel(3, 0)
+		screen.move(note.x, note.y + 0.5)
+		screen.line_rel(5, 0)
 		screen.stroke()
 	end
 
@@ -1112,11 +1112,11 @@ function redraw()
 			if note ~= nil then
 				note.y_transposed = y_transposed
 				-- clear outline
-				screen.rect(note.x - 2, y_transposed - 2, 7, 3)
+				screen.rect(note.x - 1, y_transposed - 1, 7, 3)
 				screen.level(0)
 				screen.fill()
 				-- draw note
-				screen.move(note.x - 1, y_transposed)
+				screen.move(note.x, y_transposed + 0.5)
 				screen.line_rel(5, 0)
 				screen.level(level)
 				screen.stroke()
@@ -1125,19 +1125,19 @@ function redraw()
 				local transpose_distance = y_transposed - note.y
 				if transpose_distance < -1 or transpose_distance > 1 then
 					local transpose_line_length = math.abs(transpose_distance) - 2
-					local transpose_line_top = math.min(y_transposed + 1, note.y)
-					screen.move(note.x + 2, transpose_line_top)
+					local transpose_line_top = math.min(y_transposed + 2, note.y + 1)
+					screen.move(note.x + 2.5, transpose_line_top)
 					screen.line_rel(0, transpose_line_length)
 					screen.level(1)
 					screen.stroke()
 					if transpose_line_length > 2 then
 						local transpose_cap_y = transpose_distance < 0 and y_transposed + 2 or y_transposed - 2
 						-- clear outline
-						screen.rect(note.x - 1, transpose_cap_y - 2, 6, 3)
+						screen.rect(note.x, transpose_cap_y - 1, 5, 3)
 						screen.level(0)
 						screen.fill()
 						-- draw cap
-						screen.move(note.x, transpose_cap_y)
+						screen.move(note.x + 1, transpose_cap_y + 0.5)
 						screen.line_rel(3, 0)
 						screen.level(2)
 						screen.stroke()
@@ -1146,26 +1146,24 @@ function redraw()
 			end
 		elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
 			-- draw output pitch
-			screen.pixel(62, y_transposed - 2)
-			screen.pixel(63, y_transposed - 2)
-			screen.pixel(64, y_transposed - 2)
-			screen.pixel(64, y_transposed - 1)
-			screen.pixel(64, y_transposed)
-			screen.pixel(63, y_transposed)
-			screen.pixel(62, y_transposed)
-			screen.pixel(62, y_transposed - 1)
+			-- TODO: fix offsets
+			screen.rect(60.5, y_transposed - 1.5, 4, 4)
+			screen.line_width(3)
+			screen.level(0)
+			screen.stroke()
+			screen.rect(60.5, y_transposed - 1.5, 4, 4)
+			screen.line_width(1)
 			screen.level(level)
-			screen.fill()
+			screen.stroke()
 		end
 	end
 
 	-- draw head indicator
 	local head_note = screen_notes[17]
-	screen.move(head_note.x, head_note.y)
-	screen.line_rel(3, 0)
+	screen.rect(head_note.x + 1, head_note.y - 1, 3, 3)
 	screen.level(0)
-	screen.stroke()
-	screen.pixel(head_note.x + 1, head_note.y - 1)
+	screen.fill()
+	screen.pixel(head_note.x + 2, head_note.y)
 	screen.level(15)
 	screen.fill()
 
@@ -1176,35 +1174,35 @@ function redraw()
 		local y1 = math.min(note.y, note.y_transposed and note.y_transposed or note.y) - 5
 		local y2 = math.max(note.y, note.y_transposed and note.y_transposed or note.y) + 5
 		-- clear background around caps
-		screen.rect(x - 2, y1 - 2, 7, 3)
-		screen.rect(x - 2, y2 - 2, 7, 3)
+		screen.rect(x - 1, y1 - 1, 7, 3)
+		screen.rect(x - 1, y2 - 1, 7, 3)
 		screen.level(0)
 		screen.fill()
 		-- set level
 		screen.level(blink_fast and 15 or 7)
 		-- top left cap
-		screen.move(x - 1, y1)
+		screen.move(x, y1 + 0.5)
 		screen.line_rel(2, 0)
 		screen.stroke()
 		-- top right cap
-		screen.move(x + 2, y1)
-		screen.line_rel(2, 0)
+		screen.move(x + 5, y1 + 0.5)
+		screen.line_rel(-2, 0)
 		screen.stroke()
 		-- top stem
-		screen.move(x + 2, y1)
+		screen.move(x + 2.5, y1 + 1)
 		screen.line_rel(0, 3)
 		screen.stroke()
 		-- bottom stem
-		screen.move(x + 2, y2 - 4)
-		screen.line_rel(0, 3)
+		screen.move(x + 2.5, y2)
+		screen.line_rel(0, -3)
 		screen.stroke()
 		-- bottom left cap
-		screen.move(x - 1, y2)
+		screen.move(x, y2 + 0.5)
 		screen.line_rel(2, 0)
 		screen.stroke()
 		-- bottom right cap
-		screen.move(x + 2, y2)
-		screen.line_rel(2, 0)
+		screen.move(x + 5, y2 + 0.5)
+		screen.line_rel(-2, 0)
 		screen.stroke()
 	end
 
