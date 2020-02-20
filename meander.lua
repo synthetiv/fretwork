@@ -1159,7 +1159,7 @@ function redraw()
 	end
 
 	-- draw head indicator
-	local head_note = screen_notes[17]
+	local head_note = screen_notes[16]
 	screen.rect(head_note.x + 1, head_note.y - 1, 3, 3)
 	screen.level(0)
 	screen.fill()
