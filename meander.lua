@@ -88,6 +88,7 @@ local output_source_head_4 = 4
 local output_source_audio_in = 5
 local output_source_grid = 6
 local output_stream = { false, false, false, false }
+local output_draw_order = { 4, 3, 2, 1 }
 
 local active_heads = { false, false, false, false }
 local selected_heads = { false, false, false, false }
@@ -109,9 +110,9 @@ local input_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 local control_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 local keyboard = input_keyboard
 
-local screen_note_width = 4
+local screen_note_width = 5
 local n_screen_notes = 128 / screen_note_width
-local screen_note_center = math.floor((n_screen_notes - 1) / 2)
+local screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
 
 local blink_slow = false
 local blink_fast = false
@@ -213,7 +214,7 @@ local function rewind()
 	dirty = true
 end
 
-local function update_active_heads()
+local function update_active_heads(last_output)
 	active_heads = { false, false, false, false }
 	selected_heads = { false, false, false, false }
 	for o = 1, 4 do
@@ -224,6 +225,16 @@ local function update_active_heads()
 				selected_heads[source] = true
 			end
 		end
+	end
+	if last_output then
+		local new_draw_order = {}
+		for i, o in ipairs(output_draw_order) do
+			if o ~= last_output then
+				table.insert(new_draw_order, o)
+			end
+		end
+		table.insert(new_draw_order, last_output)
+		output_draw_order = new_draw_order
 	end
 end
 
@@ -435,17 +446,9 @@ local function grid_key(x, y, z)
 		end
 	elseif output_selector:should_handle_key(x, y) then
 		-- TODO: what should these do in modes other than transpose?
+		local output = output_selector:get_key_option(x, y)
 		output_selector:key(x, y, z)
-		update_active_heads()
-		-- in edit mode, jump to the selected output's offset
-		-- TODO: make the cursor follow this output until it's explicitly moved?
-		if grid_mode == grid_mode_edit and z == 1 then
-			local output = output_selector:get_key_option(x, y)
-			local source = output_source[output]
-			if source >= output_source_head_1 and source <= output_source_head_4 then
-				shift_register.cursor = shift_register:clamp_loop_offset(shift_register.read_heads[source].offset)
-			end
-		end
+		update_active_heads(z == 1 and output)
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
@@ -579,7 +582,7 @@ local function add_params()
 		id = 'shift_clock',
 		name = 'sr/s+h clock',
 		options = clock_mode_names,
-		default = clock_mode_trig,
+		default = clock_mode_trig_grid,
 		action = function(value)
 			clock_mode = value
 			if clock_mode ~= clock_mode_grid then
@@ -617,7 +620,7 @@ local function add_params()
 		local head = shift_register.read_heads[i]
 		params:add{
 			type = 'number',
-			id = 'head_' .. i .. '_offset',
+			id = 'head_' .. i .. '_offset', -- TODO: infinite offsets (wrap to SR length)
 			name = 'head ' .. i .. ' offset',
 			min = -15,
 			max = 16,
@@ -987,234 +990,171 @@ function get_screen_note_y(note)
 	return 71 + keyboard.octave * scale.length - note
 end
 
-local function draw_head_brackets(h, level)
-	local head = shift_register.read_heads[h]
-	local x_low = get_screen_offset_x(head.offset_base + head:get_min_offset_offset())
-	local x_high = get_screen_offset_x(head.offset_base + head:get_max_offset_offset()) + 4
-	screen.level(0)
-	screen.rect(x_low - 1, 0, 3, 3)
-	screen.rect(x_high - 1, 0, 3, 3)
-	screen.fill()
-	screen.rect(x_low - 1, 61, 3, 3)
-	screen.rect(x_high - 1, 61, 3, 3)
-	screen.fill()
-	screen.move(x_high + 0.5, 2)
-	screen.line(x_high + 0.5, 0.5)
-	screen.line(x_low + 0.5, 0.5)
-	screen.line(x_low + 0.5, 2)
-	screen.level(level)
-	screen.stroke()
-	screen.move(x_high + 0.5, 62)
-	screen.line(x_high + 0.5, 64)
-	screen.line(x_low + 0.5, 64)
-	screen.line(x_low + 0.5, 62)
-	screen.level(level)
-	screen.stroke()
-end
-
 function redraw()
 	screen.clear()
 	screen.stroke()
 	screen.line_width(1)
 
 	-- draw loop region
-	local loop_start_x = get_screen_offset_x(shift_register.start_offset)
-	local loop_end_x = get_screen_offset_x(shift_register.end_offset)
+	--[[
+	local loop_start_x = get_screen_offset_x(shift_register.start_offset) - 1
+	local loop_end_x = get_screen_offset_x(shift_register.end_offset) + screen_note_width
 	for x = loop_start_x, loop_end_x do
 		if x == loop_start_x or x == loop_end_x then
-			screen.pixel(x, 1)
-			screen.pixel(x, 3)
-			screen.pixel(x, 5)
-			screen.pixel(x, 58)
-			screen.pixel(x, 60)
-			screen.pixel(x, 62)
-		elseif x % 2 == 1 then
-			screen.pixel(x, 0)
-			screen.pixel(x, 63)
+			for y = 0, 63 do
+				if y % 2 == 1 then
+					screen.pixel(x, y)
+				end
+			end
 		end
 	end
 	screen.level(1)
 	screen.fill()
+		--]]
 
-	local screen_notes = {}
-	
-	-- build table of all visible notes and draw them
-	for n = 1, n_screen_notes do
-		local note = {}
-		note.offset = n - screen_note_center - 1
-		note.x = (n - 1) * screen_note_width
-		note.y = get_screen_note_y(scale:snap(shift_register:read_loop_offset(note.offset)))
-		screen_notes[n] = note
-		-- connect with previous note
-		if n > 1 then
-			local previous_note = screen_notes[n - 1]
-			local diff = note.y - previous_note.y
-			if diff > 0 then
-				screen.move(note.x + 0.5, previous_note.y + 1)
-				screen.line_rel(0, diff - 1)
+	-- draw vertical output/head indicator
+	local output_x = get_screen_offset_x(0) + 3
+	screen.move(output_x, 0)
+	screen.line_rel(0, 3)
+	screen.move(output_x, 64)
+	screen.line_rel(0, -3)
+	screen.level(1)
+	screen.stroke()
+
+	-- build table of all visible notes for each output
+	local output_notes = {}
+	for o = 1, 4 do
+		-- TODO: how should non-SR sources be displayed? horizontal lines? nothing?
+		local offset = shift_register.read_heads[output_source[o]].offset
+		local transpose = params:get('output_' .. o .. '_transpose')
+		output_notes[o] = {}
+		for n = 1, n_screen_notes do
+			local note = {}
+			note.x = (n - 1) * screen_note_width + 0.5
+			note.pitch = shift_register:read_loop_offset(n - 1 - screen_note_center - offset)
+			note.y = get_screen_note_y(scale:snap(note.pitch + transpose))
+			if output_selector:is_selected(o) then
+				-- in transpose mode, blink selected output(s)
+				if grid_mode ~= grid_mode_transpose or blink_fast then
+					level = 15
+				end
 			else
-				screen.move(note.x + 0.5, previous_note.y)
-				screen.line_rel(0, diff + 1)
+				note.level = 5
 			end
-			if note.offset > shift_register.start_offset and note.offset < shift_register.end_offset then
-				screen.level(2)
+			output_notes[o][n] = note
+		end
+	end
+
+	local function draw_snake(o)
+		local offset = shift_register.read_heads[output_source[o]].offset -- TODO
+		for n = 1, n_screen_notes do
+			local note = output_notes[o][n]
+			local x = note.x
+			local y = note.y
+			-- move or connect from previous note
+			if n == 1 then
+				screen.move(x, y)
 			else
-				screen.level(1)
+				screen.line(x, y)
 			end
-			screen.stroke()
+			-- draw this note
+			screen.line(x + screen_note_width, y)
 		end
-		if note.offset >= shift_register.start_offset and note.offset < shift_register.end_offset then
-			-- highlight content between loop points (center of screen)
-			screen.level(2)
-		else
-			screen.level(1)
-		end
-		screen.move(note.x, note.y + 0.5)
-		screen.line_rel(5, 0)
+	end
+
+	-- draw snakes
+	for i, o in ipairs(output_draw_order) do
+		local offset = shift_register.read_heads[output_source[o]].offset -- TODO
+		local head = screen_note_center + offset + 1
+		local head_note = output_notes[o][head]
+		local level = output_selector:is_selected(o) and 3 + ((i - 1) * 4) or 2
+		-- draw body
+		screen.line_cap('square')
+		screen.line_width(4)
+		screen.level(0)
+		draw_snake(o)
+		screen.stroke()
+		screen.line_width(2)
+		screen.level(level)
+		draw_snake(o)
+		screen.stroke()
+		-- draw gap for head
+		screen.line_cap('butt')
+		screen.line_width(1)
+		screen.move(head_note.x + 3.5, head_note.y - 1)
+		screen.line(head_note.x + 3.5, head_note.y + 1)
+		screen.level(0)
+		screen.stroke()
+		-- highlight current note
+		local note = output_notes[o][screen_note_center + 1] -- TODO: is this actually the current note?
+		screen.move(note.x + 2.5, note.y - 1)
+		screen.line(note.x + 2.5, note.y + 1)
+		screen.level(15)
 		screen.stroke()
 	end
 
-	-- draw incoming grid pitch
-	-- TODO
-	-- for o = 1, 4 do
-		-- local y = -1
-		-- if output_source[o] == output_source_grid then
-			-- y = get_screen_note_y(scale:snap(keyboard:get_last_note()))
-		-- elseif pitch_in_detected and (output_source[o] == output_source_audio_in) then
-			-- y = get_screen_note_y(scale:snap(pitch_in))
-		-- end
-		-- if y > -1 then
-			-- screen.pixel(127, y - 1)
-			-- screen.level(2)
-			-- screen.fill()
-		-- end
-	-- end
-
-	-- draw output states
-	for o = 1, 4 do
-		local y_transposed = get_screen_note_y(output_note[o])
-		local level = 12
-		-- in transpose mode, blink selected output(s)
-		if grid_mode == grid_mode_transpose and output_selector:is_selected(o) then
-			if blink_fast then
-				level = 15
-			else
-				level = 7
-			end
-		end
-		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
-			local head_index = output_source[o]
-			-- TODO: you could have a table of outputs and store a reference to each output's head in that table.......
-			local head = shift_register.read_heads[head_index]
-			local note = screen_notes[screen_note_center + head.offset + 1]
-			-- TODO: we have to check this because random head offset might point to a note that's not on
-			-- the screen. any good way to deal with that...?
-			if note ~= nil then
-				note.y_transposed = y_transposed
-				-- clear outline
-				screen.rect(note.x - 1, y_transposed - 1, 7, 3)
-				screen.level(0)
-				screen.fill()
-				-- draw note
-				screen.move(note.x, y_transposed + 0.5)
-				screen.line_rel(5, 0)
-				screen.level(level)
-				screen.stroke()
-				-- connect transposed output with original note
-				-- TODO: draw highest (+/-) transpositions first, then lower, so they look OK if they stack
-				local transpose_distance = y_transposed - note.y
-				if transpose_distance < -1 or transpose_distance > 1 then
-					local transpose_line_length = math.abs(transpose_distance) - 2
-					local transpose_line_top = math.min(y_transposed + 2, note.y + 1)
-					screen.move(note.x + 2.5, transpose_line_top)
-					screen.line_rel(0, transpose_line_length)
-					screen.level(1)
-					screen.stroke()
-					if transpose_line_length > 2 then
-						local transpose_cap_y = transpose_distance < 0 and y_transposed + 2 or y_transposed - 2
-						-- clear outline
-						screen.rect(note.x, transpose_cap_y - 1, 5, 3)
-						screen.level(0)
-						screen.fill()
-						-- draw cap
-						screen.move(note.x + 1, transpose_cap_y + 0.5)
-						screen.line_rel(3, 0)
-						screen.level(2)
-						screen.stroke()
-					end
-				end
-			end
-		elseif output_source[o] == output_source_audio_in or output_source[o] == output_source_grid then
-			-- draw output pitch
-			-- TODO: fix offsets
-			screen.rect(60.5, y_transposed - 1.5, 4, 4)
-			screen.line_width(3)
-			screen.level(0)
-			screen.stroke()
-			screen.rect(60.5, y_transposed - 1.5, 4, 4)
-			screen.line_width(1)
-			screen.level(level)
-			screen.stroke()
-		end
+	local function draw_input(x, y, level)
+		screen.rect(x + 3, y - 2, 4, 4)
+		screen.level(0)
+		screen.fill()
+		screen.rect(x + 4, y - 1, 2, 2)
+		screen.level(level)
+		screen.fill()
 	end
 
-	-- draw head indicator
-	local head_note = screen_notes[16]
-	screen.rect(head_note.x + 1, head_note.y - 1, 3, 3)
-	screen.level(0)
-	screen.fill()
-	screen.pixel(head_note.x + 2, head_note.y)
-	screen.level(15)
-	screen.fill()
+	local top_output = output_draw_order[4]
+
+	-- draw input indicators
+	local input_offset = shift_register.read_heads[output_source[top_output]].offset -- TODO
+	local input_x = output_notes[top_output][screen_note_center + 1 + input_offset].x
+	-- grid pitch
+	local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note()))
+	draw_input(input_x, grid_y, input_keyboard.gate and 15 or 7)
+	-- pitch detector pitch
+	local audio_y = get_screen_note_y(scale:snap(pitch_in))
+	draw_input(input_x, audio_y, pitch_in_detected and 15 or 7)
 
 	-- draw cursor
 	if grid_mode == grid_mode_edit then
-		local note = screen_notes[screen_note_center + shift_register.cursor + 1]
+		local o = output_draw_order[4]
+		local offset = shift_register.read_heads[output_source[o]].offset
+		-- TODO: let the cursor appear anywhere on the screen (why do we constrain it so much in the shift reg class?)
+		local note = output_notes[o][(screen_note_center + shift_register.cursor + offset) % n_screen_notes + 1]
 		local x = note.x
-		local y1 = math.min(note.y, note.y_transposed and note.y_transposed or note.y) - 5
-		local y2 = math.max(note.y, note.y_transposed and note.y_transposed or note.y) + 5
-		-- clear background around caps
-		screen.rect(x - 1, y1 - 1, 7, 3)
-		screen.rect(x - 1, y2 - 1, 7, 3)
+		local y1 = note.y - 6
+		local y2 = note.y + 5
+		local level = blink_fast and 15 or 7
+		-- clear background/outline
+		screen.rect(x, y1 - 1, 5, 3)
+		screen.rect(x, y2 - 1, 5, 3)
+		screen.rect(x + 1, y1, 3, 5)
+		screen.rect(x + 1, y2 - 4, 3, 5)
 		screen.level(0)
 		screen.fill()
 		-- set level
-		screen.level(blink_fast and 15 or 7)
+		screen.level(level)
 		-- top left cap
-		screen.move(x, y1 + 0.5)
-		screen.line_rel(2, 0)
-		screen.stroke()
+		screen.pixel(x + 1, y1)
+		screen.fill()
 		-- top right cap
-		screen.move(x + 5, y1 + 0.5)
-		screen.line_rel(-2, 0)
-		screen.stroke()
+		screen.pixel(x + 3, y1)
+		screen.fill()
 		-- top stem
 		screen.move(x + 2.5, y1 + 1)
 		screen.line_rel(0, 3)
+		screen.level(level)
 		screen.stroke()
 		-- bottom stem
 		screen.move(x + 2.5, y2)
 		screen.line_rel(0, -3)
+		screen.level(level)
 		screen.stroke()
 		-- bottom left cap
-		screen.move(x, y2 + 0.5)
-		screen.line_rel(2, 0)
-		screen.stroke()
+		screen.pixel(x + 1, y2)
+		screen.fill()
 		-- bottom right cap
-		screen.move(x + 5, y2 + 0.5)
-		screen.line_rel(-2, 0)
-		screen.stroke()
-	end
-
-	for i = 1, 4 do
-		if active_heads[i] and not selected_heads[i] then
-			draw_head_brackets(i, 1)
-		end
-	end
-	for i = 1, 4 do
-		if selected_heads[i] then
-			draw_head_brackets(i, 3)
-		end
+		screen.pixel(x + 3, y2)
+		screen.fill()
 	end
 
 	local write_probability = params:get('write_probability') - 1

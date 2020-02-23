@@ -211,6 +211,7 @@ function ShiftRegister:delete()
 	end
 end
 
+-- TODO: maybe (?) don't bother with the symmetry thing
 function ShiftRegister:set_length(length)
 	if length < 2 or length > self.buffer_size or length == self.length then
 		return
