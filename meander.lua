@@ -37,6 +37,7 @@ local memory_mask = 1
 local memory_transposition = 2
 local memory_loop = 3
 
+-- TODO: save/recall offsets too... if they could be set by grid then they could be stored with transpositions
 -- TODO: save/recall mask, loop, and transposition all at once
 
 local shift_register = ShiftRegister.new(32)
@@ -72,6 +73,7 @@ local clock_mode_trig_grid = 3
 
 local output_transpose = { 0, 0, 0, 0 }
 local output_note = { 0, 0, 0, 0 }
+-- TODO: maybe you don't need sources at all. just 4 read heads -> 4 outs.
 local output_source = { 0, 0, 0, 0 }
 local output_source_names = {
 	'head 1',
@@ -110,13 +112,16 @@ local input_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 local control_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 local keyboard = input_keyboard
 
-local screen_note_width = 5
+local screen_note_width = 4
 local n_screen_notes = 128 / screen_note_width
 local screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
 
+local key_shift = false
+local info_visible = false
 local blink_slow = false
 local blink_fast = false
 local dirty = false
+local info_metro
 local redraw_metro
 
 local function recall_mask()
@@ -534,6 +539,17 @@ local function update_freq(value)
 	end
 end
 
+local function show_info()
+	info_visible = true
+	dirty = true
+	if not key_shift then
+		if info_metro ~= nil then
+			info_metro:stop()
+			info_metro:start(0.75)
+		end
+	end
+end
+
 local function crow_setup()
 	crow.clear()
 	-- input modes will be set by params
@@ -575,6 +591,9 @@ local function add_params()
 		controlspec = controlspec.new(1, 101, 'exp', 1, 1),
 		formatter = function(param)
 			return string.format('%1.f%%', param:get() - 1)
+		end,
+		action = function(value)
+			show_info()
 		end
 	}
 	params:add{
@@ -638,6 +657,7 @@ local function add_params()
 		}
 		params:add{
 			type = 'number',
+			-- TODO: either add a new indicator for this to the UI, or abandon the concept (maybe in favor of probability of shift per voice?)
 			id = 'head_' .. i .. '_offset_random',
 			name = 'head ' .. i .. ' offset random',
 			min = 0,
@@ -660,6 +680,7 @@ local function add_params()
 		action = function(value)
 			shift_register:set_length(value)
 			for o = 1, 4 do
+				-- TODO: when loop is adjusted, adjust around currently selected output (??)
 				-- TODO: this nil comparison is only necessary because of the order of params; should they
 				-- be reordered anyway?
 				if output_source[o] ~= nil and output_source[o] < 5 then
@@ -667,6 +688,7 @@ local function add_params()
 				end
 			end
 			dirty = true
+			show_info()
 		end
 	}
 	
@@ -812,6 +834,13 @@ function init()
 	end
 
 	redraw_metro:start(1 / 15)
+
+	info_metro = metro.init()
+	info_metro.event = function()
+		info_visible = false
+		dirty = true
+	end
+	info_metro.count = 1
 	
 	engine.pitchAmpThreshold(util.dbamp(-80))
 	engine.pitchConfidenceThreshold(0.8)
@@ -896,6 +925,7 @@ end
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
+		show_info()
 	elseif z == 1 then
 		if grid_mode == grid_mode_play then
 			key_shift_clock(n)
@@ -958,7 +988,7 @@ function enc(n, d)
 			shift_register:move_cursor(d)
 		else
 			-- move head(s)
-			params_multi_delta('head_%d_offset', selected_heads, d)
+			params_multi_delta('head_%d_offset', selected_heads, -d)
 		end
 	elseif n == 3 then
 		if grid_mode == grid_mode_edit then
@@ -994,30 +1024,17 @@ function redraw()
 	screen.clear()
 	screen.stroke()
 	screen.line_width(1)
-
-	-- draw loop region
-	--[[
-	local loop_start_x = get_screen_offset_x(shift_register.start_offset) - 1
-	local loop_end_x = get_screen_offset_x(shift_register.end_offset) + screen_note_width
-	for x = loop_start_x, loop_end_x do
-		if x == loop_start_x or x == loop_end_x then
-			for y = 0, 63 do
-				if y % 2 == 1 then
-					screen.pixel(x, y)
-				end
-			end
-		end
-	end
-	screen.level(1)
-	screen.fill()
-		--]]
+	screen.font_face(2)
+	screen.font_size(8)
 
 	-- draw vertical output/head indicator
+	-- TODO: I think this can go closer to the right edge of the screen, unless you start featuring retrograde motion more
+	-- TODO: set heads/outputs to retrograde instead of allowing backwards clock ticks
+	-- TODO: inversion too
+	-- TODO: then you get into different loop lengths...
 	local output_x = get_screen_offset_x(0) + 3
 	screen.move(output_x, 0)
-	screen.line_rel(0, 3)
-	screen.move(output_x, 64)
-	screen.line_rel(0, -3)
+	screen.line(output_x, 64)
 	screen.level(1)
 	screen.stroke()
 
@@ -1025,13 +1042,14 @@ function redraw()
 	local output_notes = {}
 	for o = 1, 4 do
 		-- TODO: how should non-SR sources be displayed? horizontal lines? nothing?
+		-- not an issue if you drop the concept of other sources
 		local offset = shift_register.read_heads[output_source[o]].offset
 		local transpose = params:get('output_' .. o .. '_transpose')
 		output_notes[o] = {}
 		for n = 1, n_screen_notes do
 			local note = {}
 			note.x = (n - 1) * screen_note_width + 0.5
-			note.pitch = shift_register:read_loop_offset(n - 1 - screen_note_center - offset)
+			note.pitch = shift_register:read_loop_offset(n - 1 - screen_note_center + offset)
 			note.y = get_screen_note_y(scale:snap(note.pitch + transpose))
 			if output_selector:is_selected(o) then
 				-- in transpose mode, blink selected output(s)
@@ -1049,8 +1067,8 @@ function redraw()
 		local offset = shift_register.read_heads[output_source[o]].offset -- TODO
 		for n = 1, n_screen_notes do
 			local note = output_notes[o][n]
-			local x = note.x
-			local y = note.y
+			local x = note.x + 0.5
+			local y = note.y + 0.5
 			-- move or connect from previous note
 			if n == 1 then
 				screen.move(x, y)
@@ -1065,68 +1083,77 @@ function redraw()
 	-- draw snakes
 	for i, o in ipairs(output_draw_order) do
 		local offset = shift_register.read_heads[output_source[o]].offset -- TODO
-		local head = screen_note_center + offset + 1
+		local head = screen_note_center - offset + 1
 		local head_note = output_notes[o][head]
 		local level = output_selector:is_selected(o) and 3 + ((i - 1) * 4) or 2
 		-- draw body
 		screen.line_cap('square')
-		screen.line_width(4)
+		screen.line_width(3)
 		screen.level(0)
 		draw_snake(o)
 		screen.stroke()
-		screen.line_width(2)
+		screen.line_width(1)
 		screen.level(level)
 		draw_snake(o)
 		screen.stroke()
 		-- draw gap for head
 		screen.line_cap('butt')
-		screen.line_width(1)
-		screen.move(head_note.x + 3.5, head_note.y - 1)
-		screen.line(head_note.x + 3.5, head_note.y + 1)
-		screen.level(0)
-		screen.stroke()
-		-- highlight current note
-		local note = output_notes[o][screen_note_center + 1] -- TODO: is this actually the current note?
-		screen.move(note.x + 2.5, note.y - 1)
-		screen.line(note.x + 2.5, note.y + 1)
-		screen.level(15)
-		screen.stroke()
-	end
-
-	local function draw_input(x, y, level)
-		screen.rect(x + 3, y - 2, 4, 4)
+		screen.pixel(head_note.x + 3, head_note.y)
 		screen.level(0)
 		screen.fill()
-		screen.rect(x + 4, y - 1, 2, 2)
-		screen.level(level)
+	end
+
+	-- highlight current notes after drawing all snakes, lest some be covered by outlines
+	for i, o in ipairs(output_draw_order) do
+		local note = output_notes[o][screen_note_center + 1] -- TODO: is this actually the current note?
+		screen.pixel(note.x + 2, note.y)
+		screen.level(15)
 		screen.fill()
 	end
 
 	local top_output = output_draw_order[4]
 
+	local function draw_input(x, y, level)
+		screen.rect(x + 2, y - 2, 5, 5)
+		screen.level(0)
+		screen.fill()
+		screen.rect(x + 3.5, y - 0.5, 2, 2)
+		screen.level(15)
+		screen.stroke()
+	end
+
 	-- draw input indicators
+	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
+	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
+	-- that value when a write occurs?
 	local input_offset = shift_register.read_heads[output_source[top_output]].offset -- TODO
-	local input_x = output_notes[top_output][screen_note_center + 1 + input_offset].x
+	local input_x = output_notes[top_output][screen_note_center + 1 - input_offset].x
+	local input_transpose = params:get('output_' .. top_output .. '_transpose')
 	-- grid pitch
-	local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note()))
-	draw_input(input_x, grid_y, input_keyboard.gate and 15 or 7)
+	if input_keyboard.gate then
+		local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note() + input_transpose))
+		draw_input(input_x, grid_y)
+	end
 	-- pitch detector pitch
-	local audio_y = get_screen_note_y(scale:snap(pitch_in))
-	draw_input(input_x, audio_y, pitch_in_detected and 15 or 7)
+	if pitch_in_detected then
+		local audio_y = get_screen_note_y(scale:snap(pitch_in + input_transpose))
+		draw_input(input_x, audio_y)
+	end
 
 	-- draw cursor
+	-- TODO: consider just circling a corner
 	if grid_mode == grid_mode_edit then
 		local o = output_draw_order[4]
 		local offset = shift_register.read_heads[output_source[o]].offset
 		-- TODO: let the cursor appear anywhere on the screen (why do we constrain it so much in the shift reg class?)
-		local note = output_notes[o][(screen_note_center + shift_register.cursor + offset) % n_screen_notes + 1]
+		local note = output_notes[o][(screen_note_center + shift_register.cursor - offset) % n_screen_notes + 1]
 		local x = note.x
-		local y1 = note.y - 6
+		local y1 = note.y - 5
 		local y2 = note.y + 5
 		local level = blink_fast and 15 or 7
 		-- clear background/outline
-		screen.rect(x, y1 - 1, 5, 3)
-		screen.rect(x, y2 - 1, 5, 3)
+		screen.rect(x - 1, y1 - 1, 7, 3)
+		screen.rect(x - 1, y2 - 1, 7, 3)
 		screen.rect(x + 1, y1, 3, 5)
 		screen.rect(x + 1, y2 - 4, 3, 5)
 		screen.level(0)
@@ -1134,10 +1161,10 @@ function redraw()
 		-- set level
 		screen.level(level)
 		-- top left cap
-		screen.pixel(x + 1, y1)
+		screen.rect(x, y1, 2, 1)
 		screen.fill()
 		-- top right cap
-		screen.pixel(x + 3, y1)
+		screen.rect(x + 3, y1, 2, 1)
 		screen.fill()
 		-- top stem
 		screen.move(x + 2.5, y1 + 1)
@@ -1150,20 +1177,29 @@ function redraw()
 		screen.level(level)
 		screen.stroke()
 		-- bottom left cap
-		screen.pixel(x + 1, y2)
+		screen.rect(x, y2, 2, 1)
 		screen.fill()
 		-- bottom right cap
-		screen.pixel(x + 3, y2)
+		screen.rect(x + 3, y2, 2, 1)
 		screen.fill()
 	end
 
-	local write_probability = params:get('write_probability') - 1
-	local probability_level = math.ceil(write_probability / 10)
-	if probability_level > 0 then
-		screen.move(12, 10)
-		screen.level(probability_level)
-		screen.text_right(util.round(write_probability))
-		screen.text('%')
+	if info_visible then
+		screen.rect(0, 0, 26, 64)
+		screen.level(0)
+		screen.fill()
+		screen.move(24.5, 0)
+		screen.line(24.5, 64)
+		screen.level(4)
+		screen.stroke()
+
+		screen.move(0, 7)
+		screen.level(15)
+		screen.text(string.format('P: %d%%', util.round(params:get('write_probability') - 1)))
+
+		screen.move(0, 16)
+		screen.level(15)
+		screen.text(string.format('L: %d', params:get('loop_length')))
 	end
 
 	-- DEBUG: draw minibuffer, loop region, head
