@@ -12,6 +12,7 @@ local Keyboard = include 'lib/grid_keyboard'
 local Select = include 'lib/grid_select'
 local MultiSelect = include 'lib/grid_multi_select'
 local ShiftRegister = include 'lib/shift_register'
+local ShiftRegisterVoice = include 'lib/shift_register_voice'
 local Scale = include 'lib/scale'
 
 local pitch_poll
@@ -71,29 +72,11 @@ local clock_mode_trig = 1
 local clock_mode_grid = 2
 local clock_mode_trig_grid = 3
 
-local output_transpose = { 0, 0, 0, 0 }
-local output_note = { 0, 0, 0, 0 }
--- TODO: maybe you don't need sources at all. just 4 read heads -> 4 outs.
-local output_source = { 0, 0, 0, 0 }
-local output_source_names = {
-	'head 1',
-	'head 2',
-	'head 3',
-	'head 4',
-	'audio in',
-	'grid'
-}
-local output_source_head_1 = 1
-local output_source_head_2 = 2
-local output_source_head_3 = 3
-local output_source_head_4 = 4
-local output_source_audio_in = 5
-local output_source_grid = 6
-local output_stream = { false, false, false, false }
-local output_draw_order = { 4, 3, 2, 1 }
-
-local active_heads = { false, false, false, false }
-local selected_heads = { false, false, false, false }
+local voices = {}
+local n_voices = 4
+local voice_draw_order = { 4, 3, 2, 1 }
+local top_voice_index = 1
+local top_voice = {}
 
 local grid_mode_play = 1
 local grid_mode_mask = 2
@@ -115,6 +98,8 @@ local keyboard = input_keyboard
 local screen_note_width = 4
 local n_screen_notes = 128 / screen_note_width
 local screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
+local screen_notes = { {}, {}, {}, {} }
+local cursor = 0
 
 local key_shift = false
 local info_visible = false
@@ -141,12 +126,12 @@ local function recall_loop()
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	shift_register:set_loop(saved_loops[loop_selector.selected])
+	shift_register:set_loop(cursor, saved_loops[loop_selector.selected])
 	shift_register.dirty = false
 end
 
 local function save_loop()
-	saved_loops[loop_selector.selected] = shift_register:get_loop()
+	saved_loops[loop_selector.selected] = shift_register:get_loop(cursor)
 	shift_register.dirty = false
 end
 
@@ -156,7 +141,7 @@ local function recall_transposition()
 		return
 	end
 	for o = 1, 4 do
-		params:set(string.format('output_%d_transpose', o), saved_transpositions[t][o])
+		params:set(string.format('voice_%d_transpose', o), saved_transpositions[t][o])
 	end
 	transposition_dirty = false
 end
@@ -164,30 +149,29 @@ end
 local function save_transposition()
 	local transposition = {}
 	for o = 1, 4 do
-		transposition[o] = params:get(string.format('output_%d_transpose', o))
+		transposition[o] = params:get(string.format('voice_%d_transpose', o))
 	end
 	saved_transpositions[transposition_selector.selected] = transposition
 	transposition_dirty = false
 end
 
-local function update_output(out)
-	local output_source = output_source[out]
-	local volts = 0
-	if output_source == output_source_audio_in then
-		output_note[out] = scale:snap(pitch_in + output_transpose[out])
-	elseif output_source == output_source_grid then
-		output_note[out] = scale:snap(input_keyboard:get_last_note() + output_transpose[out])
-	else
-		local output_head = output_source
-		output_note[out] = scale:snap(shift_register:read_head(output_head) + output_transpose[out])
+local function update_voice(v)
+	local voice = voices[v]
+	voice.note_snapped = scale:snap(voice.note)
+	crow.output[v].volts = voice.note_snapped / 12 - 1
+end
+
+local function update_voices()
+	for v = 1, n_voices do
+		update_voice(v)
 	end
-	volts = output_note[out] / 12 - 1
-	dirty = true
-	crow.output[out].volts = volts
 end
 
 local function sample_pitch()
 	shift_register:shift(1)
+	for v = 1, n_voices do
+		voices[v]:clock()
+	end
 	if params:get('write_probability') > math.random(1, 100) then
 		if source == source_crow then
 			shift_register:write_head(crow_pitch_in)
@@ -201,45 +185,32 @@ local function sample_pitch()
 			shift_register:write_head(input_keyboard:get_last_note())
 		end
 	end
-	for out = 1, 4 do
-		if not output_stream[out] then
-			update_output(out)
-		end
-	end
+	update_voices()
 	dirty = true
 end
 
 local function rewind()
 	shift_register:shift(-1)
-	for out = 1, 4 do
-		if not output_stream[out] then
-			update_output(out)
-		end
+	-- TODO: fix this, MAYBE by disabling rewind
+	for v = 1, n_voices do
+		voices[v]:clock()
 	end
+	update_voices()
 	dirty = true
 end
 
 local function update_active_heads(last_output)
-	active_heads = { false, false, false, false }
-	selected_heads = { false, false, false, false }
-	for o = 1, 4 do
-		local source = output_source[o]
-		if source ~= nil and source >= output_source_head_1 and source <= output_source_head_4 then
-			active_heads[source] = true
-			if output_selector:is_selected(o) then
-				selected_heads[source] = true
-			end
-		end
-	end
 	if last_output then
 		local new_draw_order = {}
-		for i, o in ipairs(output_draw_order) do
+		for i, o in ipairs(voice_draw_order) do
 			if o ~= last_output then
 				table.insert(new_draw_order, o)
 			end
 		end
 		table.insert(new_draw_order, last_output)
-		output_draw_order = new_draw_order
+		top_voice_index = new_draw_order[n_voices]
+		top_voice = voices[top_voice_index]
+		voice_draw_order = new_draw_order
 	end
 end
 
@@ -279,6 +250,10 @@ local function grid_redraw()
 	g:refresh()
 end
 
+local function get_cursor_offset()
+	return top_voice:get_offset(cursor)
+end
+
 local key_level_callbacks = {}
 
 key_level_callbacks[grid_mode_play] = function(self, x, y, n)
@@ -288,9 +263,10 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 		level = 4
 	end
 	-- highlight output notes
-	for o = 1, 4 do
-		if n == output_note[o] then
-			if output_selector:is_selected(o) then
+	for v = 1, n_voices do
+		local voice = voices[v]
+		if n == voice.note_snapped then
+			if output_selector:is_selected(v) then
 				level = 10
 			else
 				level = math.max(level, 5)
@@ -315,9 +291,9 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 		level = 5
 	end
 	-- highlight output notes
-	for o = 1, 4 do
-		if n == output_note[o] then
-			if output_selector:is_selected(o) then
+	for v = 1, n_voices do
+		if n == voices[v].note_snapped then
+			if output_selector:is_selected(v) then
 				level = 10
 			else
 				level = math.max(level, 5)
@@ -335,7 +311,7 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	end
 	-- highlight transposition settings
 	for i = 1, 4 do
-		if n - 36 == params:get('output_' .. i .. '_transpose') then
+		if n - 36 == params:get('voice_' .. i .. '_transpose') then
 			if output_selector:is_selected(i) then
 				level = 10
 			elseif level < 5 then
@@ -353,19 +329,20 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 		level = 3
 	end
 	-- highlight un-transposed output notes
-	for o = 1, 4 do
-		if output_source[o] >= output_source_head_1 and output_source[o] <= output_source_head_4 then
-			if n == self.scale:snap(shift_register:read_head(output_source[o])) then
-				level = 7
-			end
+	for v = 1, n_voices do
+		-- TODO: there's gotta be a better way to do this
+		--[[
+		if n == self.scale:snap(shift_register:read_head(output_source[o])) then
+			level = 7
 		end
+		--]]
 	end
 	-- highlight snapped version of the note at the cursor
-	if n == scale:snap(shift_register:read_cursor()) then
+	if n == scale:snap(shift_register:read_loop_offset(get_cursor_offset())) then
 		level = 10
 	end
 	-- highlight + blink the un-snapped note we're editing
-	if n == shift_register:read_cursor() then
+	if n == shift_register:read_loop_offset(get_cursor_offset()) then
 		if blink_fast then
 			level = 15
 		else
@@ -386,12 +363,6 @@ local function grid_octave_key(z, d)
 			-- change octave of current note
 			keyboard_note = keyboard:get_last_note()
 		end
-		-- update streaming outputs
-		for out = 1, 4 do
-			if output_source[out] == output_source_grid and output_stream[out] then
-				update_output(out)
-			end
-		end
 	end
 	grid_octave_key_held = z == 1
 end
@@ -405,11 +376,6 @@ local function grid_key(x, y, z)
 				if clock_mode ~= clock_mode_trig then
 					sample_pitch()
 				end
-				for out = 1, 4 do
-					if output_source[out] == output_source_grid and output_stream[out] then
-						update_output(out)
-					end
-				end
 			end
 		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
 			if z == 1 then
@@ -417,9 +383,7 @@ local function grid_key(x, y, z)
 				scale:toggle_class(n)
 				mask_dirty = true
 				if grid_ctrl then
-					for out = 1, 4 do
-						update_output(out)
-					end
+					update_voices()
 				end
 			end
 		elseif grid_mode == grid_mode_transpose then
@@ -428,7 +392,7 @@ local function grid_key(x, y, z)
 				local transpose = math.min(72, math.max(0, keyboard:get_last_note())) - 36
 				for o = 1, 4 do
 					if output_selector:is_selected(o) then
-						params:set('output_' .. o .. '_transpose', transpose)
+						params:set('voice_' .. o .. '_transpose', transpose)
 					end
 				end
 			end
@@ -436,15 +400,11 @@ local function grid_key(x, y, z)
 			keyboard:note(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
-				shift_register:write_cursor(note)
+				shift_register:write_loop_offset(get_cursor_offset(), note)
 				-- update outputs immediately, if appropriate
-				for h = 1, shift_register.n_read_heads do
-					if shift_register.read_heads[h].offset == shift_register.cursor then
-						for o = 1, 4 do
-							if output_source[o] == h then
-								update_output(o)
-							end
-						end
+				for v = 1, n_voices do
+					if shift_register:get_loop_pos(voice:get_offset(0)) == shift_register:get_loop_pos(voice:get_offset(cursor)) then
+						update_voice(v)
 					end
 				end
 			end
@@ -487,9 +447,7 @@ local function grid_key(x, y, z)
 		else
 			recall_mask()
 			if grid_ctrl then
-				for out = 1, 4 do
-					update_output(out)
-				end
+				update_voices()
 			end
 		end
 	elseif memory_selector:is_selected(memory_transposition) and transposition_selector:should_handle_key(x, y) then
@@ -506,11 +464,7 @@ local function grid_key(x, y, z)
 		else
 			recall_loop()
 			if grid_ctrl then
-				for out = 1, 4 do
-					if output_source[out] >= output_source_head_1 and output_source[out] <= output_source_head_4 then
-						update_output(out)
-					end
-				end
+				update_voices()
 			end
 		end
 	elseif x == 1 and y == 7 then
@@ -530,11 +484,6 @@ local function update_freq(value)
 	if pitch_in_detected then
 		-- TODO: accommodate non-12TET scales
 		pitch_in = musicutil.freq_to_note_num(value) + (pitch_in_octave - 2) * scale.length
-		for out = 1, 4 do
-			if output_source[out] == output_source_audio_in and output_stream[out] then
-				update_output(out)
-			end
-		end
 		dirty = true
 	end
 end
@@ -635,41 +584,6 @@ local function add_params()
 	
 	params:add_separator()
 	
-	for i = 1, shift_register.n_read_heads do
-		local head = shift_register.read_heads[i]
-		params:add{
-			type = 'number',
-			id = 'head_' .. i .. '_offset', -- TODO: infinite offsets (wrap to SR length)
-			name = 'head ' .. i .. ' offset',
-			min = -15,
-			max = 16,
-			default = i * -3,
-			action = function(value)
-				head.offset_base = value
-				head:update(true)
-				for o = 1, 4 do
-					if output_source[o] == i then
-						update_output(o)
-					end
-				end
-				dirty = true
-			end
-		}
-		params:add{
-			type = 'number',
-			-- TODO: either add a new indicator for this to the UI, or abandon the concept (maybe in favor of probability of shift per voice?)
-			id = 'head_' .. i .. '_offset_random',
-			name = 'head ' .. i .. ' offset random',
-			min = 0,
-			max = 31,
-			default = 0,
-			action = function(value)
-				head.randomness = value
-				dirty = true
-			end
-		}
-	end
-	
 	params:add{
 		type = 'number',
 		id = 'loop_length',
@@ -677,16 +591,10 @@ local function add_params()
 		min = 2,
 		max = 32,
 		default = 16,
+		-- TODO: decreasing loop length when some/all voices' offsets are near loop length causes... let's say unintuitive behavior
 		action = function(value)
 			shift_register:set_length(value)
-			for o = 1, 4 do
-				-- TODO: when loop is adjusted, adjust around currently selected output (??)
-				-- TODO: this nil comparison is only necessary because of the order of params; should they
-				-- be reordered anyway?
-				if output_source[o] ~= nil and output_source[o] < 5 then
-					update_output(o)
-				end
-			end
+			update_voices()
 			dirty = true
 			show_info()
 		end
@@ -694,55 +602,55 @@ local function add_params()
 	
 	params:add_separator()
 	
-	for out = 1, 4 do
+	for v = 1, n_voices do
+		local voice = voices[v]
 		params:add{
-			type = 'option',
-			id = 'output_' .. out .. '_source',
-			name = 'out ' .. out .. ' source',
-			options = output_source_names,
-			default = out,
+			type = 'control',
+			id = string.format('voice_%d_offset', v),
+			name = string.format('voice %d offset', v),
+			-- min + max are outside loop length range; param action wraps value to [0, loop length]
+			-- TODO: this may (will) behave weirdly under MIDI control. any way to improve?
+			-- TODO: values jump when sweeping offset across min/max with scatter > 0
+			controlspec = controlspec.new(-1, 98, 'lin', 1, params:get('loop_length') - v * 3),
 			action = function(value)
-				output_source[out] = value
-				update_active_heads()
-				update_output(out)
-			end
-		}
-		params:add{
-			type = 'option',
-			id = 'output_' .. out .. '_rate',
-			name = 'out ' .. out .. ' rate',
-			options = { 's+h', 'stream' },
-			default = 1,
-			action = function(value)
-				output_stream[out] = value == 2
+				local wrapped = value % params:get('loop_length')
+				if value ~= wrapped then
+					params:set(string.format('voice_%d_offset', v), wrapped)
+					return
+				end
+				voice.offset = value
+				update_voice(v)
+				dirty = true
 			end
 		}
 		params:add{
 			type = 'control',
-			id = 'output_' .. out .. '_slew',
-			name = 'out ' .. out .. ' slew',
-			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
+			id = string.format('voice_%d_scramble', v),
+			name = string.format('voice %d scramble', v),
+			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
-				crow.output[out].slew = value / 1000
+				voice.scramble = value
+				dirty = true
 			end
 		}
 		params:add{
-			type = 'number',
-			id = 'output_' .. out .. '_transpose',
-			name = 'out ' .. out .. ' transpose',
-			min = -36,
-			max = 36,
-			default = 0,
-			formatter = function(param)
-				local value = param:get()
-				if value > 0 then
-					return string.format('+%d st', value)
-				end
-				return string.format('%d st', value)
-			end,
+			type = 'control',
+			id = string.format('voice_%d_slew', v),
+			name = string.format('voice %d slew', v),
+			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
 			action = function(value)
-				output_transpose[out] = value
-				update_output(out)
+				crow.output[v].slew = value / 1000
+			end
+		}
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_transpose', v),
+			name = string.format('voice %d transpose', v),
+			controlspec = controlspec.new(-48, 48, 'lin', 1, 0, 'st'),
+			action = function(value)
+				voice.transpose = value
+				update_voice(v)
+				dirty = true
 				transposition_dirty = true
 			end
 		}
@@ -796,6 +704,12 @@ end
 
 function init()
 
+	-- initialize voices
+	for v = 1, n_voices do
+		voices[v] = ShiftRegisterVoice.new(0, shift_register)
+	end
+	top_voice = voices[top_voice_index]
+
 	VesselEngine.add_params('basic')
 	params:add_separator()
 	add_params()
@@ -841,6 +755,7 @@ function init()
 		dirty = true
 	end
 	info_metro.count = 1
+	-- TODO: why does info stay on screen indefinitely after load?
 	
 	engine.pitchAmpThreshold(util.dbamp(-80))
 	engine.pitchConfidenceThreshold(0.8)
@@ -907,18 +822,18 @@ end
 
 local function key_shift_register_insert(n)
 	if n == 2 then
-		shift_register:delete()
+		shift_register:delete(get_cursor_offset())
 	elseif n == 3 then
-		shift_register:insert()
+		shift_register:insert(get_cursor_offset())
 	end
 	params:set('loop_length', shift_register.length) -- keep param value up to date
 end
 
 local function key_move_cursor(n)
 	if n == 2 then
-		shift_register:move_cursor(-1)
+		cursor = (cursor + screen_note_center - 1) % n_screen_notes - screen_note_center
 	elseif n == 3 then
-		shift_register:move_cursor(1)
+		cursor = (cursor + screen_note_center + 1) % n_screen_notes - screen_note_center
 	end
 end
 
@@ -946,6 +861,8 @@ end
 
 local function params_multi_delta(param_format, selected, d)
 	-- note: this assumes number params with identical range!
+	local min = 0
+	local max = 0
 	local min_value = math.huge
 	local max_value = -math.huge
 	local selected_params = {}
@@ -953,7 +870,18 @@ local function params_multi_delta(param_format, selected, d)
 		if is_selected then
 			local param_name = string.format(param_format, n)
 			local param = params:lookup_param(param_name)
-			local value = param.value
+			local value = 0
+			if param.value ~= nil then
+				-- number param
+				value = param.value
+				min = param.min
+				max = param.max
+			else
+				-- control param
+				value = param:get()
+				min = param.controlspec.minval
+				max = param.controlspec.maxval
+			end
 			table.insert(selected_params, param)
 			min_value = math.min(min_value, value)
 			max_value = math.max(max_value, value)
@@ -966,9 +894,9 @@ local function params_multi_delta(param_format, selected, d)
 		return
 	end
 	if d > 0 then
-		d = math.min(d,	(selected_params[1].max - max_value))
+		d = math.min(d,	max - max_value)
 	elseif d < 0 then
-		d = math.max(d, (selected_params[1].min - min_value))
+		d = math.max(d, min - min_value)
 	end
 	for i, param in ipairs(selected_params) do
 		param:delta(d)
@@ -985,28 +913,27 @@ function enc(n, d)
 	elseif n == 2 then
 		if grid_mode == grid_mode_edit then
 			-- move cursor
-			shift_register:move_cursor(d)
+			cursor = (cursor + screen_note_center + d) % n_screen_notes - screen_note_center
 		else
 			-- move head(s)
-			params_multi_delta('head_%d_offset', selected_heads, -d)
+			params_multi_delta('voice_%d_offset', output_selector.selected, -d)
 		end
 	elseif n == 3 then
 		if grid_mode == grid_mode_edit then
 			-- change note at cursor
-			shift_register:write_cursor(shift_register:read_cursor() + d)
-			for out = 1, 4 do
-				if output_source[out] >= output_source_head_1 and output_source[out] <= output_source_head_4 then
-					if shift_register.read_heads[output_source[out]].offset == shift_register.cursor then
-						update_output(out)
-					end
+			local current_note = shift_register:read_loop_offset(get_cursor_offset())
+			shift_register:write_loop_offset(get_cursor_offset(), current_note + d)
+			for v = 1, n_voices do
+				if shift_register:get_loop_pos(voices[v]:get_offset(0)) == shift_register:get_loop_pos(voices[v]:get_offset(cursor)) then
+					update_voice(v)
 				end
 			end
 		elseif key_shift then
 			-- change head randomness
-			params_multi_delta('head_%d_offset_random', selected_heads, d)
+			params_multi_delta('voice_%d_scramble', output_selector.selected, d)
 		else
 			-- transpose head(s)
-			params_multi_delta('output_%d_transpose', output_selector.selected, d);
+			params_multi_delta('voice_%d_transpose', output_selector.selected, d);
 		end
 	end
 	dirty = true
@@ -1018,6 +945,78 @@ end
 
 function get_screen_note_y(note)
 	return 71 + keyboard.octave * scale.length - note
+end
+
+-- calculate coordinates for each visible note
+function calculate_voice_path(v)
+	local voice = voices[v]
+	local path = voice:get_path(-screen_note_center, n_screen_notes - screen_note_center)
+	screen_notes[v] = {}
+	for n = 1, n_screen_notes do
+		local note = {}
+		note.x = (n - 1) * screen_note_width
+		note.y = get_screen_note_y(scale:snap(path[n]))
+		screen_notes[v][n] = note
+	end
+end
+
+function draw_voice_path(v, level)
+	local voice = voices[v]
+
+	calculate_voice_path(v) -- TODO: don't do this every time, only when it changes
+
+	-- find the note at the shift register's write head
+	local head = screen_note_center - voice.offset + 1
+	local head_note = screen_notes[v][head]
+
+	screen.line_cap('square')
+
+	-- draw background/outline
+	screen.line_width(3)
+	screen.level(0)
+	for n = 1, n_screen_notes do
+		local note = screen_notes[v][n]
+		local x = note.x + 0.5
+		local y = note.y + 0.5
+		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line
+		-- move or connect from previous note
+		if n == 1 then
+			screen.move(x + 0.5, y + 0.5)
+		else
+			screen.line(x, y)
+		end
+		-- draw this note
+		screen.line(x + screen_note_width, y)
+	end
+	screen.stroke()
+
+	-- draw foreground/path
+	screen.line_width(1)
+	screen.level(level)
+	for n = 1, n_screen_notes do
+		local note = screen_notes[v][n]
+		local x = note.x + 0.5
+		local y = note.y + 0.5
+		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line; and when current z is low, draw current note as dots
+		-- move or connect from previous note
+		if n == 1 then
+			screen.move(x, y)
+		else
+			screen.line(x, y)
+		end
+		-- draw this note
+		screen.line(x + screen_note_width, y)
+	end
+	screen.stroke()
+
+	-- add gap for head, if it's visible on screen
+	-- TODO: draw for each loop
+	if head_note ~= nil then
+		screen.pixel(head_note.x + 3, head_note.y)
+		screen.level(0)
+		screen.fill()
+	end
+	screen.line_cap('butt')
 end
 
 function redraw()
@@ -1038,80 +1037,21 @@ function redraw()
 	screen.level(1)
 	screen.stroke()
 
-	-- build table of all visible notes for each output
-	local output_notes = {}
-	for o = 1, 4 do
-		-- TODO: how should non-SR sources be displayed? horizontal lines? nothing?
-		-- not an issue if you drop the concept of other sources
-		local offset = shift_register.read_heads[output_source[o]].offset
-		local transpose = params:get('output_' .. o .. '_transpose')
-		output_notes[o] = {}
-		for n = 1, n_screen_notes do
-			local note = {}
-			note.x = (n - 1) * screen_note_width + 0.5
-			note.pitch = shift_register:read_loop_offset(n - 1 - screen_note_center + offset)
-			note.y = get_screen_note_y(scale:snap(note.pitch + transpose))
-			if output_selector:is_selected(o) then
-				-- in transpose mode, blink selected output(s)
-				if grid_mode ~= grid_mode_transpose or blink_fast then
-					level = 15
-				end
-			else
-				note.level = 5
-			end
-			output_notes[o][n] = note
-		end
-	end
-
-	local function draw_snake(o)
-		local offset = shift_register.read_heads[output_source[o]].offset -- TODO
-		for n = 1, n_screen_notes do
-			local note = output_notes[o][n]
-			local x = note.x + 0.5
-			local y = note.y + 0.5
-			-- move or connect from previous note
-			if n == 1 then
-				screen.move(x, y)
-			else
-				screen.line(x, y)
-			end
-			-- draw this note
-			screen.line(x + screen_note_width, y)
-		end
-	end
-
-	-- draw snakes
-	for i, o in ipairs(output_draw_order) do
-		local offset = shift_register.read_heads[output_source[o]].offset -- TODO
-		local head = screen_note_center - offset + 1
-		local head_note = output_notes[o][head]
-		local level = output_selector:is_selected(o) and 3 + ((i - 1) * 4) or 2
-		-- draw body
-		screen.line_cap('square')
-		screen.line_width(3)
-		screen.level(0)
-		draw_snake(o)
-		screen.stroke()
-		screen.line_width(1)
-		screen.level(level)
-		draw_snake(o)
-		screen.stroke()
-		-- draw gap for head
-		screen.line_cap('butt')
-		screen.pixel(head_note.x + 3, head_note.y)
-		screen.level(0)
-		screen.fill()
+	-- draw paths
+	for i, v in ipairs(voice_draw_order) do
+		local level = output_selector:is_selected(v) and 3 + ((i - 1) * 4) or 2
+		draw_voice_path(v, level)
 	end
 
 	-- highlight current notes after drawing all snakes, lest some be covered by outlines
-	for i, o in ipairs(output_draw_order) do
-		local note = output_notes[o][screen_note_center + 1] -- TODO: is this actually the current note?
+	-- TODO: draw these based on voice.note_snapped in case that somehow ends up being different from what's shown on the screen??
+	-- (but it shouldn't, ever)
+	for i, v in ipairs(voice_draw_order) do
+		local note = screen_notes[v][screen_note_center + 1] -- TODO: is this actually the current note?
 		screen.pixel(note.x + 2, note.y)
 		screen.level(15)
 		screen.fill()
 	end
-
-	local top_output = output_draw_order[4]
 
 	local function draw_input(x, y, level)
 		screen.rect(x + 2, y - 2, 5, 5)
@@ -1126,9 +1066,11 @@ function redraw()
 	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
 	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
 	-- that value when a write occurs?
-	local input_offset = shift_register.read_heads[output_source[top_output]].offset -- TODO
-	local input_x = output_notes[top_output][screen_note_center + 1 - input_offset].x
-	local input_transpose = params:get('output_' .. top_output .. '_transpose')
+	local input_offset = top_voice.offset
+	-- TODO: if head is offscreen, this breaks
+	--[[
+	local input_x = screen_notes[top_voice_index][screen_note_center + 1 - input_offset].x
+	local input_transpose = params:get('voice_' .. top_voice_index .. '_transpose')
 	-- grid pitch
 	if input_keyboard.gate then
 		local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note() + input_transpose))
@@ -1139,14 +1081,13 @@ function redraw()
 		local audio_y = get_screen_note_y(scale:snap(pitch_in + input_transpose))
 		draw_input(input_x, audio_y)
 	end
+	--]]
 
 	-- draw cursor
 	-- TODO: consider just circling a corner
 	if grid_mode == grid_mode_edit then
-		local o = output_draw_order[4]
-		local offset = shift_register.read_heads[output_source[o]].offset
-		-- TODO: let the cursor appear anywhere on the screen (why do we constrain it so much in the shift reg class?)
-		local note = output_notes[o][(screen_note_center + shift_register.cursor - offset) % n_screen_notes + 1]
+		local offset = top_voice.offset
+		local note = screen_notes[top_voice_index][(screen_note_center + cursor - 1 - offset) % n_screen_notes + 1]
 		local x = note.x
 		local y1 = note.y - 5
 		local y2 = note.y + 5
@@ -1193,13 +1134,22 @@ function redraw()
 		screen.level(4)
 		screen.stroke()
 
-		screen.move(0, 7)
 		screen.level(15)
+
+		screen.move(0, 7)
 		screen.text(string.format('P: %d%%', util.round(params:get('write_probability') - 1)))
 
 		screen.move(0, 16)
-		screen.level(15)
 		screen.text(string.format('L: %d', params:get('loop_length')))
+
+		screen.move(0, 25)
+		screen.text(string.format('O: %d', params:get('voice_' .. top_voice_index .. '_offset')))
+
+		screen.move(0, 34)
+		screen.text(string.format('T: %d', params:get('voice_' .. top_voice_index .. '_transpose')))
+
+		screen.move(0, 43)
+		screen.text(string.format('S: %.1f', params:get('voice_' .. top_voice_index .. '_scramble')))
 	end
 
 	-- DEBUG: draw minibuffer, loop region, head
