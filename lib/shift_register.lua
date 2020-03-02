@@ -27,13 +27,13 @@ function ShiftRegister:get_loop_pos(offset)
 end
 
 function ShiftRegister:shift(delta)
-	-- TODO: wouldn't mind understanding better _why_ this works the way it does
-	if delta > 0 then
-		self:write_buffer_offset(0, self:read_buffer_offset(-self.length), true)
-	end
 	self.head = self:get_buffer_pos(delta)
-	if delta < 0 then
-		self:write_buffer_offset(-self.length, self:read_buffer_offset(0), true)
+	if delta > 0 then
+		-- if shifting forward, copy the value from before the start of the loop to the end
+		self:write_buffer_offset(0, self:read_buffer_offset(-self.length), true)
+	elseif delta < 0 then
+		-- if shifting backward, copy the value from after the end of the loop to the start
+		self:write_buffer_offset(-self.length + 1, self:read_buffer_offset(1), true)
 	end
 end
 

@@ -1163,7 +1163,7 @@ function redraw()
 	screen.line_rel(shift_register.buffer_size, 0)
 	screen.level(1)
 	screen.stroke()
-	for offset = shift_register.start_offset, shift_register.end_offset do
+	for offset = -shift_register.length, 0 do
 		screen.pixel(shift_register:get_loop_pos(offset) - 1, 0)
 		if grid_mode == grid_mode_edit and offset == shift_register.cursor then
 			screen.level(blink_fast and 15 or 7)
@@ -1174,7 +1174,7 @@ function redraw()
 		end
 		screen.fill()
 	end
-	]]
+	--]]
 
 	screen.update()
 end
