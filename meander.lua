@@ -593,7 +593,7 @@ local function add_params()
 		default = 16,
 		-- TODO: decreasing loop length when some/all voices' offsets are near loop length causes... let's say unintuitive behavior
 		action = function(value)
-			shift_register:set_length(value)
+			shift_register.length = value
 			update_voices()
 			dirty = true
 			show_info()
@@ -609,8 +609,9 @@ local function add_params()
 			id = string.format('voice_%d_offset', v),
 			name = string.format('voice %d offset', v),
 			-- min + max are outside loop length range; param action wraps value to [0, loop length]
+			-- total range is 100 to avoid rounding oddness caused by params:delta()
 			-- TODO: this may (will) behave weirdly under MIDI control. any way to improve?
-			-- TODO: values jump when sweeping offset across min/max with scatter > 0
+			-- TODO: values jump when sweeping offset across min/max with scramble > 0
 			controlspec = controlspec.new(-1, 98, 'lin', 1, params:get('loop_length') - v * 3),
 			action = function(value)
 				local wrapped = value % params:get('loop_length')
@@ -823,8 +824,10 @@ end
 local function key_shift_register_insert(n)
 	if n == 2 then
 		shift_register:delete(get_cursor_offset())
+		-- TODO: move cursor: -1 if in central loop, more or less in other loops
 	elseif n == 3 then
 		shift_register:insert(get_cursor_offset())
+		-- TODO: move cursor: +1 if in central loop, more or less in other loops
 	end
 	params:set('loop_length', shift_register.length) -- keep param value up to date
 end
@@ -1086,8 +1089,7 @@ function redraw()
 	-- draw cursor
 	-- TODO: consider just circling a corner
 	if grid_mode == grid_mode_edit then
-		local offset = top_voice.offset
-		local note = screen_notes[top_voice_index][(screen_note_center + cursor - 1 - offset) % n_screen_notes + 1]
+		local note = screen_notes[top_voice_index][(screen_note_center + cursor - 1) % n_screen_notes + 1]
 		local x = note.x
 		local y1 = note.y - 5
 		local y2 = note.y + 5
