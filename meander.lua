@@ -1072,22 +1072,23 @@ function redraw()
 	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
 	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
 	-- that value when a write occurs?
-	local input_offset = top_voice.offset
-	-- TODO: if head is offscreen, this breaks
-	--[[
-	local input_x = screen_notes[top_voice_index][screen_note_center + 1 - input_offset].x
 	local input_transpose = params:get('voice_' .. top_voice_index .. '_transpose')
-	-- grid pitch
-	if input_keyboard.gate then
-		local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note() + input_transpose))
-		draw_input(input_x, grid_y)
+	for n = 1, n_screen_notes do
+		local note = screen_notes[top_voice_index][n]
+		if note.offset == 0 then
+			local x = note.x
+			-- grid pitch
+			if input_keyboard.gate then
+				local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note() + input_transpose))
+				draw_input(x, grid_y)
+			end
+			-- pitch detector pitch
+			if pitch_in_detected then
+				local audio_y = get_screen_note_y(scale:snap(pitch_in + input_transpose))
+				draw_input(x, audio_y)
+			end
+		end
 	end
-	-- pitch detector pitch
-	if pitch_in_detected then
-		local audio_y = get_screen_note_y(scale:snap(pitch_in + input_transpose))
-		draw_input(input_x, audio_y)
-	end
-	--]]
 
 	-- draw cursor
 	-- TODO: consider just circling a corner
