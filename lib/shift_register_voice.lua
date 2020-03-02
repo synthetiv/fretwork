@@ -1,36 +1,4 @@
-local RandomQueue = {}
-RandomQueue.__index = RandomQueue
-
 local random_queue_size = 128
-
-RandomQueue.new = function()
-	queue = setmetatable({}, RandomQueue)
-	queue.index = 1
-	queue.values = {}
-	for i = 1, random_queue_size do
-		queue:set(i)
-	end
-	return queue
-end
-
-function RandomQueue:get_index(i)
-	local index = (self.index + i - 1) % random_queue_size + 1
-	return index
-end
-
-function RandomQueue:set(i)
-	self.values[self:get_index(i)] = math.random() * 2 - 1
-end
-
-function RandomQueue:get(i)
-	return self.values[self:get_index(i)]
-end
-
-function RandomQueue:next()
-	self.index = self.index + 1
-	self:set(random_queue_size / 2) -- re-randomize an offscreen value
-	return self:get(0)
-end
 
 local ShiftRegisterVoice = {}
 ShiftRegisterVoice.__index = ShiftRegisterVoice
@@ -43,18 +11,41 @@ ShiftRegisterVoice.new = function(offset, shift_register)
 	voice.offset = offset
 	voice.shift_register = shift_register
 	voice.scramble = 0
-	voice.random_queue = RandomQueue.new()
+	voice.random_index = 1
+	voice.random_queue = {}
+	for i = 1, random_queue_size do
+		voice:set_random(i)
+	end
 	return voice
 end
 
+function ShiftRegisterVoice:get_random_index(i)
+	local index = (self.offset + self.random_index + i - 1) % random_queue_size + 1
+	return index
+end
+
+function ShiftRegisterVoice:set_random(i)
+	self.random_queue[self:get_random_index(i)] = math.random() * 2 - 1
+end
+
+function ShiftRegisterVoice:get_random(i)
+	return self.random_queue[self:get_random_index(i)]
+end
+
+function ShiftRegisterVoice:next_random()
+	self.random_index = self.random_index + 1
+	self:set_random(self.offset + random_queue_size / 2)
+	return self:get(0)
+end
+
 function ShiftRegisterVoice:clock()
-	local random = self.random_queue:next()
+	local random = self:next_random()
 	self.note = self:get(0)
 end
 
 function ShiftRegisterVoice:get_offset(t)
-	local random = self.random_queue:get(t)
-	return t + util.round(random * self.scramble)
+	local random = self:get_random(t)
+	return t + self.offset + util.round(random * self.scramble)
 end
 
 function ShiftRegisterVoice:get(t)
