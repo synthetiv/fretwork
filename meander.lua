@@ -84,7 +84,7 @@ local grid_mode_transpose = 3
 local grid_mode_edit = 4
 local grid_mode = grid_mode_play
 
-local output_selector = MultiSelect.new(5, 3, 1, 4)
+local voice_selector = MultiSelect.new(5, 3, 1, 4)
 
 local g = grid.connect()
 
@@ -140,8 +140,8 @@ local function recall_transposition()
 	if saved_transpositions[t] == nil then
 		return
 	end
-	for o = 1, 4 do
-		params:set(string.format('voice_%d_transpose', o), saved_transpositions[t][o])
+	for v = 1, n_voices do
+		params:set(string.format('voice_%d_transpose', v), saved_transpositions[t][v])
 	end
 	transposition_dirty = false
 end
@@ -199,15 +199,15 @@ local function rewind()
 	dirty = true
 end
 
-local function update_active_heads(last_output)
-	if last_output then
+local function update_active_heads(last_voice)
+	if last_voice then
 		local new_draw_order = {}
 		for i, o in ipairs(voice_draw_order) do
-			if o ~= last_output then
+			if o ~= last_voice then
 				table.insert(new_draw_order, o)
 			end
 		end
-		table.insert(new_draw_order, last_output)
+		table.insert(new_draw_order, last_voice)
 		top_voice_index = new_draw_order[n_voices]
 		top_voice = voices[top_voice_index]
 		voice_draw_order = new_draw_order
@@ -238,8 +238,8 @@ local function grid_redraw()
 	g:led(1, 7, grid_shift and 15 or 2)
 	g:led(1, 8, grid_ctrl and 15 or 2)
 
-	-- output buttons
-	output_selector:draw(g, 10, 5)
+	-- voice buttons
+	voice_selector:draw(g, 10, 5)
 
 	-- keyboard octaves
 	g:led(3, 8, 2 - math.min(keyboard.octave, 0))
@@ -262,11 +262,11 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	if self.scale:contains(n) then
 		level = 4
 	end
-	-- highlight output notes
+	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
 		if n == voice.note_snapped then
-			if output_selector:is_selected(v) then
+			if voice_selector:is_selected(v) then
 				level = 10
 			else
 				level = math.max(level, 5)
@@ -290,10 +290,10 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	if self.scale:contains(n) then
 		level = 5
 	end
-	-- highlight output notes
+	-- highlight voice notes
 	for v = 1, n_voices do
 		if n == voices[v].note_snapped then
-			if output_selector:is_selected(v) then
+			if voice_selector:is_selected(v) then
 				level = 10
 			else
 				level = math.max(level, 5)
@@ -312,7 +312,7 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	-- highlight transposition settings
 	for v = 1, n_voices do
 		if n - 36 == voices[v].transpose then
-			if output_selector:is_selected(i) then
+			if voice_selector:is_selected(i) then
 				level = 10
 			elseif level < 5 then
 				level = 5
@@ -328,7 +328,7 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 	if self.scale:contains(n) then
 		level = 3
 	end
-	-- highlight un-transposed output notes
+	-- highlight un-transposed voice notes
 	for v = 1, n_voices do
 		-- TODO: there's gotta be a better way to do this
 		--[[
@@ -390,9 +390,9 @@ local function grid_key(x, y, z)
 			keyboard:note(x, y, z)
 			if keyboard.gate then
 				local transpose = math.min(72, math.max(0, keyboard:get_last_note())) - 36
-				for o = 1, 4 do
-					if output_selector:is_selected(o) then
-						params:set('voice_' .. o .. '_transpose', transpose)
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:set(string.format('voice_%d_transpose', v), transpose)
 					end
 				end
 			end
@@ -401,19 +401,20 @@ local function grid_key(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note()
 				shift_register:write_loop_offset(get_cursor_offset(), note)
-				-- update outputs immediately, if appropriate
+				-- update voices immediately, if appropriate
 				for v = 1, n_voices do
+					local voice = voices[v]
 					if shift_register:get_loop_pos(voice:get_offset(0)) == shift_register:get_loop_pos(voice:get_offset(cursor)) then
 						update_voice(v)
 					end
 				end
 			end
 		end
-	elseif output_selector:should_handle_key(x, y) then
+	elseif voice_selector:should_handle_key(x, y) then
 		-- TODO: what should these do in modes other than transpose?
-		local output = output_selector:get_key_option(x, y)
-		output_selector:key(x, y, z)
-		update_active_heads(z == 1 and output)
+		local voice = voice_selector:get_key_option(x, y)
+		voice_selector:key(x, y, z)
+		update_active_heads(z == 1 and voice)
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
@@ -722,7 +723,7 @@ function init()
 	-- initialize grid controls
 	grid_mode = grid_mode_play
 	keyboard.get_key_level = key_level_callbacks[grid_mode]
-	output_selector:reset(true)
+	voice_selector:reset(true)
 	update_active_heads()
 
 	redraw_metro = metro.init()
@@ -779,8 +780,8 @@ function init()
 
 	for t = 1, 16 do
 		saved_transpositions[t] = {}
-		for o = 1, 4 do
-			saved_transpositions[t][o] = 0
+		for v = 1, n_voices do
+			saved_transpositions[t][v] = 0
 		end
 	end
 	transposition_selector.selected = 1
@@ -803,7 +804,7 @@ function init()
 	recall_transposition()
 	recall_loop()
 
-	-- TODO: since we're no longer calling params:bang() at the bottom, outputs need to be updated
+	-- TODO: since we're no longer calling params:bang() at the bottom, voices need to be updated
 	-- (...should I just call params:bang() again?)
 	
 	memory_selector.selected = memory_loop
@@ -920,7 +921,7 @@ function enc(n, d)
 			cursor = (cursor + screen_note_center + d) % n_screen_notes - screen_note_center
 		else
 			-- move head(s)
-			params_multi_delta('voice_%d_offset', output_selector.selected, -d)
+			params_multi_delta('voice_%d_offset', voice_selector.selected, -d)
 		end
 	elseif n == 3 then
 		if grid_mode == grid_mode_edit then
@@ -934,10 +935,10 @@ function enc(n, d)
 			end
 		elseif key_shift then
 			-- change head randomness
-			params_multi_delta('voice_%d_scramble', output_selector.selected, d)
+			params_multi_delta('voice_%d_scramble', voice_selector.selected, d)
 		else
 			-- transpose head(s)
-			params_multi_delta('voice_%d_transpose', output_selector.selected, d);
+			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
 		end
 	end
 	dirty = true
@@ -1035,7 +1036,7 @@ function redraw()
 
 	-- draw vertical output/head indicator
 	-- TODO: I think this can go closer to the right edge of the screen, unless you start featuring retrograde motion more
-	-- TODO: set heads/outputs to retrograde instead of allowing backwards clock ticks
+	-- TODO: set voices to retrograde instead of allowing backwards clock ticks
 	-- TODO: inversion too
 	-- TODO: then you get into different loop lengths...
 	local output_x = get_screen_offset_x(0) + 3
@@ -1046,7 +1047,7 @@ function redraw()
 
 	-- draw paths
 	for i, v in ipairs(voice_draw_order) do
-		local level = output_selector:is_selected(v) and 3 + ((i - 1) * 4) or 2
+		local level = voice_selector:is_selected(v) and 3 + ((i - 1) * 4) or 2
 		draw_voice_path(v, level)
 	end
 
