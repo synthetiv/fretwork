@@ -148,8 +148,8 @@ end
 
 local function save_transposition()
 	local transposition = {}
-	for o = 1, 4 do
-		transposition[o] = params:get(string.format('voice_%d_transpose', o))
+	for v = 1, n_voices do
+		transposition[v] = voices[v].transpose
 	end
 	saved_transpositions[transposition_selector.selected] = transposition
 	transposition_dirty = false
@@ -310,8 +310,8 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 		level = 2
 	end
 	-- highlight transposition settings
-	for i = 1, 4 do
-		if n - 36 == params:get('voice_' .. i .. '_transpose') then
+	for v = 1, n_voices do
+		if n - 36 == voices[v].transpose then
 			if output_selector:is_selected(i) then
 				level = 10
 			elseif level < 5 then
@@ -604,6 +604,7 @@ local function add_params()
 	
 	for v = 1, n_voices do
 		local voice = voices[v]
+		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
 			id = string.format('voice_%d_offset', v),
@@ -612,9 +613,9 @@ local function add_params()
 			-- total range is 100 to avoid rounding oddness caused by params:delta()
 			-- TODO: this may (will) behave weirdly under MIDI control. any way to improve?
 			-- TODO: values jump when sweeping offset across min/max with scramble > 0
-			controlspec = controlspec.new(-1, 98, 'lin', 1, params:get('loop_length') - v * 3),
+			controlspec = controlspec.new(-1, 98, 'lin', 1, shift_register.length - v * 3),
 			action = function(value)
-				local wrapped = value % params:get('loop_length')
+				local wrapped = value % shift_register.length
 				if value ~= wrapped then
 					params:set(string.format('voice_%d_offset', v), wrapped)
 					return
@@ -1072,7 +1073,7 @@ function redraw()
 	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
 	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
 	-- that value when a write occurs?
-	local input_transpose = params:get('voice_' .. top_voice_index .. '_transpose')
+	local input_transpose = top_voice.transpose
 	for n = 1, n_screen_notes do
 		local note = screen_notes[top_voice_index][n]
 		if note.offset == 0 then
@@ -1146,16 +1147,16 @@ function redraw()
 		screen.text(string.format('P: %d%%', util.round(params:get('write_probability') - 1)))
 
 		screen.move(0, 16)
-		screen.text(string.format('L: %d', params:get('loop_length')))
+		screen.text(string.format('L: %d', shift_register.length))
 
 		screen.move(0, 25)
-		screen.text(string.format('O: %d', params:get('voice_' .. top_voice_index .. '_offset')))
+		screen.text(string.format('O: %d', top_voice.offset))
 
 		screen.move(0, 34)
-		screen.text(string.format('T: %d', params:get('voice_' .. top_voice_index .. '_transpose')))
+		screen.text(string.format('T: %d', top_voice.transpose))
 
 		screen.move(0, 43)
-		screen.text(string.format('S: %.1f', params:get('voice_' .. top_voice_index .. '_scramble')))
+		screen.text(string.format('S: %.1f', top_voice.scramble))
 	end
 
 	-- DEBUG: draw minibuffer, loop region, head
