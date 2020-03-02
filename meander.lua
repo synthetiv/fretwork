@@ -958,7 +958,8 @@ function calculate_voice_path(v)
 	for n = 1, n_screen_notes do
 		local note = {}
 		note.x = (n - 1) * screen_note_width
-		note.y = get_screen_note_y(scale:snap(path[n]))
+		note.y = get_screen_note_y(scale:snap(path[n].value))
+		note.offset = path[n].offset
 		screen_notes[v][n] = note
 	end
 end
@@ -970,7 +971,6 @@ function draw_voice_path(v, level)
 
 	-- find the note at the shift register's write head
 	local head = screen_note_center - voice.offset + 1
-	local head_note = screen_notes[v][head]
 
 	screen.line_cap('square')
 
@@ -1012,13 +1012,16 @@ function draw_voice_path(v, level)
 	end
 	screen.stroke()
 
-	-- add gap for head, if it's visible on screen
-	-- TODO: draw for each loop
-	if head_note ~= nil then
-		screen.pixel(head_note.x + 3, head_note.y)
-		screen.level(0)
-		screen.fill()
+	-- add gap(s) for head
+	for n = 1, n_screen_notes do
+		local note = screen_notes[v][n]
+		if note.offset == 0 then
+			screen.pixel(note.x + 3, note.y)
+			screen.level(0)
+			screen.fill()
+		end
 	end
+
 	screen.line_cap('butt')
 end
 

@@ -56,8 +56,10 @@ function ShiftRegisterVoice:get_path(start_offset, end_offset)
 	local path = {}
 	local length = end_offset - start_offset
 	for n = 1, length do
-		local offset = self.offset + start_offset + n
-		path[n] = self:get(offset)
+		path[n] = {
+			offset = self.shift_register:clamp_loop_offset(self:get_offset(start_offset + n)),
+			value = self:get(start_offset + n)
+		}
 	end
 	return path
 end
