@@ -26,20 +26,20 @@ local saved_masks = {} -- TODO: save with params... somehow
 local mask_dirty = false
 local mask_selector = Select.new(1, 3, 4, 4)
 
-local transposition_dirty = false
-local saved_transpositions = {}
-local transposition_selector = Select.new(1, 3, 4, 4)
+local config_dirty = false
+local saved_configs = {}
+local config_selector = Select.new(1, 3, 4, 4)
 
 local saved_loops = {}
 local loop_selector = Select.new(1, 3, 4, 4)
 
 local memory_selector = Select.new(2, 2, 3, 1)
 local memory_mask = 1
-local memory_transposition = 2
+local memory_config = 2
 local memory_loop = 3
 
--- TODO: save/recall offsets too... if they could be set by grid then they could be stored with transpositions
--- TODO: save/recall mask, loop, and transposition all at once
+-- TODO: save/recall offsets too... if they could be set by grid then they could be stored with configs
+-- TODO: save/recall mask, loop, and config all at once
 
 local shift_register = ShiftRegister.new(32)
 
@@ -135,24 +135,33 @@ local function save_loop()
 	shift_register.dirty = false
 end
 
-local function recall_transposition()
-	local t = transposition_selector.selected
-	if saved_transpositions[t] == nil then
+local function recall_config()
+	local c = config_selector.selected
+	if saved_configs[c] == nil then
 		return
 	end
 	for v = 1, n_voices do
-		params:set(string.format('voice_%d_transpose', v), saved_transpositions[t][v])
+		local config = saved_configs[c][v]
+		params:set(string.format('voice_%d_transpose', v), config.transpose)
+		params:set(string.format('voice_%d_scramble', v), config.scramble)
+		voices[v].pos = shift_register.head + config.offset
+		params:set(string.format('voice_%d_direction', v), config.direction == -1 and 2 or 1)
 	end
-	transposition_dirty = false
+	config_dirty = false
 end
 
-local function save_transposition()
-	local transposition = {}
+local function save_config()
+	local config = {}
 	for v = 1, n_voices do
-		transposition[v] = voices[v].transpose
+		config[v] = {
+			offset = voices[v].pos - shift_register.head,
+			transpose = voices[v].transpose,
+			scramble = voices[v].scramble,
+			direction = voices[v].direction
+		}
 	end
-	saved_transpositions[transposition_selector.selected] = transposition
-	transposition_dirty = false
+	saved_configs[config_selector.selected] = config
+	config_dirty = false
 end
 
 local function update_voice(v)
@@ -228,8 +237,8 @@ local function grid_redraw()
 	-- recall buttons
 	if memory_selector:is_selected(memory_mask) then
 		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
-	elseif memory_selector:is_selected(memory_transposition) then
-		transposition_selector:draw(g, transposition_dirty and blink_slow and 8 or 7, 2)
+	elseif memory_selector:is_selected(memory_config) then
+		config_selector:draw(g, config_dirty and blink_slow and 8 or 7, 2)
 	else
 		loop_selector:draw(g, shift_register.dirty and blink_slow and 8 or 7, 2)
 	end
@@ -312,7 +321,7 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	-- highlight transposition settings
 	for v = 1, n_voices do
 		if n - 36 == voices[v].transpose then
-			if voice_selector:is_selected(i) then
+			if voice_selector:is_selected(v) then
 				level = 10
 			elseif level < 5 then
 				level = 5
@@ -377,7 +386,7 @@ local function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_transpose then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local transpose = math.min(72, math.max(0, keyboard:get_last_note() - top-voice.transpose)) - 36
+				local transpose = math.min(72, math.max(0, keyboard:get_last_note())) - 36
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						params:set(string.format('voice_%d_transpose', v), transpose)
@@ -438,12 +447,12 @@ local function grid_key(x, y, z)
 				update_voices()
 			end
 		end
-	elseif memory_selector:is_selected(memory_transposition) and transposition_selector:should_handle_key(x, y) then
-		transposition_selector:key(x, y, z)
+	elseif memory_selector:is_selected(memory_config) and config_selector:should_handle_key(x, y) then
+		config_selector:key(x, y, z)
 		if grid_shift then
-			save_transposition()
+			save_config()
 		else
-			recall_transposition()
+			recall_config()
 		end
 	elseif memory_selector:is_selected(memory_loop) and loop_selector:should_handle_key(x, y) then
 		loop_selector:key(x, y, z)
@@ -594,12 +603,39 @@ local function add_params()
 		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
+			id = string.format('voice_%d_transpose', v),
+			name = string.format('voice %d transpose', v),
+			controlspec = controlspec.new(-48, 48, 'lin', 1, 0, 'st'),
+			action = function(value)
+				voice.transpose = value
+				update_voice(v)
+				dirty = true
+				config_dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
 			id = string.format('voice_%d_scramble', v),
 			name = string.format('voice %d scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
 				voice.scramble = value
 				dirty = true
+				config_dirty = true
+			end
+		}
+		params:add{
+			type = 'option',
+			id = string.format('voice_%d_direction', v),
+			name = string.format('voice %d direction', v),
+			options = {
+				'forward',
+				'retrograde'
+			},
+			action = function(value)
+				voice.direction = value == 2 and -1 or 1
+				dirty = true
+				config_dirty = true
 			end
 		}
 		params:add{
@@ -609,18 +645,6 @@ local function add_params()
 			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
 			action = function(value)
 				crow.output[v].slew = value / 1000
-			end
-		}
-		params:add{
-			type = 'control',
-			id = string.format('voice_%d_transpose', v),
-			name = string.format('voice %d transpose', v),
-			controlspec = controlspec.new(-48, 48, 'lin', 1, 0, 'st'),
-			action = function(value)
-				voice.transpose = value
-				update_voice(v)
-				dirty = true
-				transposition_dirty = true
 			end
 		}
 	end
@@ -644,8 +668,24 @@ local function add_params()
 						mask_dirty = true
 					end
 					if data.transpositions ~= nil then
-						saved_transpositions = data.transpositions
-						transposition_dirty = true
+						saved_configs = {}
+						for c, transposition in ipairs(data.transpositions) do
+							local config = {}
+							for v = 1, n_voices do
+								config[v] = {
+									offset = 0,
+									transpose = transposition[v],
+									scramble = 0,
+									direction = 1
+								}
+							end
+							saved_configs[c] = config
+						end
+						config_dirty = true
+					end
+					if data.configs ~= nil then
+						saved_configs = data.configs
+						config_dirty = true
 					end
 					if data.loops ~= nil then
 						saved_loops = data.loops
@@ -664,7 +704,7 @@ local function add_params()
 			local data_file = norns.state.data .. 'memory.lua'
 			local data = {}
 			data.masks = saved_masks
-			data.transpositions = saved_transpositions
+			data.configs = saved_configs
 			data.loops = saved_loops
 			tab.save(data, data_file)
 		end
@@ -744,13 +784,13 @@ function init()
 	save_mask()
 
 	for t = 1, 16 do
-		saved_transpositions[t] = {}
+		saved_configs[t] = {}
 		for v = 1, n_voices do
-			saved_transpositions[t][v] = 0
+			saved_configs[t][v] = 0
 		end
 	end
-	transposition_selector.selected = 1
-	save_transposition() -- read & save defaults from params
+	config_selector.selected = 1
+	save_config() -- read & save defaults from params
 
 	for l = 1, 16 do
 		saved_loops[l] = {}
@@ -766,7 +806,7 @@ function init()
 
 	params:set('restore_memory')
 	recall_mask()
-	recall_transposition()
+	recall_config()
 	recall_loop()
 
 	memory_selector.selected = memory_loop
@@ -891,6 +931,7 @@ function enc(n, d)
 					update_voice(v)
 				end
 			end
+			config_dirty = true
 			dirty = true
 		end
 	elseif n == 3 then
@@ -988,7 +1029,11 @@ function draw_voice_path(v, level)
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		if note.offset == 0 then
-			screen.pixel(note.x + 3, note.y)
+			if voices[v].direction == 1 then
+				screen.pixel(note.x + 3, note.y)
+			else
+				screen.pixel(note.x + 1, note.y)
+			end
 			screen.level(0)
 			screen.fill()
 		end
@@ -1032,10 +1077,11 @@ function redraw()
 	end
 
 	local function draw_input(x, y, level)
-		screen.rect(x + 2, y - 2, 5, 5)
+		local offset = top_voice.direction == 1 and 2 or -2
+		screen.rect(x + offset, y - 2, 5, 5)
 		screen.level(0)
 		screen.fill()
-		screen.rect(x + 3.5, y - 0.5, 2, 2)
+		screen.rect(x + offset + 1.5, y - 0.5, 2, 2)
 		screen.level(15)
 		screen.stroke()
 	end
@@ -1044,6 +1090,7 @@ function redraw()
 	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
 	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
 	-- that value when a write occurs?
+	-- TODO: when top voice is retrograde, this looks odd. not sure how to make it easier to follow.
 	for n = 1, n_screen_notes do
 		local note = screen_notes[top_voice_index][n]
 		if note.offset == 0 then
