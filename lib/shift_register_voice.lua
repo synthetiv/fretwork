@@ -38,12 +38,16 @@ function ShiftRegisterVoice:next_random()
 	return self:get(0)
 end
 
+function ShiftRegisterVoice:update_note()
+	self.note = self:get(0)
+end
+
 function ShiftRegisterVoice:shift(d)
 	self.random_index = (self.random_index + d - 1) % random_queue_size + 1
 	self.pos = (self.pos + d - 1) % self.shift_register.length + 1
 	-- TODO: re-randomize a random value that isn't visible on screen
 	-- (right now each voice just has a set of fixed random values, which is better than nothing but not ideal)
-	self.note = self:get(0)
+	self:update_note()
 end
 
 function ShiftRegisterVoice:get_pos(t)

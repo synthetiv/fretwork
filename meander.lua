@@ -157,6 +157,7 @@ end
 
 local function update_voice(v)
 	local voice = voices[v]
+	voice:update_note()
 	voice.note_snapped = scale:snap(voice.note)
 	crow.output[v].volts = voice.note_snapped / 12 - 1
 end
@@ -768,17 +769,13 @@ function init()
 	recall_transposition()
 	recall_loop()
 
-	-- TODO: since we're no longer calling params:bang() at the bottom, voices need to be updated
-	-- (...should I just call params:bang() again?)
-	for v = 1, n_voices do
-		update_voice(v)
-	end
-	
 	memory_selector.selected = memory_loop
 
 	pitch_poll:start()
 	g.key = grid_key
 	
+	update_voices()
+
 	dirty = true
 end
 
