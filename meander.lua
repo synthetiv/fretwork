@@ -170,7 +170,7 @@ end
 local function sample_pitch()
 	shift_register:shift(1)
 	for v = 1, n_voices do
-		voices[v]:clock()
+		voices[v]:shift(1)
 	end
 	if params:get('write_probability') > math.random(1, 100) then
 		if source == source_crow then
@@ -193,7 +193,7 @@ local function rewind()
 	shift_register:shift(-1)
 	-- TODO: fix this, MAYBE by disabling rewind
 	for v = 1, n_voices do
-		voices[v]:clock()
+		voices[v]:shift(-1)
 	end
 	update_voices()
 	dirty = true
@@ -251,7 +251,7 @@ local function grid_redraw()
 end
 
 local function get_cursor_offset()
-	return top_voice:get_offset(cursor)
+	return top_voice:get_pos(cursor)
 end
 
 local key_level_callbacks = {}
@@ -608,26 +608,6 @@ local function add_params()
 		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
-			id = string.format('voice_%d_offset', v),
-			name = string.format('voice %d offset', v),
-			-- min + max are outside loop length range; param action wraps value to [0, loop length]
-			-- total range is 100 to avoid rounding oddness caused by params:delta()
-			-- TODO: this may (will) behave weirdly under MIDI control. any way to improve?
-			-- TODO: values jump when sweeping offset across min/max with scramble > 0
-			controlspec = controlspec.new(-1, 98, 'lin', 1, shift_register.length - v * 3),
-			action = function(value)
-				local wrapped = value % shift_register.length
-				if value ~= wrapped then
-					params:set(string.format('voice_%d_offset', v), wrapped)
-					return
-				end
-				voice.offset = value
-				update_voice(v)
-				dirty = true
-			end
-		}
-		params:add{
-			type = 'control',
 			id = string.format('voice_%d_scramble', v),
 			name = string.format('voice %d scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
@@ -709,7 +689,7 @@ function init()
 
 	-- initialize voices
 	for v = 1, n_voices do
-		voices[v] = ShiftRegisterVoice.new(0, shift_register)
+		voices[v] = ShiftRegisterVoice.new(v * -3, shift_register)
 	end
 	top_voice = voices[top_voice_index]
 
@@ -920,8 +900,14 @@ function enc(n, d)
 			-- move cursor
 			cursor = (cursor + screen_note_center + d) % n_screen_notes - screen_note_center
 		else
-			-- move head(s)
-			params_multi_delta('voice_%d_offset', voice_selector.selected, -d)
+			-- shift voices
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					voices[v]:shift(-d)
+					update_voice(v)
+				end
+			end
+			dirty = true
 		end
 	elseif n == 3 then
 		if grid_mode == grid_mode_edit then
@@ -972,7 +958,7 @@ function draw_voice_path(v, level)
 	calculate_voice_path(v) -- TODO: don't do this every time, only when it changes
 
 	-- find the note at the shift register's write head
-	local head = screen_note_center - voice.offset + 1
+	local head = screen_note_center - voice.pos + 1
 
 	screen.line_cap('square')
 
@@ -1151,7 +1137,7 @@ function redraw()
 		screen.text(string.format('L: %d', shift_register.length))
 
 		screen.move(0, 25)
-		screen.text(string.format('O: %d', top_voice.offset))
+		screen.text(string.format('O: %d', top_voice.pos))
 
 		screen.move(0, 34)
 		screen.text(string.format('T: %d', top_voice.transpose))
