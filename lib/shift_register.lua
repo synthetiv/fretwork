@@ -31,7 +31,11 @@ function ShiftRegister:clamp_loop_offset(offset)
 	return (offset - 1) % self.length - self.length + 1
 end
 
-function ShiftRegister:get_loop_pos(offset)
+function ShiftRegister:get_loop_pos(pos)
+	return self:get_buffer_pos(self:clamp_loop_pos(pos))
+end
+
+function ShiftRegister:get_loop_offset_pos(offset)
 	return self:get_buffer_offset_pos(self:clamp_loop_offset(offset))
 end
 
@@ -51,11 +55,11 @@ function ShiftRegister:read_absolute(pos)
 end
 
 function ShiftRegister:read_loop(pos)
-	return self:read_absolute(self:get_buffer_pos(self:clamp_loop_pos(pos)))
+	return self:read_absolute(self:get_loop_pos(pos))
 end
 
 function ShiftRegister:read_loop_offset(offset)
-	return self:read_absolute(self:get_loop_pos(offset))
+	return self:read_absolute(self:get_loop_offset_pos(offset))
 end
 
 function ShiftRegister:read_buffer_offset(offset)
@@ -74,8 +78,12 @@ function ShiftRegister:write_absolute(pos, value, clean)
 	end
 end
 
+function ShiftRegister:write_loop(pos, value, clean)
+	self:write_absolute(self:get_buffer_pos(self:clamp_loop_pos(pos)), value, clean)
+end
+
 function ShiftRegister:write_loop_offset(offset, value, clean)
-	self:write_absolute(self:get_loop_pos(offset), value, clean)
+	self:write_absolute(self:get_loop_offset_pos(offset), value, clean)
 end
 
 function ShiftRegister:write_buffer_offset(offset, value, clean)

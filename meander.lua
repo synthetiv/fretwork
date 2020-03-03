@@ -250,7 +250,7 @@ local function grid_redraw()
 	g:refresh()
 end
 
-local function get_cursor_offset()
+local function get_cursor_pos()
 	return top_voice:get_pos(cursor)
 end
 
@@ -338,11 +338,11 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 		--]]
 	end
 	-- highlight snapped version of the note at the cursor
-	if n == scale:snap(shift_register:read_loop_offset(get_cursor_offset())) then
+	if n == scale:snap(shift_register:read_loop(get_cursor_pos())) then
 		level = 10
 	end
 	-- highlight + blink the un-snapped note we're editing
-	if n == shift_register:read_loop_offset(get_cursor_offset()) then
+	if n == shift_register:read_loop(get_cursor_pos()) then
 		if blink_fast then
 			level = 15
 		else
@@ -395,7 +395,7 @@ local function grid_key(x, y, z)
 			keyboard:note(x, y, z)
 			if keyboard.gate then
 				local note = keyboard:get_last_note() - top_voice.transpose
-				shift_register:write_loop_offset(get_cursor_offset(), note)
+				shift_register:write_loop(get_cursor_pos(), note)
 				-- update voices immediately, if appropriate
 				for v = 1, n_voices do
 					local voice = voices[v]
@@ -800,10 +800,10 @@ end
 
 local function key_shift_register_insert(n)
 	if n == 2 then
-		shift_register:delete(get_cursor_offset())
+		shift_register:delete(get_cursor_pos())
 		-- TODO: move cursor: -1 if in central loop, more or less in other loops
 	elseif n == 3 then
-		shift_register:insert(get_cursor_offset())
+		shift_register:insert(get_cursor_pos())
 		-- TODO: move cursor: +1 if in central loop, more or less in other loops
 	end
 	params:set('loop_length', shift_register.length) -- keep param value up to date
@@ -907,10 +907,10 @@ function enc(n, d)
 	elseif n == 3 then
 		if grid_mode == grid_mode_edit then
 			-- change note at cursor
-			local current_note = shift_register:read_loop_offset(get_cursor_offset())
-			shift_register:write_loop_offset(get_cursor_offset(), current_note + d)
+			local current_note = shift_register:read_loop(get_cursor_pos())
+			shift_register:write_loop(get_cursor_pos(), current_note + d)
 			for v = 1, n_voices do
-				if shift_register:get_loop_pos(voices[v]:get_offset(0)) == shift_register:get_loop_pos(voices[v]:get_offset(cursor)) then
+				if shift_register:get_loop_pos(voices[v]:get_pos(0)) == shift_register:get_loop_pos(voices[v]:get_pos(cursor)) then
 					update_voice(v)
 				end
 			end
