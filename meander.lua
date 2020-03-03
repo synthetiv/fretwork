@@ -191,7 +191,6 @@ end
 
 local function rewind()
 	shift_register:shift(-1)
-	-- TODO: fix this, MAYBE by disabling rewind
 	for v = 1, n_voices do
 		voices[v]:shift(-1)
 	end
