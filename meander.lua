@@ -398,7 +398,6 @@ local function grid_key(x, y, z)
 			end
 		end
 	elseif voice_selector:should_handle_key(x, y) then
-		-- TODO: what should these do in modes other than transpose?
 		local voice = voice_selector:get_key_option(x, y)
 		voice_selector:key(x, y, z)
 		update_active_heads(z == 1 and voice)
