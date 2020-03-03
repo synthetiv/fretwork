@@ -576,7 +576,8 @@ local function add_params()
 		min = 2,
 		max = 32,
 		default = 16,
-		-- TODO: decreasing loop length when some/all voices' offsets are near loop length causes... let's say unintuitive behavior
+		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
+		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now
 		action = function(value)
 			shift_register.length = value
 			update_voices()
@@ -769,6 +770,9 @@ function init()
 
 	-- TODO: since we're no longer calling params:bang() at the bottom, voices need to be updated
 	-- (...should I just call params:bang() again?)
+	for v = 1, n_voices do
+		update_voice(v)
+	end
 	
 	memory_selector.selected = memory_loop
 
@@ -1008,7 +1012,7 @@ function redraw()
 	-- TODO: set voices to retrograde instead of allowing backwards clock ticks
 	-- TODO: inversion too
 	-- TODO: then you get into different loop lengths...
-	local output_x = get_screen_offset_x(0) + 3
+	local output_x = get_screen_offset_x(-1) + 3
 	screen.move(output_x, 0)
 	screen.line(output_x, 64)
 	screen.level(1)
@@ -1024,7 +1028,7 @@ function redraw()
 	-- TODO: draw these based on voice.note_snapped in case that somehow ends up being different from what's shown on the screen??
 	-- (but it shouldn't, ever)
 	for i, v in ipairs(voice_draw_order) do
-		local note = screen_notes[v][screen_note_center + 1] -- TODO: is this actually the current note?
+		local note = screen_notes[v][screen_note_center]
 		screen.pixel(note.x + 2, note.y)
 		screen.level(15)
 		screen.fill()
