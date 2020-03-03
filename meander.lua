@@ -328,18 +328,11 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 	if self.scale:contains(n) then
 		level = 3
 	end
-	-- highlight un-transposed voice notes
-	for v = 1, n_voices do
-		-- TODO: there's gotta be a better way to do this
-		--[[
-		if n == self.scale:snap(shift_register:read_head(output_source[o])) then
-			level = 7
+	-- highlight transposed voice notes
+	for i, v in ipairs(voice_draw_order) do
+		if n == self.scale:snap(shift_register:read_loop(voices[v]:get_pos(cursor)) + voices[v].transpose) then
+			level = i == 4 and 10 or 7 -- top voice is brighter than others
 		end
-		--]]
-	end
-	-- highlight snapped version of the note at the cursor
-	if n == scale:snap(shift_register:read_loop(get_cursor_pos()) + top_voice.transpose) then
-		level = 10
 	end
 	-- highlight + blink the un-snapped note we're editing
 	if n == shift_register:read_loop(get_cursor_pos()) + top_voice.transpose then
