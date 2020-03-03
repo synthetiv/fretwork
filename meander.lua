@@ -338,11 +338,11 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 		--]]
 	end
 	-- highlight snapped version of the note at the cursor
-	if n == scale:snap(shift_register:read_loop(get_cursor_pos())) then
+	if n == scale:snap(shift_register:read_loop(get_cursor_pos()) + top_voice.transpose) then
 		level = 10
 	end
 	-- highlight + blink the un-snapped note we're editing
-	if n == shift_register:read_loop(get_cursor_pos()) then
+	if n == shift_register:read_loop(get_cursor_pos()) + top_voice.transpose then
 		if blink_fast then
 			level = 15
 		else
@@ -384,7 +384,7 @@ local function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_transpose then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local transpose = math.min(72, math.max(0, keyboard:get_last_note())) - 36
+				local transpose = math.min(72, math.max(0, keyboard:get_last_note() - top-voice.transpose)) - 36
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						params:set(string.format('voice_%d_transpose', v), transpose)
@@ -399,7 +399,7 @@ local function grid_key(x, y, z)
 				-- update voices immediately, if appropriate
 				for v = 1, n_voices do
 					local voice = voices[v]
-					if shift_register:get_loop_pos(voice:get_offset(0)) == shift_register:get_loop_pos(voice:get_offset(cursor)) then
+					if shift_register:get_loop_pos(voice:get_pos(0)) == shift_register:get_loop_pos(voice:get_pos(cursor)) then
 						update_voice(v)
 					end
 				end
