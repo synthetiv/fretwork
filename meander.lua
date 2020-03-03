@@ -176,13 +176,13 @@ local function sample_pitch()
 		if source == source_crow then
 			shift_register:write_head(crow_pitch_in)
 		elseif input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
-			shift_register:write_head(input_keyboard:get_last_note())
+			shift_register:write_head(input_keyboard:get_last_note() - top_voice.transpose)
 		elseif pitch_in_detected and (source == source_grid_pitch or source == source_pitch or source == source_pitch_grid) then
 			shift_register:write_head(pitch_in)
 		elseif source == source_grid_crow then
 			shift_register:write_head(crow_pitch_in)
 		elseif input_keyboard.gate and source == source_pitch_grid then
-			shift_register:write_head(input_keyboard:get_last_note())
+			shift_register:write_head(input_keyboard:get_last_note() - top_voice.transpose)
 		end
 	end
 	update_voices()
@@ -359,10 +359,6 @@ local function grid_octave_key(z, d)
 		else
 			keyboard.octave = keyboard.octave + d
 		end
-		if grid_mode == grid_mode_play and keyboard.gate then
-			-- change octave of current note
-			keyboard_note = keyboard:get_last_note()
-		end
 	end
 	grid_octave_key_held = z == 1
 end
@@ -371,7 +367,6 @@ local function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		if grid_mode == grid_mode_play and not grid_shift then
 			keyboard:note(x, y, z)
-			keyboard_note = keyboard:get_last_note()
 			if keyboard.gate then
 				if clock_mode ~= clock_mode_trig then
 					sample_pitch()
@@ -399,7 +394,7 @@ local function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_edit then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local note = keyboard:get_last_note()
+				local note = keyboard:get_last_note() - top_voice.transpose
 				shift_register:write_loop_offset(get_cursor_offset(), note)
 				-- update voices immediately, if appropriate
 				for v = 1, n_voices do
@@ -1060,19 +1055,18 @@ function redraw()
 	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
 	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
 	-- that value when a write occurs?
-	local input_transpose = top_voice.transpose
 	for n = 1, n_screen_notes do
 		local note = screen_notes[top_voice_index][n]
 		if note.offset == 0 then
 			local x = note.x
 			-- grid pitch
 			if input_keyboard.gate then
-				local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note() + input_transpose))
+				local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note()))
 				draw_input(x, grid_y)
 			end
 			-- pitch detector pitch
 			if pitch_in_detected then
-				local audio_y = get_screen_note_y(scale:snap(pitch_in + input_transpose))
+				local audio_y = get_screen_note_y(scale:snap(pitch_in - top_voice.transpose))
 				draw_input(x, audio_y)
 			end
 		end
