@@ -481,10 +481,8 @@ local function show_info()
 	info_visible = true
 	dirty = true
 	if not key_shift then
-		if info_metro ~= nil then
-			info_metro:stop()
-			info_metro:start(0.75)
-		end
+		info_metro:stop()
+		info_metro:start(0.75)
 	end
 end
 
@@ -685,6 +683,13 @@ function init()
 	params:add_separator()
 	add_params()
 
+	info_metro = metro.init()
+	info_metro.event = function()
+		info_visible = false
+		dirty = true
+	end
+	info_metro.count = 1
+	
 	crow.add = crow_setup -- when crow is connected
 	crow_setup() -- calls params:bang()
 	
@@ -720,14 +725,6 @@ function init()
 
 	redraw_metro:start(1 / 15)
 
-	info_metro = metro.init()
-	info_metro.event = function()
-		info_visible = false
-		dirty = true
-	end
-	info_metro.count = 1
-	-- TODO: why does info stay on screen indefinitely after load?
-	
 	engine.pitchAmpThreshold(util.dbamp(-80))
 	engine.pitchConfidenceThreshold(0.8)
 	pitch_poll = poll.set('vessel_pitch', update_freq)
