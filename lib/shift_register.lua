@@ -40,6 +40,7 @@ function ShiftRegister:get_loop_offset_pos(offset)
 end
 
 function ShiftRegister:shift(delta)
+	-- TODO: constrain to GCF, because buffer size * length may be a very high number
 	self.head = (self.head + delta - 1) % (self.buffer_size * self.length) + 1
 	if delta > 0 then
 		-- if shifting forward, copy the value from before the start of the loop to the end
