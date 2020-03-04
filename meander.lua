@@ -368,8 +368,9 @@ end
 local function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		if grid_mode == grid_mode_play and not grid_shift then
+			local previous_note = keyboard:get_last_note()
 			keyboard:note(x, y, z)
-			if keyboard.gate then
+			if keyboard.gate and (previous_note ~= keyboard:get_last_note() or z == 1) then
 				if clock_mode ~= clock_mode_trig then
 					sample_pitch()
 				end
