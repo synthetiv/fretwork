@@ -87,6 +87,7 @@ grid_mode = grid_mode_play
 voice_selector = MultiSelect.new(5, 3, 1, 4)
 
 g = grid.connect()
+m = midi.connect()
 
 grid_shift = false
 grid_ctrl = false
@@ -477,6 +478,18 @@ function grid_key(x, y, z)
 	dirty = true
 end
 
+function midi_event(data)
+	local msg = midi.to_msg(data)
+	if msg.type == 'note_on' then
+		for v = 1, n_voices do
+			local voice = voices[v]
+			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
+				voice:shift(1)
+			end
+		end
+	end
+end
+
 function update_freq(value)
 	pitch_in_detected = value > 0
 	if pitch_in_detected then
@@ -639,6 +652,12 @@ function add_params()
 				config_dirty = true
 			end
 		}
+	end
+
+	params:add_separator()
+
+	for v = 1, n_voices do
+		local voice = voices[v]
 		params:add{
 			type = 'control',
 			id = string.format('voice_%d_slew', v),
@@ -646,6 +665,34 @@ function add_params()
 			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
 			action = function(value)
 				crow.output[v].slew = value / 1000
+			end
+		}
+	end
+
+	params:add_separator()
+
+	for v = 1, n_voices do
+		local voice = voices[v]
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_clock_note', v),
+			name = string.format('voice %d clock note', v),
+			min = 0,
+			max = 127,
+			default = 63 + v,
+			action = function(value)
+				voice.clock_note = value
+			end
+		}
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_clock_channel', v),
+			name = string.format('voice %d clock channel', v),
+			min = 1,
+			max = 16,
+			default = 1,
+			action = function(value)
+				voice.clock_channel = value
 			end
 		}
 	end
@@ -814,6 +861,7 @@ function init()
 
 	pitch_poll:start()
 	g.key = grid_key
+	m.event = midi_event
 	
 	update_voices()
 
