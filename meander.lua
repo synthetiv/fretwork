@@ -998,7 +998,7 @@ function draw_voice_path(v, level)
 		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line
 		-- move or connect from previous note
 		if n == 1 then
-			screen.move(x + 0.5, y + 0.5)
+			screen.move(x, y)
 		else
 			screen.line(x, y)
 		end
