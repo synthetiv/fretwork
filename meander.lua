@@ -6,45 +6,45 @@ engine.name = 'Vessel'
 VesselWaveform = include 'vessel/lib/waveform'
 VesselEngine = include 'vessel/lib/engine'
 
-local musicutil = require 'musicutil'
+musicutil = require 'musicutil'
 
-local Keyboard = include 'lib/grid_keyboard'
-local Select = include 'lib/grid_select'
-local MultiSelect = include 'lib/grid_multi_select'
-local ShiftRegister = include 'lib/shift_register'
-local ShiftRegisterVoice = include 'lib/shift_register_voice'
-local Scale = include 'lib/scale'
+Keyboard = include 'lib/grid_keyboard'
+Select = include 'lib/grid_select'
+MultiSelect = include 'lib/grid_multi_select'
+ShiftRegister = include 'lib/shift_register'
+ShiftRegisterVoice = include 'lib/shift_register_voice'
+Scale = include 'lib/scale'
 
-local pitch_poll
-local pitch_in = 0
-local pitch_in_detected = false
-local pitch_in_octave = 0
-local crow_pitch_in = 0
-local scale = Scale.new(12)
-local saved_masks = {} -- TODO: save with params... somehow
+pitch_poll = nil
+pitch_in = 0
+pitch_in_detected = false
+pitch_in_octave = 0
+crow_pitch_in = 0
+scale = Scale.new(12)
+saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
-local mask_dirty = false
-local mask_selector = Select.new(1, 3, 4, 4)
+mask_dirty = false
+mask_selector = Select.new(1, 3, 4, 4)
 
-local config_dirty = false
-local saved_configs = {}
-local config_selector = Select.new(1, 3, 4, 4)
+config_dirty = false
+saved_configs = {}
+config_selector = Select.new(1, 3, 4, 4)
 
-local saved_loops = {}
-local loop_selector = Select.new(1, 3, 4, 4)
+saved_loops = {}
+loop_selector = Select.new(1, 3, 4, 4)
 
-local memory_selector = Select.new(2, 2, 3, 1)
-local memory_mask = 1
-local memory_config = 2
-local memory_loop = 3
+memory_selector = Select.new(2, 2, 3, 1)
+memory_mask = 1
+memory_config = 2
+memory_loop = 3
 
 -- TODO: save/recall offsets too... if they could be set by grid then they could be stored with configs
 -- TODO: save/recall mask, loop, and config all at once
 
-local shift_register = ShiftRegister.new(32)
+shift_register = ShiftRegister.new(32)
 
-local source
-local source_names = {
+source = 1
+source_names = {
 	'grid',
 	'pitch track',
 	'crow input 2',
@@ -53,63 +53,63 @@ local source_names = {
 	'pitch OR grid'
 	-- TODO: random too?
 }
-local source_grid = 1
-local source_pitch = 2
-local source_crow = 3
-local source_grid_pitch = 4
-local source_grid_crow = 5
-local source_pitch_grid = 6
+source_grid = 1
+source_pitch = 2
+source_crow = 3
+source_grid_pitch = 4
+source_grid_crow = 5
+source_pitch_grid = 6
 
 -- TODO: add internal clock using beatclock
 -- TODO: clock from MIDI notes
-local clock_mode
-local clock_mode_names = {
+clock_mode = 1
+clock_mode_names = {
 	'crow input 1',
 	'grid',
 	'crow in OR grid'
 }
-local clock_mode_trig = 1
-local clock_mode_grid = 2
-local clock_mode_trig_grid = 3
+clock_mode_trig = 1
+clock_mode_grid = 2
+clock_mode_trig_grid = 3
 
-local voices = {}
-local n_voices = 4
-local voice_draw_order = { 4, 3, 2, 1 }
-local top_voice_index = 1
-local top_voice = {}
+voices = {}
+n_voices = 4
+voice_draw_order = { 4, 3, 2, 1 }
+top_voice_index = 1
+top_voice = {}
 
-local grid_mode_play = 1
-local grid_mode_mask = 2
-local grid_mode_transpose = 3
-local grid_mode_edit = 4
-local grid_mode = grid_mode_play
+grid_mode_play = 1
+grid_mode_mask = 2
+grid_mode_transpose = 3
+grid_mode_edit = 4
+grid_mode = grid_mode_play
 
-local voice_selector = MultiSelect.new(5, 3, 1, 4)
+voice_selector = MultiSelect.new(5, 3, 1, 4)
 
-local g = grid.connect()
+g = grid.connect()
 
-local grid_shift = false
-local grid_ctrl = false
-local grid_octave_key_held = false
-local input_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-local control_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-local keyboard = input_keyboard
+grid_shift = false
+grid_ctrl = false
+grid_octave_key_held = false
+input_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+control_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+keyboard = input_keyboard
 
-local screen_note_width = 4
-local n_screen_notes = 128 / screen_note_width
-local screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
-local screen_notes = { {}, {}, {}, {} }
-local cursor = 0
+screen_note_width = 4
+n_screen_notes = 128 / screen_note_width
+screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
+screen_notes = { {}, {}, {}, {} }
+cursor = 0
 
-local key_shift = false
-local info_visible = false
-local blink_slow = false
-local blink_fast = false
-local dirty = false
-local info_metro
-local redraw_metro
+key_shift = false
+info_visible = false
+blink_slow = false
+blink_fast = false
+dirty = false
+info_metro = nil
+redraw_metro = nil
 
-local function recall_mask()
+function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
 	end
@@ -117,12 +117,12 @@ local function recall_mask()
 	mask_dirty = false
 end
 
-local function save_mask()
+function save_mask()
 	saved_masks[mask_selector.selected] = scale:get_mask()
 	mask_dirty = false
 end
 
-local function recall_loop()
+function recall_loop()
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
@@ -130,12 +130,12 @@ local function recall_loop()
 	shift_register.dirty = false
 end
 
-local function save_loop()
+function save_loop()
 	saved_loops[loop_selector.selected] = shift_register:get_loop(cursor)
 	shift_register.dirty = false
 end
 
-local function recall_config()
+function recall_config()
 	local c = config_selector.selected
 	if saved_configs[c] == nil then
 		return
@@ -150,7 +150,7 @@ local function recall_config()
 	config_dirty = false
 end
 
-local function save_config()
+function save_config()
 	local config = {}
 	for v = 1, n_voices do
 		config[v] = {
@@ -164,20 +164,20 @@ local function save_config()
 	config_dirty = false
 end
 
-local function update_voice(v)
+function update_voice(v)
 	local voice = voices[v]
 	voice:update_note()
 	voice.note_snapped = scale:snap(voice.note)
 	crow.output[v].volts = voice.note_snapped / 12 - 1
 end
 
-local function update_voices()
+function update_voices()
 	for v = 1, n_voices do
 		update_voice(v)
 	end
 end
 
-local function sample_pitch()
+function sample_pitch()
 	shift_register:shift(1)
 	for v = 1, n_voices do
 		voices[v]:shift(1)
@@ -199,7 +199,7 @@ local function sample_pitch()
 	dirty = true
 end
 
-local function rewind()
+function rewind()
 	shift_register:shift(-1)
 	for v = 1, n_voices do
 		voices[v]:shift(-1)
@@ -208,7 +208,7 @@ local function rewind()
 	dirty = true
 end
 
-local function update_active_heads(last_voice)
+function update_active_heads(last_voice)
 	if last_voice then
 		local new_draw_order = {}
 		for i, o in ipairs(voice_draw_order) do
@@ -223,7 +223,7 @@ local function update_active_heads(last_voice)
 	end
 end
 
-local function grid_redraw()
+function grid_redraw()
 
 	-- mode buttons
 	g:led(1, 1, grid_mode == grid_mode_play and 7 or 2)
@@ -259,11 +259,11 @@ local function grid_redraw()
 	g:refresh()
 end
 
-local function get_cursor_pos()
+function get_cursor_pos()
 	return top_voice:get_pos(cursor)
 end
 
-local key_level_callbacks = {}
+key_level_callbacks = {}
 
 key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	local level = 0
@@ -354,7 +354,7 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 	return level
 end
 
-local function grid_octave_key(z, d)
+function grid_octave_key(z, d)
 	if z == 1 then
 		if grid_octave_key_held then
 			keyboard.octave = 0
@@ -365,7 +365,7 @@ local function grid_octave_key(z, d)
 	grid_octave_key_held = z == 1
 end
 
-local function grid_key(x, y, z)
+function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		if grid_mode == grid_mode_play and not grid_shift then
 			local previous_note = keyboard:get_last_note()
@@ -477,7 +477,7 @@ local function grid_key(x, y, z)
 	dirty = true
 end
 
-local function update_freq(value)
+function update_freq(value)
 	pitch_in_detected = value > 0
 	if pitch_in_detected then
 		-- TODO: accommodate non-12TET scales
@@ -486,7 +486,7 @@ local function update_freq(value)
 	end
 end
 
-local function show_info()
+function show_info()
 	info_visible = true
 	dirty = true
 	if not key_shift then
@@ -495,7 +495,7 @@ local function show_info()
 	end
 end
 
-local function crow_setup()
+function crow_setup()
 	crow.clear()
 	-- input modes will be set by params
 	crow.input[1].change = function()
@@ -511,7 +511,7 @@ local function crow_setup()
 	params:bang()
 end
 
-local function add_params()
+function add_params()
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control
 	params:add{
@@ -820,7 +820,7 @@ function init()
 	dirty = true
 end
 
-local function key_shift_clock(n)
+function key_shift_clock(n)
 	if n == 2 then
 		rewind()
 	elseif n == 3 then
@@ -828,7 +828,7 @@ local function key_shift_clock(n)
 	end
 end
 
-local function key_shift_register_insert(n)
+function key_shift_register_insert(n)
 	if n == 2 then
 		shift_register:delete(get_cursor_pos())
 		-- TODO: move cursor: -1 if in central loop, more or less in other loops
@@ -839,7 +839,7 @@ local function key_shift_register_insert(n)
 	params:set('loop_length', shift_register.length) -- keep param value up to date
 end
 
-local function key_move_cursor(n)
+function key_move_cursor(n)
 	if n == 2 then
 		cursor = (cursor + screen_note_center - 1) % n_screen_notes - screen_note_center
 	elseif n == 3 then
@@ -869,7 +869,7 @@ function key(n, z)
 	dirty = true
 end
 
-local function params_multi_delta(param_format, selected, d)
+function params_multi_delta(param_format, selected, d)
 	-- note: this assumes number params with identical range!
 	local min = 0
 	local max = 0
