@@ -2,6 +2,18 @@ local ShiftRegister = {}
 ShiftRegister.__index = ShiftRegister
 ShiftRegister.buffer_size = 128
 
+local function gcd(a, b)
+	if b == 0 then
+		return a
+	else
+		return gcd(b, a % b)
+	end
+end
+
+local function lcm(a, b)
+	return a * b / gcd(a, b)
+end
+
 ShiftRegister.new = function(length)
 	local instance = setmetatable({}, ShiftRegister)
 	instance.head = 1
@@ -9,9 +21,14 @@ ShiftRegister.new = function(length)
 	for i = 1, instance.buffer_size do
 		instance.buffer[i] = 0
 	end
-	instance.length = length
+	instance:set_length(length)
 	instance.dirty = false
 	return instance
+end
+
+function ShiftRegister:set_length(length)
+	self.length = length
+	self.length_lcm = lcm(self.length, self.buffer_size)
 end
 
 function ShiftRegister:get_buffer_pos(pos)
@@ -40,8 +57,10 @@ function ShiftRegister:get_loop_offset_pos(offset)
 end
 
 function ShiftRegister:shift(delta)
-	-- TODO: constrain to GCF, because buffer size * length may be a very high number
-	self.head = (self.head + delta - 1) % (self.buffer_size * self.length) + 1
+	-- constrain head to the least common multiple of loop length and buffer size, because we don't
+	-- want it to increase infinitely but simply constraining to loop length or buffer size causes
+	-- discontinuities (loop appears to jump) when head position is wrapped
+	self.head = (self.head + delta - 1) % self.length_lcm + 1
 	if delta > 0 then
 		-- if shifting forward, copy the value from before the start of the loop to the end
 		self:write_buffer_offset(0, self:read_buffer_offset(-self.length), true)
@@ -109,7 +128,7 @@ end
 
 function ShiftRegister:insert(offset)
 	offset = self:clamp_loop_offset(offset)
-	self.length = self.length + 1
+	self:set_length(self.length + 1)
 	-- replace values before the offset with later values
 	self:shift_range(-self.length, offset - 1, 1)
 end
@@ -120,13 +139,13 @@ function ShiftRegister:delete(offset)
 		return
 	end
 	offset = self:clamp_loop_offset(offset)
-	self.length = self.length - 1
+	self:set_length(self.length - 1)
 	-- replace the offset value and everything before it with earlier values
 	self:shift_range(-self.length, offset, -1)
 end
 
 function ShiftRegister:set_loop(offset, loop)
-	self.length = #loop
+	self:set_length(#loop)
 	for i = 1, self.length do
 		self:write_loop_offset(offset + i - 1, loop[i])
 	end

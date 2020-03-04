@@ -590,7 +590,7 @@ function add_params()
 		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
 		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now
 		action = function(value)
-			shift_register.length = value
+			shift_register:set_length(value)
 			update_voices()
 			dirty = true
 			show_info()
