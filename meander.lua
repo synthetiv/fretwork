@@ -585,7 +585,7 @@ function add_params()
 		id = 'loop_length',
 		name = 'loop length',
 		min = 2,
-		max = 32,
+		max = 128,
 		default = 16,
 		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
 		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now

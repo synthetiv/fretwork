@@ -1,6 +1,6 @@
 local ShiftRegister = {}
 ShiftRegister.__index = ShiftRegister
-ShiftRegister.buffer_size = 32 -- TODO: increase
+ShiftRegister.buffer_size = 128
 
 ShiftRegister.new = function(length)
 	local instance = setmetatable({}, ShiftRegister)
