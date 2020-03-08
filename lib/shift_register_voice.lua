@@ -39,7 +39,7 @@ end
 
 function ShiftRegisterVoice:shift(d)
 	self.random_index = (self.random_index + d * self.direction - 1) % random_queue_size + 1
-	self.pos = (self.pos + d * self.direction - 1) % self.shift_register.length + 1
+	self.pos = self.shift_register:clamp_loop_pos(self.pos + d * self.direction)
 	-- TODO: re-randomize a random value that isn't visible on screen
 	-- (right now each voice just has a set of fixed random values, which is better than nothing but not ideal)
 	self:update_note()

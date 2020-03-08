@@ -1232,11 +1232,18 @@ function redraw()
 	screen.level(1)
 	screen.stroke()
 	for offset = 1, shift_register.length do
-		screen.pixel(shift_register:get_loop_pos(offset) - 1, 0)
-		if offset == 1 then
+		local pos = shift_register:get_loop_pos(offset)
+		screen.pixel(pos - 1, 0)
+		screen.level(7)
+		if pos == shift_register.head then
 			screen.level(15)
-		else
-			screen.level(7)
+		end
+		for v = 1, n_voices do
+			-- TODO: make it so that these _never_ move when you change loop length. no, not sure how.
+			-- currently they _sometimes_ stay in place. probably has something to do with modulo'ing to LCM
+			if voice_selector:is_selected(v) and pos == shift_register:get_loop_pos(voices[v]:get_pos(0)) then
+				screen.level(15)
+			end
 		end
 		screen.fill()
 	end
