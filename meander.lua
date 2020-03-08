@@ -184,6 +184,7 @@ function sample_pitch()
 		voices[v]:shift(1)
 	end
 	if params:get('write_probability') > math.random(1, 100) then
+		-- TODO: something's not quite right here, didn't seem to be writing predictably last night
 		if source == source_crow then
 			shift_register:write_head(crow_pitch_in)
 		elseif input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
