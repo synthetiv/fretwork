@@ -1223,6 +1223,10 @@ function redraw()
 
 		screen.move(0, 43)
 		screen.text(string.format('S: %.1f', top_voice.scramble))
+
+		screen.level(shift_register.direction == -1 and 15 or 2)
+		screen.move(0, 52)
+		screen.text('Ret.')
 	end
 
 	-- DEBUG: draw minibuffer, loop region, head
