@@ -180,6 +180,7 @@ end
 
 function sample_pitch()
 	shift_register:shift(1)
+	move_cursor(-1)
 	for v = 1, n_voices do
 		voices[v]:shift(1)
 	end
@@ -203,6 +204,7 @@ end
 
 function rewind()
 	shift_register:shift(-1)
+	move_cursor(1)
 	for v = 1, n_voices do
 		voices[v]:shift(-1)
 	end
@@ -888,11 +890,22 @@ function key_shift_register_insert(n)
 	params:set('loop_length', shift_register.length) -- keep param value up to date
 end
 
+function move_cursor(d)
+	local old_cursor = cursor
+	cursor = cursor + d
+	dirty = true
+	-- if cursor is at either screen edge, wrap to the nearest multiple of loop length
+	if (d < 0 and cursor <= -screen_note_center) or (d > 0 and cursor > n_screen_notes - screen_note_center) then
+		local wrap_length = n_screen_notes - (n_screen_notes % shift_register.length)
+		cursor = cursor + (wrap_length * -d)
+	end
+end
+
 function key_move_cursor(n)
 	if n == 2 then
-		cursor = (cursor + screen_note_center - 1) % n_screen_notes - screen_note_center
+		move_cursor(-1)
 	elseif n == 3 then
-		cursor = (cursor + screen_note_center + 1) % n_screen_notes - screen_note_center
+		move_cursor(1)
 	end
 end
 
@@ -972,7 +985,7 @@ function enc(n, d)
 	elseif n == 2 then
 		if grid_mode == grid_mode_edit then
 			-- move cursor
-			cursor = (cursor + screen_note_center + d) % n_screen_notes - screen_note_center
+			move_cursor(d)
 		else
 			-- shift voices
 			for v = 1, n_voices do
@@ -1161,7 +1174,7 @@ function redraw()
 	-- draw cursor
 	-- TODO: consider just circling a corner
 	if grid_mode == grid_mode_edit then
-		local note = screen_notes[top_voice_index][(screen_note_center + cursor - 1) % n_screen_notes + 1]
+		local note = screen_notes[top_voice_index][screen_note_center + cursor]
 		local x = note.x
 		local y1 = note.y - 5
 		local y2 = note.y + 5
