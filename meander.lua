@@ -102,6 +102,10 @@ screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
 screen_notes = { {}, {}, {}, {} }
 cursor = 0
 
+recent_writes = { nil, nil, nil, nil, nil, nil, nil, nil }
+n_recent_writes = 8
+last_write = 0
+
 key_shift = false
 info_visible = false
 blink_slow = false
@@ -178,25 +182,43 @@ function update_voices()
 	end
 end
 
+function get_sample_pitch()
+	-- TODO: watch debug output
+	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow or (source == source_pitch_grid and not pitch_in_detected)) then
+		print(string.format('writing grid pitch (source = %d)', source))
+		return input_keyboard:get_last_note() - top_voice.transpose
+	elseif source == source_pitch or source == source_grid_pitch then
+		print(string.format('writing audio pitch (source = %d)', source))
+		return pitch_in
+	elseif source == source_crow or source == source_grid_crow then
+		print(string.format('writing crow pitch (source = %d)', source))
+		return crow_pitch_in
+	end
+	print(string.format('nothing to write (source = %d)', source))
+	return false
+end
+
 function sample_pitch()
 	shift_register:shift(1)
 	move_cursor(-1)
 	for v = 1, n_voices do
 		voices[v]:shift(1)
 	end
-	if params:get('write_probability') > math.random(1, 100) then
-		-- TODO: something's not quite right here, didn't seem to be writing predictably last night
-		if source == source_crow then
-			shift_register:write_head(crow_pitch_in)
-		elseif input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
-			shift_register:write_head(input_keyboard:get_last_note() - top_voice.transpose)
-		elseif pitch_in_detected and (source == source_grid_pitch or source == source_pitch or source == source_pitch_grid) then
-			shift_register:write_head(pitch_in)
-		elseif source == source_grid_crow then
-			shift_register:write_head(crow_pitch_in)
-		elseif input_keyboard.gate and source == source_pitch_grid then
-			shift_register:write_head(input_keyboard:get_last_note() - top_voice.transpose)
+	local prob = params:get('write_probability')
+	if prob > math.random(1, 100) then
+		local write_pitch = get_sample_pitch()
+		if not write_pitch then
+			return
 		end
+		shift_register:write_head(write_pitch)
+		last_write = last_write % n_recent_writes + 1
+		recent_writes[last_write] = {
+			level = 15, -- brightness
+			pos = shift_register.head,
+			pitch = write_pitch
+		}
+	else
+		print(string.format('skipping write (probability = %d)', prob - 1))
 	end
 	update_voices()
 	dirty = true
@@ -522,7 +544,6 @@ function crow_setup()
 	crow.input[2].stream = function(value)
 		-- TODO: accommodate non-12TET scales
 		crow_pitch_in = math.floor(value * scale.length + 0.5)
-		print(string.format('crow input 2: %fV = %d', value, crow_pitch_in))
 	end
 	params:bang()
 end
@@ -713,7 +734,6 @@ function add_params()
 				if errorMessage ~= nil then
 					error(errorMessage)
 				else
-					tab.print(data)
 					if data.masks ~= nil then
 						saved_masks = data.masks
 						mask_dirty = true
@@ -1036,6 +1056,7 @@ function calculate_voice_path(v)
 		note.x = (n - 1) * screen_note_width
 		note.y = get_screen_note_y(scale:snap(path[n].value))
 		note.offset = path[n].offset
+		note.pos = path[n].pos
 		screen_notes[v][n] = note
 	end
 end
@@ -1145,29 +1166,22 @@ function redraw()
 		screen.level(0)
 		screen.fill()
 		screen.rect(x + offset + 1.5, y - 0.5, 2, 2)
-		screen.level(15)
+		screen.level(level)
 		screen.stroke()
 	end
 
 	-- draw input indicators
-	-- TODO: I'm currently not drawing them at all when they aren't present (when keyboard gate is 0
-	-- and no pitch is detected) but if a trigger is received the last value will be used. maybe flash
-	-- that value when a write occurs?
 	-- TODO: when top voice is retrograde, this looks odd. not sure how to make it easier to follow.
-	for n = 1, n_screen_notes do
-		local note = screen_notes[top_voice_index][n]
-		if note.offset == 0 then
-			local x = note.x
-			-- grid pitch
-			if input_keyboard.gate then
-				local grid_y = get_screen_note_y(scale:snap(input_keyboard:get_last_note()))
-				draw_input(x, grid_y)
+	for w = 1, n_recent_writes do
+		local write = recent_writes[w]
+		if write ~= nil and write.level > 0 then
+			for n = 1, n_screen_notes do
+				local note = screen_notes[top_voice_index][n]
+				if shift_register:clamp_loop_pos(note.pos) == shift_register:clamp_loop_pos(write.pos) then
+					draw_input(note.x, get_screen_note_y(scale:snap(write.pitch + top_voice.transpose)), write.level)
+				end
 			end
-			-- pitch detector pitch
-			if pitch_in_detected then
-				local audio_y = get_screen_note_y(scale:snap(pitch_in - top_voice.transpose))
-				draw_input(x, audio_y)
-			end
+			write.level = math.floor(write.level * 0.7)
 		end
 	end
 
