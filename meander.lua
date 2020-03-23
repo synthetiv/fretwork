@@ -49,8 +49,7 @@ source_names = {
 	'pitch track',
 	'crow input 2',
 	'grid OR pitch',
-	'grid OR crow',
-	'pitch OR grid'
+	'grid OR crow'
 	-- TODO: random too?
 }
 source_grid = 1
@@ -58,7 +57,6 @@ source_pitch = 2
 source_crow = 3
 source_grid_pitch = 4
 source_grid_crow = 5
-source_pitch_grid = 6
 
 -- TODO: add internal clock using beatclock
 -- TODO: clock from MIDI notes
@@ -184,7 +182,7 @@ end
 
 function get_sample_pitch()
 	-- TODO: watch debug output
-	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow or (source == source_pitch_grid and not pitch_in_detected)) then
+	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		print(string.format('writing grid pitch (source = %d)', source))
 		return input_keyboard:get_last_note() - top_voice.transpose
 	elseif source == source_pitch or source == source_grid_pitch then
