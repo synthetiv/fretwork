@@ -899,17 +899,6 @@ function key_shift_clock(n)
 	end
 end
 
-function key_shift_register_insert(n)
-	if n == 2 then
-		shift_register:delete(get_cursor_pos())
-		-- TODO: move cursor: -1 if in central loop, more or less in other loops
-	elseif n == 3 then
-		shift_register:insert(get_cursor_pos())
-		-- TODO: move cursor: +1 if in central loop, more or less in other loops
-	end
-	params:set('loop_length', shift_register.length) -- keep param value up to date
-end
-
 function move_cursor(d)
 	local old_cursor = cursor
 	cursor = cursor + d
@@ -941,11 +930,7 @@ function key(n, z)
 		elseif grid_mode == grid_mode_transpose then
 			key_shift_clock(n)
 		elseif grid_mode == grid_mode_edit then
-			if key_shift then
-				key_shift_register_insert(n)
-			else
-				key_move_cursor(n)
-			end
+			key_move_cursor(n)
 		end
 	end
 	dirty = true

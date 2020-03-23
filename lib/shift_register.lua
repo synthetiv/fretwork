@@ -114,36 +114,6 @@ function ShiftRegister:write_head(value, clean)
 	self:write_absolute(self.head, value, clean)
 end
 
-function ShiftRegister:shift_range(min, max, delta)
-	if delta > 0 then
-		for offset = min, max do
-			self:write_buffer_offset(offset, self:read_buffer_offset(offset + delta))
-		end
-	elseif delta < 0 then
-		for offset = max, min, -1 do
-			self:write_buffer_offset(offset, self:read_buffer_offset(offset + delta))
-		end
-	end
-end
-
-function ShiftRegister:insert(offset)
-	offset = self:clamp_loop_offset(offset)
-	self:set_length(self.length + 1)
-	-- replace values before the offset with later values
-	self:shift_range(-self.length, offset - 1, 1)
-end
-
-function ShiftRegister:delete(offset)
-	-- refuse to delete if the loop size is already at the minimum
-	if self.length <= 2 then
-		return
-	end
-	offset = self:clamp_loop_offset(offset)
-	self:set_length(self.length - 1)
-	-- replace the offset value and everything before it with earlier values
-	self:shift_range(-self.length, offset, -1)
-end
-
 function ShiftRegister:set_loop(offset, loop)
 	self:set_length(#loop)
 	for i = 1, self.length do
