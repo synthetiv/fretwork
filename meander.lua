@@ -180,6 +180,7 @@ end
 function update_voice(v)
 	local voice = voices[v]
 	voice:update_value()
+	engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.value * 12))
 	crow.output[v].volts = voice.value
 end
 
@@ -780,6 +781,7 @@ function init()
 	top_voice = voices[top_voice_index]
 
 	polysub.params()
+	params:set('level', 0.002) -- be gentle (TODO: why is it SO loud otherwise?)
 	params:add_separator()
 	add_params()
 
