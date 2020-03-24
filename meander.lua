@@ -16,11 +16,22 @@ ShiftRegisterVoice = include 'lib/shift_register_voice'
 Scale = include 'lib/scale'
 
 pitch_poll = nil
-pitch_in = 0
+pitch_in_value = 0
 pitch_in_detected = false
 pitch_in_octave = 0
-crow_pitch_in = 0
-scale = Scale.new(12)
+crow_in_values = { 0, 0 }
+
+-- calculate pitch class values
+et12 = {} -- 12TET
+for p = 1, 12 do 
+	et12[p] = (p - 1) / 12
+end
+-- et41 = {} -- 41TET -- TODO: use!
+-- for p = 1, 41 do 
+-- 	et41[p] = (p - 1) / 41
+-- end
+-- TODO: add uneven/JI scales
+scale = Scale.new(et12)
 saved_masks = {} -- TODO: save with params... somehow
 -- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
 mask_dirty = false
@@ -126,6 +137,7 @@ function save_mask()
 end
 
 function recall_loop()
+	-- TODO: convert existing saved loop(s) to continuum / v/oct format instead of MIDI notes
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
@@ -169,9 +181,8 @@ end
 
 function update_voice(v)
 	local voice = voices[v]
-	voice:update_note()
-	voice.note_snapped = scale:snap(voice.note)
-	crow.output[v].volts = voice.note_snapped / 12 - 1
+	voice:update_value()
+	crow.output[v].volts = voice.value_quantized
 end
 
 function update_voices()
@@ -184,13 +195,13 @@ function get_sample_pitch()
 	-- TODO: watch debug output
 	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		print(string.format('writing grid pitch (source = %d)', source))
-		return input_keyboard:get_last_note() - top_voice.transpose
+		return input_keyboard:get_last_value() - top_voice.transpose
 	elseif source == source_pitch or source == source_grid_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
-		return pitch_in
+		return pitch_in_value
 	elseif source == source_crow or source == source_grid_crow then
 		print(string.format('writing crow pitch (source = %d)', source))
-		return crow_pitch_in
+		return crow_in_values[2]
 	end
 	print(string.format('nothing to write (source = %d)', source))
 	return false
@@ -211,7 +222,7 @@ function sample_pitch()
 		shift_register:write_head(write_pitch)
 		last_write = last_write % n_recent_writes + 1
 		recent_writes[last_write] = {
-			level = 15, -- brightness
+			level = 15,
 			pos = shift_register.head,
 			pitch = write_pitch
 		}
@@ -392,18 +403,22 @@ end
 function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		if grid_mode == grid_mode_play and not grid_shift then
-			local previous_note = keyboard:get_last_note()
+			local previous_note = keyboard:get_last_pitch()
 			keyboard:note(x, y, z)
-			if keyboard.gate and (previous_note ~= keyboard:get_last_note() or z == 1) then
+			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch() or z == 1) then
+				print(keyboard:get_last_value())
 				if clock_mode ~= clock_mode_trig then
 					sample_pitch()
 				end
 			end
 		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
 			if z == 1 then
-				local n = keyboard:get_key_note(x, y)
+				local n = keyboard:get_key_pitch(x, y)
 				scale:toggle_class(n)
 				mask_dirty = true
+				-- TODO: when ctrl is not held, make it visually obvious that the change is pending, rather
+				-- than reflecting change immediately in UI
+				-- maybe in part by pushing a closure onto a queue of actions to take on the next clock tick
 				if grid_ctrl then
 					update_voices()
 				end
@@ -411,7 +426,7 @@ function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_transpose then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local transpose = math.min(72, math.max(0, keyboard:get_last_note())) - 36
+				local transpose = keyboard:get_last_value()
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						params:set(string.format('voice_%d_transpose', v), transpose)
@@ -421,7 +436,7 @@ function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_edit then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local note = keyboard:get_last_note() - top_voice.transpose
+				local note = keyboard:get_last_value() - top_voice.transpose
 				shift_register:write_loop(get_cursor_pos(), note)
 				-- update voices immediately, if appropriate
 				for v = 1, n_voices do
@@ -516,8 +531,7 @@ end
 function update_freq(value)
 	pitch_in_detected = value > 0
 	if pitch_in_detected then
-		-- TODO: accommodate non-12TET scales
-		pitch_in = musicutil.freq_to_note_num(value) + (pitch_in_octave - 2) * scale.length
+		pitch_in_value = math.log(value / 440.0) / math.log(2) + 3.75 + pitch_in_octave
 		dirty = true
 	end
 end
@@ -539,9 +553,11 @@ function crow_setup()
 			sample_pitch()
 		end
 	end
+	crow.input[1].stream = function(value) -- not used... yet!
+		crow_in_values[1] = value
+	end
 	crow.input[2].stream = function(value)
-		-- TODO: accommodate non-12TET scales
-		crow_pitch_in = math.floor(value * scale.length + 0.5)
+		crow_in_values[2] = value
 	end
 	params:bang()
 end
@@ -643,7 +659,7 @@ function add_params()
 			name = string.format('voice %d transpose', v),
 			controlspec = controlspec.new(-48, 48, 'lin', 1, 0, 'st'),
 			action = function(value)
-				voice.transpose = value
+				voice.transpose = value / scale.length
 				update_voice(v)
 				dirty = true
 				config_dirty = true
@@ -1004,7 +1020,9 @@ function enc(n, d)
 		if grid_mode == grid_mode_edit then
 			-- change note at cursor
 			local current_note = shift_register:read_loop(get_cursor_pos())
-			shift_register:write_loop(get_cursor_pos(), current_note + d)
+			-- TODO: changing by increments of 1/(2*length) might not work so well for JI scales, and it
+			-- might be too sluggish for ET scales. tune for best feel.
+			shift_register:write_loop(get_cursor_pos(), current_note + d / (scale.length * 2))
 			for v = 1, n_voices do
 				if shift_register:get_loop_pos(voices[v]:get_pos(0)) == shift_register:get_loop_pos(voices[v]:get_pos(cursor)) then
 					update_voice(v)
@@ -1026,7 +1044,8 @@ function get_screen_offset_x(offset)
 end
 
 function get_screen_note_y(note)
-	return 71 + keyboard.octave * scale.length - note
+	-- print('get y for ' .. note)
+	return 32 + (keyboard.octave - note) * scale.length -- TODO: center...
 end
 
 -- calculate coordinates for each visible note
@@ -1230,7 +1249,7 @@ function redraw()
 		screen.text(string.format('O: %d', top_voice.pos))
 
 		screen.move(0, 34)
-		screen.text(string.format('T: %d', top_voice.transpose))
+		screen.text(string.format('T: %.2f', top_voice.transpose))
 
 		screen.move(0, 43)
 		screen.text(string.format('S: %.1f', top_voice.scramble))

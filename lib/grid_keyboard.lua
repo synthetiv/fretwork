@@ -12,8 +12,9 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.gate = false
 	-- set offset interval per row, rather than calculating it dynamically, so that "open tunings" are possible
 	instance.row_offsets = {}
+	instance.center_x = instance.x + math.floor(instance.width / 2)
 	for row = 1, height do
-		instance.row_offsets[row] = (11 - row) * 5
+		instance.row_offsets[row] = instance.scale.center_pitch + (math.floor(instance.height / 2) - row) * 5
 	end
 	-- this method can be redefined on the fly
 	instance.get_key_level = function(self, x, y, n)
@@ -22,25 +23,29 @@ function Keyboard.new(x, y, width, height, scale)
 	return instance
 end
 
-function Keyboard:get_key_note(x, y)
+function Keyboard:get_key_pitch(x, y)
 	-- TODO: update to return [-n, n] instead of [0, 2n]
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	return x + 1 - self.x + self.row_offsets[y] + self.octave * self.scale.length
+	return x - self.center_x + self.row_offsets[y] + self.octave * self.scale.length
 end
 
-function Keyboard:get_key_id_note(id)
+function Keyboard:get_key_id_pitch(id)
 	local x, y = self:get_key_id_coords(id)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	local note = self:get_key_note(x, y)
-	return note
+	local pitch = self:get_key_pitch(x, y)
+	return pitch
 end
 
-function Keyboard:get_last_note()
-	return self:get_key_id_note(self.last_key)
+function Keyboard:get_last_pitch()
+	return self:get_key_id_pitch(self.last_key)
+end
+
+function Keyboard:get_last_value()
+	return self.scale:get(self:get_last_pitch())
 end
 
 function Keyboard:set_gate()
@@ -53,7 +58,7 @@ function Keyboard:note(x, y, z)
 	end
 	local key_id = self:get_key_id(x, y)
 	if z == 1 then
-		local n = self:get_key_note(x, y)
+		local n = self:get_key_pitch(x, y)
 		table.insert(self.held_keys, key_id)
 		self.last_key = key_id
 	else
@@ -95,7 +100,7 @@ end
 function Keyboard:draw(g)
 	for x = self.x, self.x2 do
 		for y = self.y, self.y2 do
-			local n = self:get_key_note(x, y)
+			local n = self:get_key_pitch(x, y)
 			g:led(x, y, self:get_key_level(x, y, n))
 		end
 	end

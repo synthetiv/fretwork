@@ -6,8 +6,8 @@ ShiftRegisterVoice.__index = ShiftRegisterVoice
 ShiftRegisterVoice.new = function(pos, shift_register)
 	local voice = setmetatable({}, ShiftRegisterVoice)
 	voice.transpose = 0
-	voice.note = 0
-	voice.note_snapped = 0
+	voice.value = 0
+	voice.value_quantized = 0
 	voice.pos = pos
 	voice.shift_register = shift_register
 	voice.scramble = 0
@@ -33,8 +33,8 @@ function ShiftRegisterVoice:get_random(i)
 	return self.random_queue[self:get_random_index(i)]
 end
 
-function ShiftRegisterVoice:update_note()
-	self.note = self:get(0)
+function ShiftRegisterVoice:update_value()
+	self.value = self:get(0)
 end
 
 function ShiftRegisterVoice:shift(d)
@@ -42,7 +42,7 @@ function ShiftRegisterVoice:shift(d)
 	self.pos = self.shift_register:clamp_loop_pos(self.pos + d * self.direction)
 	-- TODO: re-randomize a random value that isn't visible on screen
 	-- (right now each voice just has a set of fixed random values, which is better than nothing but not ideal)
-	self:update_note()
+	self:update_value()
 end
 
 function ShiftRegisterVoice:get_pos(t)
