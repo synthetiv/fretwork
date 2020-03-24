@@ -1,10 +1,8 @@
 -- follower
 -- follow pitch, quantize, etc...
 
-engine.name = 'Vessel'
-
-VesselWaveform = include 'vessel/lib/waveform'
-VesselEngine = include 'vessel/lib/engine'
+engine.name = 'PolySub'
+polysub = require 'we/lib/polysub'
 
 musicutil = require 'musicutil'
 
@@ -619,16 +617,6 @@ function add_params()
 			pitch_in_octave = value
 		end
 	}
-	params:add{
-		type = 'option',
-		id = 'pitch_post',
-		name = 'pitch post-verb',
-		options = { 'no', 'yes' },
-		default = 1,
-		action = function(value)
-			engine.pitchPost(value - 1)
-		end
-	}
 	
 	params:add_separator()
 	
@@ -791,7 +779,7 @@ function init()
 	end
 	top_voice = voices[top_voice_index]
 
-	VesselEngine.add_params('basic')
+	polysub.params()
 	params:add_separator()
 	add_params()
 
@@ -837,9 +825,7 @@ function init()
 
 	redraw_metro:start(1 / 15)
 
-	engine.pitchAmpThreshold(util.dbamp(-80))
-	engine.pitchConfidenceThreshold(0.8)
-	pitch_poll = poll.set('vessel_pitch', update_freq)
+	pitch_poll = poll.set('pitch_in_l', update_freq)
 	pitch_poll.time = 1 / 10 -- was 8, is 10 OK?
 	
 	for m = 1, 16 do
