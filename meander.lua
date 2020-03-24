@@ -408,7 +408,6 @@ function grid_key(x, y, z)
 			local previous_note = keyboard:get_last_pitch()
 			keyboard:note(x, y, z)
 			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch() or z == 1) then
-				print(keyboard:get_last_value())
 				if clock_mode ~= clock_mode_trig then
 					sample_pitch()
 				end
@@ -692,6 +691,8 @@ function add_params()
 				config_dirty = true
 			end
 		}
+		-- TODO: inversion too? value scaling?
+		-- TODO: maybe even different loop lengths... which implies multiple independent SRs
 	end
 
 	params:add_separator()
@@ -993,6 +994,7 @@ function enc(n, d)
 			move_cursor(d)
 		else
 			-- shift voices
+			-- TODO: somehow do this more slowly / make it less sensitive?
 			for v = 1, n_voices do
 				if voice_selector:is_selected(v) then
 					voices[v]:shift(-d)
@@ -1029,9 +1031,8 @@ function get_screen_offset_x(offset)
 	return screen_note_width * (screen_note_center + offset)
 end
 
-function get_screen_note_y(note)
-	-- print('get y for ' .. note)
-	return 32 + (keyboard.octave - note) * scale.length -- TODO: center...
+function get_screen_note_y(value)
+	return util.round(32 + (keyboard.octave - value) * scale.length)
 end
 
 -- calculate coordinates for each visible note
@@ -1122,10 +1123,6 @@ function redraw()
 	screen.font_size(8)
 
 	-- draw vertical output/head indicator
-	-- TODO: I think this can go closer to the right edge of the screen, unless you start featuring retrograde motion more
-	-- TODO: set voices to retrograde instead of allowing backwards clock ticks
-	-- TODO: inversion too
-	-- TODO: then you get into different loop lengths...
 	local output_x = get_screen_offset_x(-1) + 3
 	screen.move(output_x, 0)
 	screen.line(output_x, 64)
@@ -1139,7 +1136,7 @@ function redraw()
 	end
 
 	-- highlight current notes after drawing all snakes, lest some be covered by outlines
-	-- TODO: draw these based on voice.note_snapped in case that somehow ends up being different from what's shown on the screen??
+	-- TODO: draw these based on voice.value in case that somehow ends up being different from what's shown on the screen??
 	-- (but it shouldn't, ever)
 	for i, v in ipairs(voice_draw_order) do
 		local note = screen_notes[v][screen_note_center]
@@ -1174,7 +1171,6 @@ function redraw()
 	end
 
 	-- draw cursor
-	-- TODO: consider just circling a corner
 	if grid_mode == grid_mode_edit then
 		local note = screen_notes[top_voice_index][screen_note_center + cursor]
 		local x = note.x
