@@ -182,7 +182,7 @@ end
 function update_voice(v)
 	local voice = voices[v]
 	voice:update_value()
-	crow.output[v].volts = voice.value_quantized
+	crow.output[v].volts = voice.value
 end
 
 function update_voices()
@@ -309,7 +309,7 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if n == voice.note_snapped then
+		if n == voice.pitch then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
@@ -350,12 +350,12 @@ end
 key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	local level = 0
 	-- highlight octaves
-	if n % self.scale.length == 0 then
+	if (n - self.scale.center_pitch) % self.scale.length == 1 then
 		level = 2
 	end
 	-- highlight transposition settings
 	for v = 1, n_voices do
-		if n - 36 == voices[v].transpose then
+		if n == self.scale:get_nearest_pitch(voices[v].transpose) then
 			if voice_selector:is_selected(v) then
 				level = 10
 			elseif level < 5 then
@@ -374,12 +374,14 @@ key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
 	end
 	-- highlight transposed voice notes
 	for i, v in ipairs(voice_draw_order) do
-		if n == self.scale:snap(shift_register:read_loop(voices[v]:get_pos(cursor)) + voices[v].transpose) then
+		local voice_value = shift_register:read_loop(voices[v]:get_pos(cursor)) + voices[v].transpose
+		if n == self.scale:get_nearest_mask_pitch(voice_value) then
 			level = i == 4 and 10 or 7 -- top voice is brighter than others
 		end
 	end
 	-- highlight + blink the un-snapped note we're editing
-	if n == shift_register:read_loop(get_cursor_pos()) + top_voice.transpose then
+	local edit_value = shift_register:read_loop(get_cursor_pos()) + top_voice.transpose
+	if n == self.scale:get_nearest_pitch(edit_value) then
 		if blink_fast then
 			level = 15
 		else
@@ -657,9 +659,9 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_transpose', v),
 			name = string.format('voice %d transpose', v),
-			controlspec = controlspec.new(-48, 48, 'lin', 1, 0, 'st'),
+			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
 			action = function(value)
-				voice.transpose = value / scale.length
+				voice.transpose = value
 				update_voice(v)
 				dirty = true
 				config_dirty = true
@@ -752,22 +754,6 @@ function add_params()
 						saved_masks = data.masks
 						mask_dirty = true
 					end
-					if data.transpositions ~= nil then
-						saved_configs = {}
-						for c, transposition in ipairs(data.transpositions) do
-							local config = {}
-							for v = 1, n_voices do
-								config[v] = {
-									offset = 0,
-									transpose = transposition[v],
-									scramble = 0,
-									direction = 1
-								}
-							end
-							saved_configs[c] = config
-						end
-						config_dirty = true
-					end
 					if data.configs ~= nil then
 						saved_configs = data.configs
 						config_dirty = true
@@ -800,7 +786,7 @@ function init()
 
 	-- initialize voices
 	for v = 1, n_voices do
-		voices[v] = ShiftRegisterVoice.new(v * -3, shift_register)
+		voices[v] = ShiftRegisterVoice.new(v * -3, shift_register, scale)
 	end
 	top_voice = voices[top_voice_index]
 

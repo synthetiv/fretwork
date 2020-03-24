@@ -42,19 +42,19 @@ function Scale:set_mask(mask)
 	for p = 1, self.length do
 		self.mask[p] = mask[p] or false
 	end
-	self:update_mask_values()
+	self:update_mask_pitches()
 end
 
-function Scale:update_mask_values()
+function Scale:update_mask_pitches()
 	local i = 1
-	self.mask_values = {}
+	self.mask_pitches = {}
 	for p = 1, n_values do
 		if self.mask[(p - 1) % self.length + 1] then
-			self.mask_values[i] = self.values[p]
+			self.mask_pitches[i] = p
 			i = i + 1
 		end
 	end
-	self.n_mask_values = #self.mask_values
+	self.n_mask_pitches = #self.mask_pitches
 end
 
 function Scale:get_mask()
@@ -75,13 +75,13 @@ end
 
 function Scale:set_class(pitch, enable)
 	self.mask[self:get_pitch_class(pitch)] = enable
-	self:update_mask_values()
+	self:update_mask_pitches()
 end
 
 function Scale:toggle_class(pitch)
 	local pitch_class = self:get_pitch_class(pitch)
 	self.mask[pitch_class] = not self.mask[pitch_class]
-	self:update_mask_values()
+	self:update_mask_pitches()
 end
 
 function Scale.ubound(t, v)
@@ -106,38 +106,68 @@ function Scale.ubound(t, v)
 	return i
 end
 
-function Scale:snap(value)
-	local pitch = 1
-	local next_pitch = 1
+local function binary_search(first, last, v, predicate)
+	local i = 1
+	local j = 1
 	local step = 0
-	local count = self.n_mask_values - 1
+	local count = last - first
 	while count > 0 do
-		next_pitch = pitch
 		step = math.floor(count / 2)
-		next_pitch = next_pitch + step
-		if self.mask_values[next_pitch] <= value then
-			pitch = next_pitch + 1
-			count = count - step - 1
-		else
+		i = j + step
+		if predicate(i, v) then
 			count = step
+		else
+			j = i + 1
+			count = count - step - 1
 		end
 	end
-	local upper_pitch = math.max(1, math.min(self.n_mask_values, pitch))
-	local lower_pitch = math.max(1, math.min(self.n_mask_values, pitch - 2))
+	return j
+end
+
+local function get_nearest(last, v, predicate)
+	local first = last - 2
 	local best_distance = 2 -- octaves; distances between pitch classes certainly ought to be smaller than this
-	for p = lower_pitch, upper_pitch do
-		local distance = math.abs(value - self.mask_values[p])
+	local j = first
+	for i = first, last do
+		local distance = math.abs(v - predicate(i))
 		if distance < best_distance then
 			best_distance = distance
-			pitch = p
+			j = i
 		end
 	end
-	return self.mask_values[pitch]
+	return j
+end
+
+function Scale:get_nearest_pitch(value)
+	local pitch = binary_search(1, n_values, value, function(i, v)
+		return self.values[i] > value
+	end)
+	pitch = get_nearest(pitch, value, function(i)
+		return self.values[p] or 2
+	end)
+	return pitch
+end
+
+function Scale:get_nearest_mask_pitch(value)
+	local mask_pitch = binary_search(1, self.n_mask_pitches, value, function(i, v)
+		return self.values[self.mask_pitches[i]] > value
+	end)
+	mask_pitch = get_nearest(mask_pitch, value, function(i)
+		return self.mask_pitches[i] ~= null and self.values[self.mask_pitches[i]] or 2
+	end)
+	return self.mask_pitches[mask_pitch]
 end
 
 function Scale:get(pitch)
-	print('get ' .. pitch)
 	return self.values[pitch]
+end
+
+function Scale:snap_raw(value)
+	return self:get(self:get_nearest_pitch(value))
+end
+
+function Scale:snap(value)
+	return self:get(self:get_nearest_mask_pitch(value))
 end
 
 return Scale

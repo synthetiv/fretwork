@@ -3,13 +3,14 @@ local random_queue_size = 127 -- prime, so SR loop and random queues are never i
 local ShiftRegisterVoice = {}
 ShiftRegisterVoice.__index = ShiftRegisterVoice
 
-ShiftRegisterVoice.new = function(pos, shift_register)
+ShiftRegisterVoice.new = function(pos, shift_register, scale)
 	local voice = setmetatable({}, ShiftRegisterVoice)
 	voice.transpose = 0
 	voice.value = 0
 	voice.value_quantized = 0
 	voice.pos = pos
 	voice.shift_register = shift_register
+	voice.scale = scale
 	voice.scramble = 0
 	voice.direction = 1
 	voice.random_index = 1
@@ -34,7 +35,9 @@ function ShiftRegisterVoice:get_random(i)
 end
 
 function ShiftRegisterVoice:update_value()
-	self.value = self:get(0)
+	self.value_raw = self:get(0) -- unquantized
+	self.pitch = self.scale:get_nearest_mask_pitch(self.value_raw)
+	self.value = self.scale:get(self.pitch)
 end
 
 function ShiftRegisterVoice:shift(d)
