@@ -108,8 +108,8 @@ end
 
 -- TODO: obviously this won't be accurate for non-12TET scales
 function Keyboard:is_white_key(n)
-	local pitch = (n - 1) % 12 + 1
-	return (pitch == 2 or pitch == 4 or pitch == 5 or pitch == 7 or pitch == 9 or pitch == 11 or pitch == 12)
+	local class = (n - self.scale.center_pitch - 1) % 12 + 1
+	return (class == 1 or class == 3 or class == 5 or class == 6 or class == 8 or class == 10 or class == 12)
 end
 
 return Keyboard
