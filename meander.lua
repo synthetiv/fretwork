@@ -1015,10 +1015,10 @@ function enc(n, d)
 				end
 			end
 		elseif key_shift then
-			-- change head randomness
+			-- change voice randomness
 			params_multi_delta('voice_%d_scramble', voice_selector.selected, d)
 		else
-			-- transpose head(s)
+			-- transpose voice(s)
 			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
 		end
 	end
