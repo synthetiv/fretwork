@@ -227,8 +227,6 @@ function sample_pitch()
 			pos = shift_register.head,
 			pitch = write_pitch
 		}
-	else
-		print(string.format('skipping write (probability = %d)', prob - 1))
 	end
 	update_voices()
 	dirty = true
