@@ -216,6 +216,8 @@ function sample_pitch()
 	if prob > math.random(1, 100) then
 		local write_pitch = get_sample_pitch()
 		if not write_pitch then
+			update_voices()
+			dirty = true
 			return
 		end
 		shift_register:write_head(write_pitch)
