@@ -68,10 +68,18 @@ source_crow = 3
 source_grid_pitch = 4
 source_grid_crow = 5
 
+noop = function() end
+events = {
+	beat = noop,
+	trigger1 = noop,
+	trigger2 = noop,
+	key = noop
+}
+
 beatclock = BeatClock.new()
 beatclock.on_step = function()
 	if beatclock.step == 0 or beatclock.step == 2 then
-		sample_pitch()
+		events.beat()
 	end
 end
 
@@ -199,7 +207,7 @@ function update_voices()
 	end
 end
 
-function get_sample_pitch()
+function get_write_value()
 	-- TODO: watch debug output
 	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		print(string.format('writing grid pitch (source = %d)', source))
@@ -215,40 +223,40 @@ function get_sample_pitch()
 	return false
 end
 
-function sample_pitch()
-	shift_register:shift(1)
-	move_cursor(-1)
-	for v = 1, n_voices do
-		voices[v]:shift(1)
-	end
+function maybe_write()
 	local prob = params:get('write_probability')
 	if prob > math.random(1, 100) then
-		local write_pitch = get_sample_pitch()
-		if not write_pitch then
-			update_voices()
-			dirty = true
+		local value = get_write_value()
+		if not value then
 			return
 		end
-		shift_register:write_head(write_pitch)
+		shift_register:write_head(value)
 		last_write = last_write % n_recent_writes + 1
 		recent_writes[last_write] = {
 			level = 15,
 			pos = shift_register.head,
-			pitch = write_pitch
+			value = value
 		}
 	end
+end
+
+function shift(d)
+	shift_register:shift(d)
+	move_cursor(-d) -- TODO: why isn't this wrapping?
+	for v = 1, n_voices do
+		voices[v]:shift(d)
+	end
+	maybe_write()
 	update_voices()
 	dirty = true
 end
 
+function advance()
+	shift(1)
+end
+
 function rewind()
-	shift_register:shift(-1)
-	move_cursor(1)
-	for v = 1, n_voices do
-		voices[v]:shift(-1)
-	end
-	update_voices()
-	dirty = true
+	shift(-1)
 end
 
 function update_active_heads(last_voice)
@@ -416,9 +424,7 @@ function grid_key(x, y, z)
 			local previous_note = keyboard:get_last_pitch()
 			keyboard:note(x, y, z)
 			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch() or z == 1) then
-				if clock_mode == clock_mode_grid or clock_mode == clock_mode_trig_grid then
-					sample_pitch()
-				end
+				events.key()
 			end
 		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
 			if z == 1 then
@@ -559,9 +565,10 @@ function crow_setup()
 	crow.clear()
 	-- input modes will be set by params
 	crow.input[1].change = function()
-		if clock_mode == clock_mode_trig or clock_mode == clock_mode_trig_grid then
-			sample_pitch()
-		end
+		events.trigger1()
+	end
+	crow.input[2].change = function()
+		events.trigger2()
 	end
 	crow.input[1].stream = function(value) -- not used... yet!
 		crow_in_values[1] = value
@@ -586,14 +593,23 @@ function add_params()
 		default = clock_mode_beatclock,
 		action = function(value)
 			clock_mode = value
+			if clock_mode == clock_mode_grid or clock_mode == clock_mode_trig_grid then
+				events.key = advance
+			else
+				events.key = noop
+			end
 			if clock_mode == clock_mode_trig or clock_mode == clock_mode_trig_grid then
+				events.trigger1 = advance
 				crow.input[1].mode('change', 2.0, 0.25, 'rising')
 			else
+				events.trigger1 = noop
 				crow.input[1].mode('none')
 			end
 			if clock_mode == clock_mode_beatclock then
+				events.beat = advance
 				beatclock:start()
 			else
+				events.beat = noop
 				beatclock:stop()
 			end
 		end
@@ -909,7 +925,7 @@ function key_shift_clock(n)
 	if n == 2 then
 		rewind()
 	elseif n == 3 then
-		sample_pitch()
+		advance()
 	end
 end
 
@@ -1176,7 +1192,7 @@ function redraw()
 			for n = 1, n_screen_notes do
 				local note = screen_notes[top_voice_index][n]
 				if shift_register:clamp_loop_pos(note.pos) == shift_register:clamp_loop_pos(write.pos) then
-					draw_input(note.x, get_screen_note_y(scale:snap(write.pitch + top_voice.transpose)), write.level)
+					draw_input(note.x, get_screen_note_y(scale:snap(write.value + top_voice.transpose)), write.level)
 				end
 			end
 			write.level = math.floor(write.level * 0.7)
