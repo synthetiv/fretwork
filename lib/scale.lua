@@ -84,28 +84,6 @@ function Scale:toggle_class(pitch)
 	self:update_mask_pitches()
 end
 
-function Scale.ubound(t, v)
-	local i = 1
-	local next_i = 1
-	local step = 0
-	local count = #t - 1
-	while count > 0 do
-		next_i = i
-		step = math.floor(count / 2)
-		next_i = next_i + step
-		print(string.format('count: %d; i: %d; step: %d; next: %d', count, i, step, next_i))
-		if t[next_i] <= v then
-			print('next <= v')
-			i = next_i + 1
-			count = count - step - 1
-		else
-			print('next > v')
-			count = step
-		end
-	end
-	return i
-end
-
 local function binary_search(first, last, v, predicate)
 	local i = 1
 	local j = 1
@@ -143,7 +121,7 @@ function Scale:get_nearest_pitch(value)
 		return self.values[i] > value
 	end)
 	pitch = get_nearest(pitch, value, function(i)
-		return self.values[p] or 2
+		return self.values[i] or 2
 	end)
 	return pitch
 end

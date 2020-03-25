@@ -312,7 +312,7 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
-				level = math.max(level, 5)
+				level = math.max(level, 7)
 			end
 		end
 	end
@@ -335,11 +335,11 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	end
 	-- highlight voice notes
 	for v = 1, n_voices do
-		if n == voices[v].note_snapped then
+		if n == voices[v].pitch then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
-				level = math.max(level, 5)
+				level = math.max(level, 7)
 			end
 		end
 	end
@@ -357,8 +357,8 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 		if n == self.scale:get_nearest_pitch(voices[v].transpose) then
 			if voice_selector:is_selected(v) then
 				level = 10
-			elseif level < 5 then
-				level = 5
+			else
+				level = math.max(level, 5)
 			end
 		end
 	end
