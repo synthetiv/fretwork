@@ -24,7 +24,6 @@ function Keyboard.new(x, y, width, height, scale)
 end
 
 function Keyboard:get_key_pitch(x, y)
-	-- TODO: update to return [-n, n] instead of [0, 2n]
 	if not self:should_handle_key(x, y) then
 		return nil
 	end

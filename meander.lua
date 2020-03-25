@@ -31,8 +31,7 @@ end
 -- end
 -- TODO: add uneven/JI scales
 scale = Scale.new(et12)
-saved_masks = {} -- TODO: save with params... somehow
--- idea: use a 'data file' param, so it can be changed; the hardest part will be naming new files, I think
+saved_masks = {}
 mask_dirty = false
 mask_selector = Select.new(1, 3, 4, 4)
 
@@ -48,7 +47,6 @@ memory_mask = 1
 memory_config = 2
 memory_loop = 3
 
--- TODO: save/recall offsets too... if they could be set by grid then they could be stored with configs
 -- TODO: save/recall mask, loop, and config all at once
 
 shift_register = ShiftRegister.new(32)
@@ -60,7 +58,7 @@ source_names = {
 	'crow input 2',
 	'grid OR pitch',
 	'grid OR crow'
-	-- TODO: random too?
+	-- TODO: random, LFO
 }
 source_grid = 1
 source_pitch = 2
@@ -770,6 +768,7 @@ function add_params()
 		id = 'restore_memory',
 		name = 'restore memory',
 		action = function()
+			-- TODO: allow multiple memory files, using a 'data file' param
 			local data_file = norns.state.data .. 'memory.lua'
 			if util.file_exists(data_file) then
 				local data, errorMessage = tab.load(data_file)
