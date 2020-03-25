@@ -5,6 +5,7 @@ engine.name = 'PolySub'
 polysub = require 'we/lib/polysub'
 
 musicutil = require 'musicutil'
+BeatClock = require 'beatclock'
 
 Keyboard = include 'lib/grid_keyboard'
 Select = include 'lib/grid_select'
@@ -67,17 +68,25 @@ source_crow = 3
 source_grid_pitch = 4
 source_grid_crow = 5
 
--- TODO: add internal clock using beatclock
+beatclock = BeatClock.new()
+beatclock.on_step = function()
+	if beatclock.step == 0 or beatclock.step == 2 then
+		sample_pitch()
+	end
+end
+
 -- TODO: clock from MIDI notes
 clock_mode = 1
 clock_mode_names = {
 	'crow input 1',
 	'grid',
-	'crow in OR grid'
+	'crow in OR grid',
+	'beatclock'
 }
 clock_mode_trig = 1
 clock_mode_grid = 2
 clock_mode_trig_grid = 3
+clock_mode_beatclock = 4
 
 voices = {}
 n_voices = 4
@@ -407,7 +416,7 @@ function grid_key(x, y, z)
 			local previous_note = keyboard:get_last_pitch()
 			keyboard:note(x, y, z)
 			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch() or z == 1) then
-				if clock_mode ~= clock_mode_trig then
+				if clock_mode == clock_mode_grid or clock_mode == clock_mode_trig_grid then
 					sample_pitch()
 				end
 			end
@@ -549,7 +558,7 @@ function crow_setup()
 	crow.clear()
 	-- input modes will be set by params
 	crow.input[1].change = function()
-		if clock_mode ~= clock_mode_grid then
+		if clock_mode == clock_mode_trig or clock_mode == clock_mode_trig_grid then
 			sample_pitch()
 		end
 	end
@@ -565,12 +574,37 @@ end
 function add_params()
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control
+
+	-- TODO: group params better
+	params:add_group('clock', 4)
+	params:add{
+		type = 'option',
+		id = 'shift_clock',
+		name = 'sr/s+h clock',
+		options = clock_mode_names,
+		default = clock_mode_beatclock,
+		action = function(value)
+			clock_mode = value
+			if clock_mode == clock_mode_trig or clock_mode == clock_mode_trig_grid then
+				crow.input[1].mode('change', 2.0, 0.25, 'rising')
+			else
+				crow.input[1].mode('none')
+			end
+			if clock_mode == clock_mode_beatclock then
+				beatclock:start()
+			else
+				beatclock:stop()
+			end
+		end
+	}
+	beatclock:add_clock_params()
+
 	params:add{
 		type = 'option',
 		id = 'shift_source',
 		name = 'sr source',
 		options = source_names,
-		default = source_grid_pitch,
+		default = source_grid,
 		action = function(value)
 			source = value
 			if source == source_crow then
@@ -590,21 +624,6 @@ function add_params()
 		end,
 		action = function(value)
 			show_info()
-		end
-	}
-	params:add{
-		type = 'option',
-		id = 'shift_clock',
-		name = 'sr/s+h clock',
-		options = clock_mode_names,
-		default = clock_mode_trig_grid,
-		action = function(value)
-			clock_mode = value
-			if clock_mode ~= clock_mode_grid then
-				crow.input[1].mode('change', 2.0, 0.25, 'rising')
-			else
-				crow.input[1].mode('none')
-			end
 		end
 	}
 	params:add{
@@ -780,10 +799,15 @@ function init()
 	end
 	top_voice = voices[top_voice_index]
 
-	polysub.params()
-	params:set('level', 0.002) -- be gentle (TODO: why is it SO loud otherwise?)
-	params:add_separator()
 	add_params()
+	params:add_separator()
+	params:add_group('ENGINE', 19)
+	polysub.params()
+	-- params:set('detune', 0.17)
+	params:set('hzlag', 0.02)
+	params:set('cut', 8.32)
+	params:set('fgain', 1.26)
+	params:set('level', 0.002) -- be gentle (TODO: why is it SO loud otherwise?)
 
 	info_metro = metro.init()
 	info_metro.event = function()
