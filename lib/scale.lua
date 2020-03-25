@@ -54,7 +54,14 @@ function Scale:update_mask_pitches()
 			i = i + 1
 		end
 	end
-	self.n_mask_pitches = #self.mask_pitches
+	self.n_mask_pitches = i - 1
+	local enabled_pitches = 0
+	for p = 1, self.length do
+		if self.mask[p] then
+			enabled_pitches = enabled_pitches + 1
+		end
+	end
+	self.n_enabled_pitches = enabled_pitches
 end
 
 function Scale:get_mask()
@@ -80,6 +87,12 @@ end
 
 function Scale:toggle_class(pitch)
 	local pitch_class = self:get_pitch_class(pitch)
+	-- don't let the user disable the last remaining pitch
+	-- TODO: if we were using z/gates, then this wouldn't have to cause errors -- could just silence all voices
+	print(self.n_mask_pitches)
+	if self.n_enabled_pitches <= 1 and self.mask[pitch_class] then
+		return
+	end
 	self.mask[pitch_class] = not self.mask[pitch_class]
 	self:update_mask_pitches()
 end
