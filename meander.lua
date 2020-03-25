@@ -538,6 +538,7 @@ function midi_event(data)
 end
 
 function update_freq(value)
+	-- TODO: better check amplitude too -- this detects a 'pitch' when there's no audio input
 	pitch_in_detected = value > 0
 	if pitch_in_detected then
 		pitch_in_value = math.log(value / 440.0) / math.log(2) + 3.75 + pitch_in_octave
