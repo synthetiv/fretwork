@@ -182,10 +182,10 @@ function save_config()
 	local config = {}
 	for v = 1, n_voices do
 		config[v] = {
-			offset = voices[v].pos - shift_register.head,
+			offset = voices[v].tap:get_loop_offset(0),
 			transpose = voices[v].transpose,
 			scramble = voices[v].scramble,
-			direction = voices[v].direction
+			direction = voices[v].tap.direction
 		}
 	end
 	saved_configs[config_selector.selected] = config
@@ -195,8 +195,10 @@ end
 function update_voice(v)
 	local voice = voices[v]
 	voice:update_value()
-	engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.value * 12))
-	crow.output[v].volts = voice.value
+	if voice.value ~= null then
+		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.value * 12))
+		crow.output[v].volts = voice.value
+	end
 end
 
 function update_voices()
@@ -710,7 +712,7 @@ function add_params()
 				'retrograde'
 			},
 			action = function(value)
-				voice.direction = value == 2 and -1 or 1
+				voice.tap.direction = value == 2 and -1 or 1
 				dirty = true
 				config_dirty = true
 			end
@@ -800,6 +802,9 @@ function add_params()
 		action = function()
 			local data_file = norns.state.data .. 'memory.lua'
 			local data = {}
+			-- TODO: convert saved masks to tables of continuum values:
+			-- { 0, 0.13, 0.9 } not { pitch ID = true/false }
+			-- this would make switching between microtonal scales less painful
 			data.masks = saved_masks
 			data.configs = saved_configs
 			data.loops = saved_loops
@@ -1061,6 +1066,9 @@ function get_screen_offset_x(offset)
 end
 
 function get_screen_note_y(value)
+	if value == null then
+		return -1
+	end
 	return util.round(32 + (keyboard.octave - value) * scale.length)
 end
 
@@ -1131,7 +1139,7 @@ function draw_voice_path(v, level)
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		if note.offset == 0 then
-			if voices[v].direction == 1 then
+			if voices[v].tap.direction == 1 then
 				screen.pixel(note.x + 3, note.y)
 			else
 				screen.pixel(note.x + 1, note.y)
@@ -1175,7 +1183,7 @@ function redraw()
 	end
 
 	local function draw_input(x, y, level)
-		local offset = top_voice.direction == 1 and 2 or -2
+		local offset = top_voice.tap.direction == 1 and 2 or -2
 		screen.rect(x + offset, y - 2, 5, 5)
 		screen.level(0)
 		screen.fill()
@@ -1265,7 +1273,7 @@ function redraw()
 		screen.move(0, 43)
 		screen.text(string.format('S: %.1f', top_voice.scramble))
 
-		screen.level(shift_register.direction == -1 and 15 or 2)
+		screen.level(top_voice.tap.direction == -1 and 15 or 2)
 		screen.move(0, 52)
 		screen.text('Ret.')
 	end

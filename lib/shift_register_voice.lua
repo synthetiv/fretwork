@@ -1,4 +1,5 @@
-local random_queue_size = 127 -- prime, so SR loop and random queues are never in phase
+local ShiftRegisterTap = include 'lib/shift_register_tap'
+local RandomQueue = include 'lib/random_queue'
 
 local ShiftRegisterVoice = {}
 ShiftRegisterVoice.__index = ShiftRegisterVoice
@@ -9,53 +10,31 @@ ShiftRegisterVoice.new = function(pos, shift_register, scale)
 	voice.value_raw = 0
 	voice.pitch = 1
 	voice.value = 0
-	voice.pos = pos
-	voice.shift_register = shift_register
+	voice.tap = ShiftRegisterTap.new(pos, shift_register)
 	voice.scale = scale
 	voice.scramble = 0
-	voice.direction = 1
-	voice.random_index = 1
-	voice.random_queue = {}
-	for i = 1, random_queue_size do
-		voice:set_random(i)
-	end
+	voice.random_queue = RandomQueue.new(127) -- prime length, so SR loop and random queues are rarely in phase
 	return voice
 end
 
-function ShiftRegisterVoice:get_random_index(i)
-	local index = (self.random_index + i * self.direction - 1) % random_queue_size + 1
-	return index
-end
-
-function ShiftRegisterVoice:set_random(i)
-	self.random_queue[self:get_random_index(i)] = math.random() * 2 - 1
-end
-
-function ShiftRegisterVoice:get_random(i)
-	return self.random_queue[self:get_random_index(i)]
-end
-
 function ShiftRegisterVoice:update_value()
-	self.value_raw = self:get(0) -- unquantized
+	self.value_raw = self.tap:get(0) -- unquantized
 	self.pitch = self.scale:get_nearest_mask_pitch(self.value_raw)
 	self.value = self.scale:get(self.pitch)
 end
 
 function ShiftRegisterVoice:shift(d)
-	self.random_index = (self.random_index + d * self.direction - 1) % random_queue_size + 1
-	self.pos = self.shift_register:clamp_loop_pos(self.pos + d * self.direction)
-	-- TODO: re-randomize a random value that isn't visible on screen
-	-- (right now each voice just has a set of fixed random values, which is better than nothing but not ideal)
+	self.random_queue:shift(d)
+	self.tap:shift(d)
 	self:update_value()
 end
 
 function ShiftRegisterVoice:get_pos(t)
-	local random = self:get_random(t)
-	return t * self.direction + self.pos + util.round(random * self.scramble)
+	return t + self.pos + util.round(self.random_queue:get(t) * self.scramble)
 end
 
 function ShiftRegisterVoice:get(t)
-	return self.shift_register:read_loop(self:get_pos(t)) + self.transpose
+	return self.tap:get(self:get_pos(t)) + self.transpose
 end
 
 function ShiftRegisterVoice:get_path(start_offset, end_offset)
@@ -65,7 +44,7 @@ function ShiftRegisterVoice:get_path(start_offset, end_offset)
 		local pos = self:get_pos(start_offset + n)
 		path[n] = {
 			pos = pos,
-			offset = self.shift_register:clamp_loop_offset(pos - self.shift_register.head),
+			offset = self.tap:get_loop_offset(pos),
 			value = self:get(start_offset + n)
 		}
 	end
