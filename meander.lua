@@ -418,6 +418,7 @@ end
 
 function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
+		-- TODO: use events here too, maybe?
 		if grid_mode == grid_mode_play and not grid_shift then
 			local previous_note = keyboard:get_last_pitch()
 			keyboard:note(x, y, z)
