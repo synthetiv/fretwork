@@ -824,7 +824,7 @@ function init()
 	params:set('hzlag', 0.02)
 	params:set('cut', 8.32)
 	params:set('fgain', 1.26)
-	params:set('level', 0.002) -- be gentle (TODO: why is it SO loud otherwise?)
+	params:set('output_level', -36)
 
 	info_metro = metro.init()
 	info_metro.event = function()
