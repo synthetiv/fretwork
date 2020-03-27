@@ -184,7 +184,7 @@ function save_config()
 		config[v] = {
 			offset = voices[v].tap:get_loop_offset(0),
 			transpose = voices[v].transpose,
-			scramble = voices[v].scramble,
+			scramble = voices[v].tap.scramble,
 			direction = voices[v].tap.direction
 		}
 	end
@@ -698,7 +698,7 @@ function add_params()
 			name = string.format('voice %d scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
-				voice.scramble = value
+				voice.tap.scramble = value
 				dirty = true
 				config_dirty = true
 			end
@@ -1271,7 +1271,7 @@ function redraw()
 		screen.text(string.format('T: %.2f', top_voice.transpose))
 
 		screen.move(0, 43)
-		screen.text(string.format('S: %.1f', top_voice.scramble))
+		screen.text(string.format('S: %.1f', top_voice.tap.scramble))
 
 		screen.level(top_voice.tap.direction == -1 and 15 or 2)
 		screen.move(0, 52)
