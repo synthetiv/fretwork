@@ -34,6 +34,11 @@ function ShiftRegisterTap:shift(d)
 	self.pos = self.shift_register:clamp_loop_pos(self.pos + d)
 end
 
+function ShiftRegisterTap:set(t, value)
+	local pos = self:get_pos(t)
+	self.shift_register:write_loop(pos, value)
+end
+
 function ShiftRegisterTap:get_loop_offset(t)
 	t = t * self.direction
 	return self.shift_register:clamp_loop_offset(t - self.shift_register.head)

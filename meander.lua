@@ -122,7 +122,6 @@ screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
 screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
 screen_notes = { {}, {}, {}, {} }
-cursor = 0
 
 recent_writes = { nil, nil, nil, nil, nil, nil, nil, nil }
 n_recent_writes = 8
@@ -150,16 +149,17 @@ function save_mask()
 end
 
 function recall_loop()
-	-- TODO: convert existing saved loop(s) to continuum / v/oct format instead of MIDI notes
+	-- TODO: queue up the recalled loop to start on the NEXT clock tick, unless Ctrl held
+	-- or, think of it as quantizing save/recall events, so they only happen on a tick, or every 4 ticks, or...
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	shift_register:set_loop(cursor, saved_loops[loop_selector.selected])
+	shift_register:set_loop(0, saved_loops[loop_selector.selected])
 	shift_register.dirty = false
 end
 
 function save_loop()
-	saved_loops[loop_selector.selected] = shift_register:get_loop(cursor)
+	saved_loops[loop_selector.selected] = shift_register:get_loop(0)
 	shift_register.dirty = false
 end
 
@@ -211,7 +211,7 @@ function get_write_value()
 	-- TODO: watch debug output
 	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		print(string.format('writing grid pitch (source = %d)', source))
-		return input_keyboard:get_last_value() - top_voice.transpose
+		return input_keyboard:get_last_value()
 	elseif source == source_pitch or source == source_grid_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
 		return pitch_in_value
@@ -230,19 +230,25 @@ function maybe_write()
 		if not value then
 			return
 		end
-		shift_register:write_head(value)
-		last_write = last_write % n_recent_writes + 1
-		recent_writes[last_write] = {
-			level = 15,
-			pos = shift_register.head,
-			value = value
-		}
+		for v = 1, n_voices do
+			-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
+			if voice_selector:is_selected(v) then
+				local voice = voices[v]
+				voice:set(0, value)
+				-- TODO: is this useful?
+				last_write = last_write % n_recent_writes + 1
+				recent_writes[last_write] = {
+					level = 15,
+					pos = voice.tap:get_pos(0),
+					value = value - voice.transpose
+				}
+			end
+		end
 	end
 end
 
 function shift(d)
 	shift_register:shift(d)
-	move_cursor(-d) -- TODO: why isn't this wrapping?
 	for v = 1, n_voices do
 		voices[v]:shift(d)
 	end
@@ -259,7 +265,7 @@ function rewind()
 	shift(-1)
 end
 
-function update_active_heads(last_voice)
+function update_active_heads(last_voice) -- TODO: rename this, wtf
 	if last_voice then
 		local new_draw_order = {}
 		for i, o in ipairs(voice_draw_order) do
@@ -308,10 +314,6 @@ function grid_redraw()
 	-- keyboard
 	keyboard:draw(g)
 	g:refresh()
-end
-
-function get_cursor_pos()
-	return top_voice:get_pos(cursor)
 end
 
 key_level_callbacks = {}
@@ -383,28 +385,6 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 end
 
 key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
-	local level = 0
-	-- highlight mask
-	if self.scale:contains(n) then
-		level = 3
-	end
-	-- highlight transposed voice notes
-	for i, v in ipairs(voice_draw_order) do
-		local voice_value = shift_register:read_loop(voices[v]:get_pos(cursor)) + voices[v].transpose
-		if n == self.scale:get_nearest_mask_pitch(voice_value) then
-			level = i == 4 and 10 or 7 -- top voice is brighter than others
-		end
-	end
-	-- highlight + blink the un-snapped note we're editing
-	local edit_value = shift_register:read_loop(get_cursor_pos()) + top_voice.transpose
-	if n == self.scale:get_nearest_pitch(edit_value) then
-		if blink_fast then
-			level = 15
-		else
-			level = 14
-		end
-	end
-	return level
 end
 
 function grid_octave_key(z, d)
@@ -450,18 +430,6 @@ function grid_key(x, y, z)
 				end
 			end
 		elseif grid_mode == grid_mode_edit then
-			keyboard:note(x, y, z)
-			if keyboard.gate then
-				local note = keyboard:get_last_value() - top_voice.transpose
-				shift_register:write_loop(get_cursor_pos(), note)
-				-- update voices immediately, if appropriate
-				for v = 1, n_voices do
-					local voice = voices[v]
-					if shift_register:get_loop_pos(voice:get_pos(0)) == shift_register:get_loop_pos(voice:get_pos(cursor)) then
-						update_voice(v)
-					end
-				end
-			end
 		end
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
@@ -495,29 +463,36 @@ function grid_key(x, y, z)
 		memory_selector:key(x, y, z)
 	elseif memory_selector:is_selected(memory_mask) and mask_selector:should_handle_key(x, y) then
 		mask_selector:key(x, y, z)
-		if grid_shift then
-			save_mask()
-		else
-			recall_mask()
-			if grid_ctrl then
-				update_voices()
+		-- TODO: these should be callbacks/handlers, properties on the selector objects
+		if z == 1 then
+			if grid_shift then
+				save_mask()
+			else
+				recall_mask()
+				if grid_ctrl then
+					update_voices()
+				end
 			end
 		end
 	elseif memory_selector:is_selected(memory_config) and config_selector:should_handle_key(x, y) then
 		config_selector:key(x, y, z)
-		if grid_shift then
-			save_config()
-		else
-			recall_config()
+		if z == 1 then
+			if grid_shift then
+				save_config()
+			else
+				recall_config()
+			end
 		end
 	elseif memory_selector:is_selected(memory_loop) and loop_selector:should_handle_key(x, y) then
 		loop_selector:key(x, y, z)
-		if grid_shift then
-			save_loop()
-		else
-			recall_loop()
-			if grid_ctrl then
-				update_voices()
+		if z == 1 then
+			if grid_shift then
+				save_loop()
+			else
+				recall_loop()
+				if grid_ctrl then
+					update_voices()
+				end
 			end
 		end
 	elseif x == 1 and y == 7 then
@@ -934,39 +909,12 @@ function key_shift_clock(n)
 	end
 end
 
-function move_cursor(d)
-	local old_cursor = cursor
-	cursor = cursor + d
-	dirty = true
-	-- if cursor is at either screen edge, wrap to the nearest multiple of loop length
-	if (d < 0 and cursor <= -screen_note_center) or (d > 0 and cursor > n_screen_notes - screen_note_center) then
-		local wrap_length = n_screen_notes - (n_screen_notes % shift_register.length)
-		cursor = cursor + (wrap_length * -d)
-	end
-end
-
-function key_move_cursor(n)
-	if n == 2 then
-		move_cursor(-1)
-	elseif n == 3 then
-		move_cursor(1)
-	end
-end
-
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
 		show_info()
 	elseif z == 1 then
-		if grid_mode == grid_mode_play then
-			key_shift_clock(n)
-		elseif grid_mode == grid_mode_mask then
-			key_shift_clock(n)
-		elseif grid_mode == grid_mode_transpose then
-			key_shift_clock(n)
-		elseif grid_mode == grid_mode_edit then
-			key_move_cursor(n)
-		end
+		key_shift_clock(n)
 	end
 	dirty = true
 end
@@ -1023,34 +971,18 @@ function enc(n, d)
 			params:delta('write_probability', d)
 		end
 	elseif n == 2 then
-		if grid_mode == grid_mode_edit then
-			-- move cursor
-			move_cursor(d)
-		else
-			-- shift voices
-			-- TODO: somehow do this more slowly / make it less sensitive?
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					voices[v]:shift(-d)
-					update_voice(v)
-				end
+		-- shift voices
+		-- TODO: somehow do this more slowly / make it less sensitive?
+		for v = 1, n_voices do
+			if voice_selector:is_selected(v) then
+				voices[v]:shift(-d)
+				update_voice(v)
 			end
-			config_dirty = true
-			dirty = true
 		end
+		config_dirty = true
+		dirty = true
 	elseif n == 3 then
-		if grid_mode == grid_mode_edit then
-			-- change note at cursor
-			local current_note = shift_register:read_loop(get_cursor_pos())
-			-- TODO: changing by increments of 1/(2*length) might not work so well for JI scales, and it
-			-- might be too sluggish for ET scales. tune for best feel.
-			shift_register:write_loop(get_cursor_pos(), current_note + d / (scale.length * 2))
-			for v = 1, n_voices do
-				if shift_register:get_loop_pos(voices[v]:get_pos(0)) == shift_register:get_loop_pos(voices[v]:get_pos(cursor)) then
-					update_voice(v)
-				end
-			end
-		elseif key_shift then
+		if key_shift then
 			-- change voice randomness
 			params_multi_delta('voice_%d_scramble', voice_selector.selected, d)
 		else
@@ -1092,9 +1024,6 @@ function draw_voice_path(v, level)
 
 	calculate_voice_path(v) -- TODO: don't do this every time, only when it changes
 
-	-- find the note at the shift register's write head
-	local head = screen_note_center - voice.pos + 1
-
 	screen.line_cap('square')
 
 	-- draw background/outline
@@ -1135,20 +1064,6 @@ function draw_voice_path(v, level)
 	end
 	screen.stroke()
 
-	-- add gap(s) for head
-	for n = 1, n_screen_notes do
-		local note = screen_notes[v][n]
-		if note.offset == 0 then
-			if voices[v].tap.direction == 1 then
-				screen.pixel(note.x + 3, note.y)
-			else
-				screen.pixel(note.x + 1, note.y)
-			end
-			screen.level(0)
-			screen.fill()
-		end
-	end
-
 	screen.line_cap('butt')
 end
 
@@ -1159,7 +1074,7 @@ function redraw()
 	screen.font_face(2)
 	screen.font_size(8)
 
-	-- draw vertical output/head indicator
+	-- draw vertical output indicator
 	local output_x = get_screen_offset_x(-1) + 3
 	screen.move(output_x, 0)
 	screen.line(output_x, 64)
@@ -1205,46 +1120,6 @@ function redraw()
 			end
 			write.level = math.floor(write.level * 0.7)
 		end
-	end
-
-	-- draw cursor
-	if grid_mode == grid_mode_edit then
-		local note = screen_notes[top_voice_index][screen_note_center + cursor]
-		local x = note.x
-		local y1 = note.y - 5
-		local y2 = note.y + 5
-		local level = blink_fast and 15 or 7
-		-- clear background/outline
-		screen.rect(x - 1, y1 - 1, 7, 3)
-		screen.rect(x - 1, y2 - 1, 7, 3)
-		screen.rect(x + 1, y1, 3, 5)
-		screen.rect(x + 1, y2 - 4, 3, 5)
-		screen.level(0)
-		screen.fill()
-		-- set level
-		screen.level(level)
-		-- top left cap
-		screen.rect(x, y1, 2, 1)
-		screen.fill()
-		-- top right cap
-		screen.rect(x + 3, y1, 2, 1)
-		screen.fill()
-		-- top stem
-		screen.move(x + 2.5, y1 + 1)
-		screen.line_rel(0, 3)
-		screen.level(level)
-		screen.stroke()
-		-- bottom stem
-		screen.move(x + 2.5, y2)
-		screen.line_rel(0, -3)
-		screen.level(level)
-		screen.stroke()
-		-- bottom left cap
-		screen.rect(x, y2, 2, 1)
-		screen.fill()
-		-- bottom right cap
-		screen.rect(x + 3, y2, 2, 1)
-		screen.fill()
 	end
 
 	if info_visible then

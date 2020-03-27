@@ -29,6 +29,13 @@ function ShiftRegisterVoice:get(t)
 	return self.tap:get(t) + self.transpose
 end
 
+function ShiftRegisterVoice:set(t, value)
+	self.tap:set(t, value - self.transpose)
+	if t == 0 then
+		self:update_value()
+	end
+end
+
 function ShiftRegisterVoice:get_path(start_offset, end_offset)
 	local path = {}
 	local length = end_offset - start_offset
