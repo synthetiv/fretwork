@@ -1046,24 +1046,16 @@ function draw_voice_path(v, level)
 	screen.stroke()
 
 	-- draw foreground/path
+	local note_level = level
 	screen.line_width(1)
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
-		local note_level = level
-		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line; and when current z is low, draw current note as dots
-		-- move or connect from previous note
-		if n == 1 then
-			screen.move(x, y)
-		else
-			screen.line(x, y)
-		end
-		screen.level(note_level)
-		screen.stroke()
-		-- draw this note
-		screen.move(x, y)
-		screen.line(x + screen_note_width, y)
+		-- if this note was just written, brighten it and the connecting line from the previous note
+		local previous_note_level = note_level
+		local connector_level = level
+		note_level = level
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
 			if write ~= nil and write.level > 0 then
@@ -1072,6 +1064,21 @@ function draw_voice_path(v, level)
 				end
 			end
 		end
+		if note_level > previous_note_level then
+			connector_level = util.round((note_level + previous_note_level) / 2)
+		end
+		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line; and when current z is low, draw current note as dots
+		-- move or connect from previous note
+		if n == 1 then
+			screen.move(x, y)
+		else
+			screen.line(x, y)
+		end
+		screen.level(connector_level)
+		screen.stroke()
+		-- draw this note
+		screen.move(x, y)
+		screen.line(x + screen_note_width, y)
 		screen.level(note_level)
 		screen.stroke()
 		screen.move(x + screen_note_width, y)
@@ -1097,7 +1104,12 @@ function redraw()
 
 	-- draw paths
 	for i, v in ipairs(voice_draw_order) do
-		local level = voice_selector:is_selected(v) and 3 + ((i - 1) * 4) or 2
+		local level = 1
+		if v == top_voice_index then
+			level = 15
+		elseif voice_selector:is_selected(v) then
+			level = 4
+		end
 		draw_voice_path(v, level)
 	end
 
