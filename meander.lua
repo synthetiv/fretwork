@@ -42,10 +42,10 @@ config_selector = Select.new(1, 3, 4, 4)
 saved_loops = {}
 loop_selector = Select.new(1, 3, 4, 4)
 
-memory_selector = Select.new(2, 2, 3, 1)
-memory_mask = 1
-memory_config = 2
-memory_loop = 3
+memory_selector = Select.new(1, 2, 3, 1)
+memory_loop = 1
+memory_mask = 2
+memory_config = 3
 
 -- TODO: save/recall mask, loop, and config all at once
 
@@ -103,7 +103,6 @@ top_voice = {}
 grid_mode_play = 1
 grid_mode_mask = 2
 grid_mode_transpose = 3
-grid_mode_edit = 4
 grid_mode = grid_mode_play
 
 voice_selector = MultiSelect.new(5, 3, 1, 4)
@@ -286,7 +285,6 @@ function grid_redraw()
 	g:led(1, 1, grid_mode == grid_mode_play and 7 or 2)
 	g:led(2, 1, grid_mode == grid_mode_mask and 7 or 2)
 	g:led(3, 1, grid_mode == grid_mode_transpose and 7 or 2)
-	g:led(4, 1, grid_mode == grid_mode_edit and 7 or 2)
 
 	-- recall mode buttons
 	memory_selector:draw(g, 7, 2)
@@ -384,9 +382,6 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	return level
 end
 
-key_level_callbacks[grid_mode_edit] = function(self, x, y, n)
-end
-
 function grid_octave_key(z, d)
 	if z == 1 then
 		if grid_octave_key_held then
@@ -429,7 +424,6 @@ function grid_key(x, y, z)
 					end
 				end
 			end
-		elseif grid_mode == grid_mode_edit then
 		end
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
@@ -446,12 +440,9 @@ function grid_key(x, y, z)
 			keyboard = input_keyboard
 		elseif x == 2 then
 			grid_mode = grid_mode_mask
-			keyboard = control_keyboard
+			keyboard = control_keyboard -- TODO: this still feels weird
 		elseif x == 3 then
 			grid_mode = grid_mode_transpose
-			keyboard = control_keyboard
-		elseif x == 4 then
-			grid_mode = grid_mode_edit
 			keyboard = control_keyboard
 		end
 		-- set the grid drawing routine based on new mode
