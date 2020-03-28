@@ -443,10 +443,10 @@ function grid_key(x, y, z)
 		elseif grid_mode == grid_mode_transpose then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local transpose = keyboard:get_last_value()
+				local transpose = keyboard:get_last_value() - top_voice.transpose
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
-						params:set(string.format('voice_%d_transpose', v), transpose)
+						params:set(string.format('voice_%d_transpose', v), voices[v].transpose + transpose)
 					end
 				end
 			end
