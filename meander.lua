@@ -195,7 +195,7 @@ function save_config()
 	for v = 1, n_voices do
 		config[v] = {
 			offset = voices[v].tap:get_loop_offset(0),
-			transpose = voices[v].transpose,
+			transpose = voices[v].edit_transpose,
 			scramble = voices[v].tap.scramble,
 			direction = voices[v].tap.direction
 		}
@@ -271,7 +271,7 @@ function shift(d)
 		voices[v]:shift(d)
 	end
 	maybe_write()
-	scale:apply_edit_mask()
+	scale:apply_edits()
 	update_voices()
 	dirty = true
 end
@@ -396,12 +396,25 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 		level = 2
 	end
 	-- highlight transposition settings
+	-- TODO: show diff between transpose and edit_transpose
 	for v = 1, n_voices do
-		if n == self.scale:get_nearest_pitch_id(voices[v].transpose) then
-			if voice_selector:is_selected(v) then
+		local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
+		local is_edit_transpose = n == self.scale:get_nearest_pitch_id(voices[v].edit_transpose)
+		if voice_selector:is_selected(v) then
+			if is_transpose and is_edit_transpose then
 				level = 10
-			else
-				level = math.max(level, 5)
+			elseif is_edit_transpose then
+				level = math.max(level, 7)
+			elseif is_transpose then
+				level = math.max(level, 3)
+			end
+		else
+			if is_transpose and is_edit_transpose then
+				level = 5
+			elseif is_edit_transpose then
+				level = math.max(level, 4)
+			elseif is_transpose then
+				level = math.max(level, 3)
 			end
 		end
 	end
@@ -434,17 +447,17 @@ function grid_key(x, y, z)
 				scale:toggle_class(n)
 				mask_dirty = true
 				if grid_ctrl then
-					scale:apply_edit_mask()
+					scale:apply_edits()
 					update_voices()
 				end
 			end
 		elseif grid_mode == grid_mode_transpose then
 			keyboard:note(x, y, z)
 			if keyboard.gate then
-				local transpose = keyboard:get_last_value() - top_voice.transpose
+				local transpose = keyboard:get_last_value() - top_voice.edit_transpose
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
-						params:set(string.format('voice_%d_transpose', v), voices[v].transpose + transpose)
+						params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
 					end
 				end
 			end
@@ -676,9 +689,7 @@ function add_params()
 			name = string.format('voice %d transpose', v),
 			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
 			action = function(value)
-				voice.transpose = value
-				update_voice(v)
-				dirty = true
+				voice.edit_transpose = value
 				config_dirty = true
 			end
 		}
@@ -1003,6 +1014,7 @@ function enc(n, d)
 		else
 			-- transpose voice(s)
 			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
+			update_voices()
 		end
 	end
 	dirty = true
@@ -1168,7 +1180,7 @@ function redraw()
 		screen.text(string.format('O: %d', top_voice.pos))
 
 		screen.move(0, 34)
-		screen.text(string.format('T: %.2f', top_voice.transpose))
+		screen.text(string.format('T: %.2f', top_voice.edit_transpose))
 
 		screen.move(0, 43)
 		screen.text(string.format('S: %.1f', top_voice.tap.scramble))

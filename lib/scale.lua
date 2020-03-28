@@ -15,7 +15,7 @@ function Scale.new(pitch_class_values)
 		mask[p] = true
 	end
 	instance.edit_mask = mask
-	instance:apply_edit_mask()
+	instance:apply_edits()
 	return instance
 end
 
@@ -59,7 +59,7 @@ function Scale:set_edit_mask(mask)
 	self.edit_mask = self:copy_mask(mask)
 end
 
-function Scale:apply_edit_mask()
+function Scale:apply_edits()
 	self:set_mask(self.edit_mask)
 end
 
