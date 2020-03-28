@@ -460,6 +460,9 @@ function grid_key(x, y, z)
 						params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
 					end
 				end
+				if grid_ctrl then
+					update_voices()
+				end
 			end
 		end
 	elseif voice_selector:should_handle_key(x, y) then
