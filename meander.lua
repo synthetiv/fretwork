@@ -433,10 +433,8 @@ function grid_key(x, y, z)
 				local n = keyboard:get_key_pitch_id(x, y)
 				scale:toggle_class(n)
 				mask_dirty = true
-				-- TODO: when ctrl is not held, make it visually obvious that the change is pending, rather
-				-- than reflecting change immediately in UI
-				-- maybe in part by pushing a closure onto a queue of actions to take on the next clock tick
 				if grid_ctrl then
+					scale:apply_edit_mask()
 					update_voices()
 				end
 			end
