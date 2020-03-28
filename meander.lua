@@ -207,8 +207,14 @@ function update_voices()
 end
 
 function get_write_value()
-	-- TODO: watch debug output
+	-- TODO: watch debug output using pitch + crow sources to make sure they're working
 	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+		-- TODO: this is good for held keys, but maybe we should also _quantize_ key presses:
+		-- when a key is pressed < 0.5 step after a clock tick, write to the current position and update outputs
+		-- when a key is pressed > 0.5 step after a clock tick, write to the NEXT position
+		-- ...that won't work with irregular clocks, though
+		-- maybe you only perform the write/update on the next tick...?
+		-- that might feel strange unless you can also update voice(s) immediately without writing
 		print(string.format('writing grid pitch (source = %d)', source))
 		return input_keyboard:get_last_value()
 	elseif source == source_pitch or source == source_grid_pitch then

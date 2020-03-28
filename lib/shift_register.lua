@@ -1,5 +1,18 @@
 local ShiftRegister = {}
 ShiftRegister.__index = ShiftRegister
+-- TODO: the main advantage this design (variable length loop within a larger ring buffer) provides
+-- is that when the loop length is changed, the newly 'revealed' values will be recently
+-- played/heard/recorded ones; and adjusting length from long -> short -> long will eventually
+-- reveal old values that weren't part of the short loop.
+-- 1. is that even all that good?
+-- 2. can something similar be achieved without all this headache-inducing ring buffer math?
+-- a couple options:
+-- A. variable length ring buffer, with magic 'virtual' values inserted when loop length changes (??)
+--    (virtual values would get locked in when they were played, but could change until then --
+--    allowing gradual changes in loop length)
+-- B. 'real' shift register of variable length; calling 'shift()' really actually shifts values
+--    adjusting length would change how values were read (i % min(new_length, old_length) or
+--    something), until next shift which would lock in the new length
 ShiftRegister.buffer_size = 128
 
 local function gcd(a, b)
