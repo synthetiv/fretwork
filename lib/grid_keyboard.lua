@@ -14,7 +14,7 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.row_offsets = {}
 	instance.center_x = instance.x + math.floor(instance.width / 2)
 	for row = 1, height do
-		instance.row_offsets[row] = instance.scale.center_pitch + (math.floor(instance.height / 2) - row) * 5
+		instance.row_offsets[row] = instance.scale.center_pitch_id + (math.floor(instance.height / 2) - row) * 5
 	end
 	-- this method can be redefined on the fly
 	instance.get_key_level = function(self, x, y, n)
@@ -23,28 +23,28 @@ function Keyboard.new(x, y, width, height, scale)
 	return instance
 end
 
-function Keyboard:get_key_pitch(x, y)
+function Keyboard:get_key_pitch_id(x, y)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
 	return x - self.center_x + self.row_offsets[y] + self.octave * self.scale.length
 end
 
-function Keyboard:get_key_id_pitch(id)
+function Keyboard:get_key_id_pitch_id(id)
 	local x, y = self:get_key_id_coords(id)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	local pitch = self:get_key_pitch(x, y)
-	return pitch
+	local pitch_id = self:get_key_pitch_id(x, y)
+	return pitch_id
 end
 
-function Keyboard:get_last_pitch()
-	return self:get_key_id_pitch(self.last_key)
+function Keyboard:get_last_pitch_id()
+	return self:get_key_id_pitch_id(self.last_key)
 end
 
 function Keyboard:get_last_value()
-	return self.scale:get(self:get_last_pitch())
+	return self.scale:get(self:get_last_pitch_id())
 end
 
 function Keyboard:set_gate()
@@ -57,7 +57,7 @@ function Keyboard:note(x, y, z)
 	end
 	local key_id = self:get_key_id(x, y)
 	if z == 1 then
-		local n = self:get_key_pitch(x, y)
+		local n = self:get_key_pitch_id(x, y)
 		table.insert(self.held_keys, key_id)
 		self.last_key = key_id
 	else
@@ -99,7 +99,7 @@ end
 function Keyboard:draw(g)
 	for x = self.x, self.x2 do
 		for y = self.y, self.y2 do
-			local n = self:get_key_pitch(x, y)
+			local n = self:get_key_pitch_id(x, y)
 			g:led(x, y, self:get_key_level(x, y, n))
 		end
 	end
@@ -107,7 +107,7 @@ end
 
 -- TODO: obviously this won't be accurate for non-12TET scales
 function Keyboard:is_white_key(n)
-	local class = (n - self.scale.center_pitch - 1) % 12 + 1
+	local class = (n - self.scale.center_pitch_id - 1) % 12 + 1
 	return (class == 1 or class == 3 or class == 5 or class == 6 or class == 8 or class == 10 or class == 12)
 end
 

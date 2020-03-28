@@ -345,7 +345,7 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if n == voice.pitch then
+		if n == voice.pitch_id then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
@@ -378,7 +378,7 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	end
 	-- highlight voice notes
 	for v = 1, n_voices do
-		if n == voices[v].pitch then
+		if n == voices[v].pitch_id then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
@@ -392,12 +392,12 @@ end
 key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	local level = 0
 	-- highlight octaves
-	if (n - self.scale.center_pitch) % self.scale.length == 1 then
+	if (n - self.scale.center_pitch_id) % self.scale.length == 1 then
 		level = 2
 	end
 	-- highlight transposition settings
 	for v = 1, n_voices do
-		if n == self.scale:get_nearest_pitch(voices[v].transpose) then
+		if n == self.scale:get_nearest_pitch_id(voices[v].transpose) then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
@@ -423,14 +423,14 @@ function grid_key(x, y, z)
 	if keyboard:should_handle_key(x, y) then
 		-- TODO: use events here too, maybe?
 		if grid_mode == grid_mode_play and not grid_shift then
-			local previous_note = keyboard:get_last_pitch()
+			local previous_note = keyboard:get_last_pitch_id()
 			keyboard:note(x, y, z)
-			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch() or z == 1) then
+			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch_id() or z == 1) then
 				events.key()
 			end
 		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
 			if z == 1 then
-				local n = keyboard:get_key_pitch(x, y)
+				local n = keyboard:get_key_pitch_id(x, y)
 				scale:toggle_class(n)
 				mask_dirty = true
 				-- TODO: when ctrl is not held, make it visually obvious that the change is pending, rather

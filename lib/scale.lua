@@ -23,13 +23,13 @@ function Scale:init(pitch_class_values)
 	self.length = #pitch_class_values
 	self.pitch_class_values = pitch_class_values
 	-- precalculate all pitch values across all octaves
-	self.center_pitch = n_values / 2
+	self.center_pitch_id = n_values / 2
 	self.values = {}
 	local pitch_class = 1
 	local octave = 0
-	for p = 0, self.center_pitch do
-		self.values[p + self.center_pitch + 1] = self.pitch_class_values[pitch_class] + octave
-		self.values[self.center_pitch - p] = self.pitch_class_values[self.length - pitch_class + 1] - octave - 1
+	for p = 0, self.center_pitch_id do
+		self.values[p + self.center_pitch_id + 1] = self.pitch_class_values[pitch_class] + octave
+		self.values[self.center_pitch_id - p] = self.pitch_class_values[self.length - pitch_class + 1] - octave - 1
 		pitch_class = pitch_class + 1
 		if pitch_class > self.length then
 			pitch_class = 1
@@ -48,7 +48,7 @@ end
 
 function Scale:set_mask(mask)
 	self.mask = self:copy_mask(mask)
-	self:update_mask_pitches()
+	self:update_mask_pitch_ids()
 end
 
 function Scale:get_edit_mask()
@@ -63,36 +63,36 @@ function Scale:apply_edit_mask()
 	self:set_mask(self.edit_mask)
 end
 
-function Scale:update_mask_pitches()
+function Scale:update_mask_pitch_ids()
 	local i = 1
-	self.mask_pitches = {}
+	self.mask_pitch_ids = {}
 	for p = 1, n_values do
 		if self.mask[(p - 1) % self.length + 1] then
-			self.mask_pitches[i] = p
+			self.mask_pitch_ids[i] = p
 			i = i + 1
 		end
 	end
 	self.n_mask_pitches = i - 1
 end
 
-function Scale:get_pitch_class(pitch)
-	return (pitch - 1) % self.length + 1
+function Scale:get_pitch_class(pitch_id)
+	return (pitch_id - 1) % self.length + 1
 end
 
-function Scale:mask_contains(pitch)
-	return self.mask[self:get_pitch_class(pitch)]
+function Scale:mask_contains(pitch_id)
+	return self.mask[self:get_pitch_class(pitch_id)]
 end
 
-function Scale:edit_mask_contains(pitch)
-	return self.edit_mask[self:get_pitch_class(pitch)]
+function Scale:edit_mask_contains(pitch_id)
+	return self.edit_mask[self:get_pitch_class(pitch_id)]
 end
 
-function Scale:set_class(pitch, enable)
-	self.edit_mask[self:get_pitch_class(pitch)] = enable
+function Scale:set_class(pitch_id, enable)
+	self.edit_mask[self:get_pitch_class(pitch_id)] = enable
 end
 
-function Scale:toggle_class(pitch)
-	local pitch_class = self:get_pitch_class(pitch)
+function Scale:toggle_class(pitch_id)
+	local pitch_class = self:get_pitch_class(pitch_id)
 	self.edit_mask[pitch_class] = not self.edit_mask[pitch_class]
 end
 
@@ -128,39 +128,39 @@ local function get_nearest(last, v, predicate)
 	return j
 end
 
-function Scale:get_nearest_pitch(value)
-	local pitch = binary_search(1, n_values, value, function(i, v)
+function Scale:get_nearest_pitch_id(value)
+	local pitch_id = binary_search(1, n_values, value, function(i, v)
 		return self.values[i] > value
 	end)
-	pitch = get_nearest(pitch, value, function(i)
+	pitch_id = get_nearest(pitch_id, value, function(i)
 		return self.values[i] or 2
 	end)
-	return pitch
+	return pitch_id
 end
 
-function Scale:get_nearest_mask_pitch(value)
+function Scale:get_nearest_mask_pitch_id(value)
 	if self.n_mask_pitches == 0 then
 		return -1
 	end
-	local mask_pitch = binary_search(1, self.n_mask_pitches, value, function(i, v)
-		return self.values[self.mask_pitches[i]] > value
+	local mask_pitch_id = binary_search(1, self.n_mask_pitches, value, function(i, v)
+		return self.values[self.mask_pitch_ids[i]] > value
 	end)
-	mask_pitch = get_nearest(mask_pitch, value, function(i)
-		return self.mask_pitches[i] ~= null and self.values[self.mask_pitches[i]] or 2
+	mask_pitch_id = get_nearest(mask_pitch_id, value, function(i)
+		return self.mask_pitch_ids[i] ~= null and self.values[self.mask_pitch_ids[i]] or 2
 	end)
-	return self.mask_pitches[mask_pitch]
+	return self.mask_pitch_ids[mask_pitch_id]
 end
 
-function Scale:get(pitch)
-	return self.values[pitch]
+function Scale:get(pitch_id)
+	return self.values[pitch_id]
 end
 
 function Scale:snap(value)
-	local nearest_mask_pitch = self:get_nearest_mask_pitch(value)
-	if nearest_mask_pitch == -1 then
+	local nearest_mask_pitch_id = self:get_nearest_mask_pitch_id(value)
+	if nearest_mask_pitch_id == -1 then
 		return value
 	end
-	return self:get(nearest_mask_pitch)
+	return self:get(nearest_mask_pitch_id)
 end
 
 return Scale
