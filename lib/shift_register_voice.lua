@@ -17,6 +17,10 @@ end
 function ShiftRegisterVoice:update_value()
 	self.value_raw = self:get(0) -- unquantized
 	self.pitch = self.scale:get_nearest_mask_pitch(self.value_raw)
+	if self.pitch == -1 then
+		self.value = self.value_raw
+		return
+	end
 	self.value = self.scale:get(self.pitch)
 end
 

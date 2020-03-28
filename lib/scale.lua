@@ -14,7 +14,8 @@ function Scale.new(pitch_class_values)
 	for p = 1, instance.length do
 		mask[p] = true
 	end
-	instance:set_mask(mask)
+	instance.edit_mask = mask
+	instance:apply_edit_mask()
 	return instance
 end
 
@@ -37,12 +38,29 @@ function Scale:init(pitch_class_values)
 	end
 end
 
-function Scale:set_mask(mask)
-	self.mask = {}
+function Scale:copy_mask(mask)
+	local copy = {}
 	for p = 1, self.length do
-		self.mask[p] = mask[p] or false
+		copy[p] = mask[p] or false
 	end
+	return copy
+end
+
+function Scale:set_mask(mask)
+	self.mask = self:copy_mask(mask)
 	self:update_mask_pitches()
+end
+
+function Scale:get_edit_mask()
+	return self:copy_mask(self.edit_mask)
+end
+
+function Scale:set_edit_mask(mask)
+	self.edit_mask = self:copy_mask(mask)
+end
+
+function Scale:apply_edit_mask()
+	self:set_mask(self.edit_mask)
 end
 
 function Scale:update_mask_pitches()
@@ -55,21 +73,6 @@ function Scale:update_mask_pitches()
 		end
 	end
 	self.n_mask_pitches = i - 1
-	local enabled_pitches = 0
-	for p = 1, self.length do
-		if self.mask[p] then
-			enabled_pitches = enabled_pitches + 1
-		end
-	end
-	self.n_enabled_pitches = enabled_pitches
-end
-
-function Scale:get_mask()
-	local mask = {}
-	for n = 1, self.length do
-		mask[n] = self.mask[n]
-	end
-	return mask
 end
 
 function Scale:get_pitch_class(pitch)
@@ -81,20 +84,12 @@ function Scale:contains(pitch)
 end
 
 function Scale:set_class(pitch, enable)
-	self.mask[self:get_pitch_class(pitch)] = enable
-	self:update_mask_pitches()
+	self.edit_mask[self:get_pitch_class(pitch)] = enable
 end
 
 function Scale:toggle_class(pitch)
 	local pitch_class = self:get_pitch_class(pitch)
-	-- don't let the user disable the last remaining pitch
-	-- TODO: if we were using z/gates, then this wouldn't have to cause errors -- could just silence all voices
-	print(self.n_mask_pitches)
-	if self.n_enabled_pitches <= 1 and self.mask[pitch_class] then
-		return
-	end
-	self.mask[pitch_class] = not self.mask[pitch_class]
-	self:update_mask_pitches()
+	self.edit_mask[pitch_class] = not self.edit_mask[pitch_class]
 end
 
 local function binary_search(first, last, v, predicate)
@@ -140,6 +135,9 @@ function Scale:get_nearest_pitch(value)
 end
 
 function Scale:get_nearest_mask_pitch(value)
+	if self.n_mask_pitches == 0 then
+		return -1
+	end
 	local mask_pitch = binary_search(1, self.n_mask_pitches, value, function(i, v)
 		return self.values[self.mask_pitches[i]] > value
 	end)
@@ -153,12 +151,12 @@ function Scale:get(pitch)
 	return self.values[pitch]
 end
 
-function Scale:snap_raw(value)
-	return self:get(self:get_nearest_pitch(value))
-end
-
 function Scale:snap(value)
-	return self:get(self:get_nearest_mask_pitch(value))
+	local nearest_mask_pitch = self:get_nearest_mask_pitch(value)
+	if nearest_mask_pitch == -1 then
+		return value
+	end
+	return self:get(nearest_mask_pitch)
 end
 
 return Scale

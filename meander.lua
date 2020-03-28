@@ -134,16 +134,29 @@ dirty = false
 info_metro = nil
 redraw_metro = nil
 
+-- LOOP/MASK/TRANSPOSE QUANTIZATION
+-- for each of these, maintain an 'edit buffer' separate from the version that's actually currently
+-- being used by SR/voices
+-- edits/changes are applied to this edit buffer, which replaces the in-use version on each beat
+-- save/recall uses edit buffer too: if you edit the current mask, save your edit to a new slot, and
+-- recall the current slot in the space of one beat, you won't have to hear your changes; then you
+-- can queue them up to hear several beats later
+-- saving/recalling loops will be slightly more complicated, since beats affect loop state (loop is
+-- shifted with each beat).
+-- so when you save a loop, that should save the _next_ state of the loop -- the shifted loop that
+-- would be heard on the next beat. (so you can save the current loop + recall it within one beat
+-- and it won't sound like any change was made.)
+
 function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
 	end
-	scale:set_mask(saved_masks[mask_selector.selected])
+	scale:set_edit_mask(saved_masks[mask_selector.selected])
 	mask_dirty = false
 end
 
 function save_mask()
-	saved_masks[mask_selector.selected] = scale:get_mask()
+	saved_masks[mask_selector.selected] = scale:get_edit_mask()
 	mask_dirty = false
 end
 
@@ -258,6 +271,7 @@ function shift(d)
 		voices[v]:shift(d)
 	end
 	maybe_write()
+	scale:apply_edit_mask()
 	update_voices()
 	dirty = true
 end
@@ -353,6 +367,7 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 		level = 2
 	end
 	-- highlight mask
+	-- TODO: highlight differences w/edit mask!
 	if self.scale:contains(n) then
 		level = 5
 	end
