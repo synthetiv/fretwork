@@ -79,8 +79,12 @@ function Scale:get_pitch_class(pitch)
 	return (pitch - 1) % self.length + 1
 end
 
-function Scale:contains(pitch)
+function Scale:mask_contains(pitch)
 	return self.mask[self:get_pitch_class(pitch)]
+end
+
+function Scale:edit_mask_contains(pitch)
+	return self.edit_mask[self:get_pitch_class(pitch)]
 end
 
 function Scale:set_class(pitch, enable)

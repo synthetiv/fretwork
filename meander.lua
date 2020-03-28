@@ -339,7 +339,7 @@ key_level_callbacks = {}
 key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	local level = 0
 	-- highlight mask
-	if self.scale:contains(n) then
+	if self.scale:mask_contains(n) then
 		level = 4
 	end
 	-- highlight voice notes
@@ -367,9 +367,14 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 		level = 2
 	end
 	-- highlight mask
-	-- TODO: highlight differences w/edit mask!
-	if self.scale:contains(n) then
+	local in_mask = self.scale:mask_contains(n)
+	local in_edit_mask = self.scale:edit_mask_contains(n)
+	if in_mask and in_edit_mask then
 		level = 5
+	elseif in_edit_mask then
+		level = 4
+	elseif in_mask then
+		level = 3
 	end
 	-- highlight voice notes
 	for v = 1, n_voices do
