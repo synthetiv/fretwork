@@ -1047,11 +1047,11 @@ function draw_voice_path(v, level)
 
 	-- draw foreground/path
 	screen.line_width(1)
-	screen.level(level)
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
+		local note_level = level
 		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line; and when current z is low, draw current note as dots
 		-- move or connect from previous note
 		if n == 1 then
@@ -1059,8 +1059,22 @@ function draw_voice_path(v, level)
 		else
 			screen.line(x, y)
 		end
+		screen.level(note_level)
+		screen.stroke()
 		-- draw this note
+		screen.move(x, y)
 		screen.line(x + screen_note_width, y)
+		for w = 1, n_recent_writes do
+			local write = recent_writes[w]
+			if write ~= nil and write.level > 0 then
+				if shift_register:clamp_loop_pos(note.pos) == shift_register:clamp_loop_pos(write.pos) then
+					note_level = math.max(note_level, write.level)
+				end
+			end
+		end
+		screen.level(note_level)
+		screen.stroke()
+		screen.move(x + screen_note_width, y)
 	end
 	screen.stroke()
 
@@ -1097,27 +1111,11 @@ function redraw()
 		screen.fill()
 	end
 
-	local function draw_input(x, y, level)
-		local offset = top_voice.tap.direction == 1 and 2 or -2
-		screen.rect(x + offset, y - 2, 5, 5)
-		screen.level(0)
-		screen.fill()
-		screen.rect(x + offset + 1.5, y - 0.5, 2, 2)
-		screen.level(level)
-		screen.stroke()
-	end
-
 	-- draw input indicators
 	-- TODO: when top voice is retrograde, this looks odd. not sure how to make it easier to follow.
 	for w = 1, n_recent_writes do
 		local write = recent_writes[w]
 		if write ~= nil and write.level > 0 then
-			for n = 1, n_screen_notes do
-				local note = screen_notes[top_voice_index][n]
-				if shift_register:clamp_loop_pos(note.pos) == shift_register:clamp_loop_pos(write.pos) then
-					draw_input(note.x, get_screen_note_y(scale:snap(write.value + top_voice.transpose)), write.level)
-				end
-			end
 			write.level = math.floor(write.level * 0.7)
 		end
 	end
