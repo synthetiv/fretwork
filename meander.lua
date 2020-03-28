@@ -184,7 +184,8 @@ function recall_config()
 		local config = saved_configs[c][v]
 		params:set(string.format('voice_%d_transpose', v), config.transpose)
 		params:set(string.format('voice_%d_scramble', v), config.scramble)
-		voices[v].pos = shift_register.head + config.offset
+		voices[v].pitch_pos = shift_register.head + (config.pitch_offset or config.offset)
+		voices[v].mod_pos = shift_register.head + (config.mod_offset or (config.offset + v))
 		params:set(string.format('voice_%d_direction', v), config.direction == -1 and 2 or 1)
 	end
 	config_dirty = false
@@ -194,10 +195,11 @@ function save_config()
 	local config = {}
 	for v = 1, n_voices do
 		config[v] = {
-			offset = voices[v].tap:get_loop_offset(0),
+			pitch_offset = voices[v].pitch_tap:get_loop_offset(0),
+			mod_offset = voices[v].mod_tap:get_loop_offset(0),
 			transpose = voices[v].edit_transpose,
-			scramble = voices[v].tap.scramble,
-			direction = voices[v].tap.direction
+			scramble = voices[v].pitch_tap.scramble, -- TODO: separate mod scramble
+			direction = voices[v].pitch_tap.direction
 		}
 	end
 	saved_configs[config_selector.selected] = config
@@ -206,10 +208,12 @@ end
 
 function update_voice(v)
 	local voice = voices[v]
-	voice:update_value()
-	if voice.value ~= null then
-		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.value * 12))
-		crow.output[v].volts = voice.value
+	voice:update_values()
+	if voice.mod > 0 then
+		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
+		-- crow.output[v].volts = voice.value
+	else
+		engine.stop(v - 1)
 	end
 end
 
@@ -252,13 +256,12 @@ function maybe_write()
 			-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
 			if voice_selector:is_selected(v) then
 				local voice = voices[v]
-				voice:set(0, value)
-				-- TODO: is this useful?
+				voice:set(0, value, value) -- TODO
 				last_write = last_write % n_recent_writes + 1
 				recent_writes[last_write] = {
 					level = 15,
-					pos = voice.tap:get_pos(0),
-					value = value - voice.transpose
+					pitch_pos = voice.pitch_tap:get_pos(0),
+					mod_pos = voice.mod_tap:get_pos(0)
 				}
 			end
 		end
@@ -702,7 +705,7 @@ function add_params()
 			name = string.format('voice %d scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
-				voice.tap.scramble = value
+				voice.pitch_tap.scramble = value
 				dirty = true
 				config_dirty = true
 			end
@@ -716,7 +719,7 @@ function add_params()
 				'retrograde'
 			},
 			action = function(value)
-				voice.tap.direction = value == 2 and -1 or 1
+				voice.pitch_tap.direction = value == 2 and -1 or 1
 				dirty = true
 				config_dirty = true
 			end
@@ -821,7 +824,7 @@ function init()
 
 	-- initialize voices
 	for v = 1, n_voices do
-		voices[v] = ShiftRegisterVoice.new(v * -3, shift_register, scale)
+		voices[v] = ShiftRegisterVoice.new(v * -3, v * -4, shift_register, scale)
 	end
 	top_voice = voices[top_voice_index]
 
@@ -833,7 +836,9 @@ function init()
 	params:set('hzlag', 0.02)
 	params:set('cut', 8.32)
 	params:set('fgain', 1.26)
-	params:set('output_level', -36)
+	params:set('ampatk', 0.03)
+	params:set('ampdec', 0.17)
+	params:set('output_level', -48)
 
 	info_metro = metro.init()
 	info_metro.event = function()
@@ -1028,7 +1033,7 @@ function get_screen_offset_x(offset)
 end
 
 function get_screen_note_y(value)
-	if value == null then
+	if value == nil then
 		return -1
 	end
 	return util.round(32 + (keyboard.octave - value) * scale.length)
@@ -1042,9 +1047,9 @@ function calculate_voice_path(v)
 	for n = 1, n_screen_notes do
 		local note = {}
 		note.x = (n - 1) * screen_note_width
-		note.y = get_screen_note_y(scale:snap(path[n].value))
-		note.offset = path[n].offset
-		note.pos = path[n].pos
+		note.y = get_screen_note_y(scale:snap(path[n].pitch))
+		note.z = path[n].mod
+		note.pitch_pos = path[n].pitch_pos
 		screen_notes[v][n] = note
 	end
 end
@@ -1059,29 +1064,34 @@ function draw_voice_path(v, level)
 	-- draw background/outline
 	screen.line_width(3)
 	screen.level(0)
+	local z = 0
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
-		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line
-		-- move or connect from previous note
-		if n == 1 then
+		local previous_z = z
+		z = note.z
+		if previous_z <= 0 or z <= 0 then
 			screen.move(x, y)
 		else
 			screen.line(x, y)
 		end
 		-- draw this note
 		screen.line(x + screen_note_width, y)
+		screen.stroke()
+		screen.move(x + screen_note_width, y)
 	end
 	screen.stroke()
 
 	-- draw foreground/path
-	local note_level = level
 	screen.line_width(1)
+	local note_level = level
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
+		local previous_z = z
+		z = note.z
 		-- if this note was just written, brighten it and the connecting line from the previous note
 		local previous_note_level = note_level
 		local connector_level = level
@@ -1089,7 +1099,8 @@ function draw_voice_path(v, level)
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
 			if write ~= nil and write.level > 0 then
-				if shift_register:clamp_loop_pos(note.pos) == shift_register:clamp_loop_pos(write.pos) then
+				-- TODO: what about mod writes?
+				if shift_register:clamp_loop_pos(note.pitch_pos) == shift_register:clamp_loop_pos(write.pitch_pos) then
 					note_level = math.max(note_level, write.level)
 				end
 			end
@@ -1097,9 +1108,7 @@ function draw_voice_path(v, level)
 		if note_level > previous_note_level then
 			connector_level = util.round((note_level + previous_note_level) / 2)
 		end
-		-- TODO: account for 'z' (gate): when current or prev z is low, don't draw connecting line; and when current z is low, draw current note as dots
-		-- move or connect from previous note
-		if n == 1 then
+		if previous_z <= 0 or z <= 0 then
 			screen.move(x, y)
 		else
 			screen.line(x, y)
@@ -1111,6 +1120,13 @@ function draw_voice_path(v, level)
 		screen.line(x + screen_note_width, y)
 		screen.level(note_level)
 		screen.stroke()
+		if z <= 0 then
+			-- dotted line
+			screen.pixel(x + 1, y)
+			screen.pixel(x + 3, y)
+			screen.level(0)
+			screen.fill(0)
+		end
 		screen.move(x + screen_note_width, y)
 	end
 	screen.stroke()
@@ -1144,7 +1160,7 @@ function redraw()
 	end
 
 	-- highlight current notes after drawing all snakes, lest some be covered by outlines
-	-- TODO: draw these based on voice.value in case that somehow ends up being different from what's shown on the screen??
+	-- TODO: draw these based on voice.pitch in case that somehow ends up being different from what's shown on the screen??
 	-- (but it shouldn't, ever)
 	for i, v in ipairs(voice_draw_order) do
 		local note = screen_notes[v][screen_note_center]
@@ -1180,15 +1196,15 @@ function redraw()
 		screen.text(string.format('L: %d', shift_register.length))
 
 		screen.move(0, 25)
-		screen.text(string.format('O: %d', top_voice.pos))
+		screen.text(string.format('O: %d', top_voice.pitch_pos))
 
 		screen.move(0, 34)
 		screen.text(string.format('T: %.2f', top_voice.edit_transpose))
 
 		screen.move(0, 43)
-		screen.text(string.format('S: %.1f', top_voice.tap.scramble))
+		screen.text(string.format('S: %.1f', top_voice.pitch_tap.scramble))
 
-		screen.level(top_voice.tap.direction == -1 and 15 or 2)
+		screen.level(top_voice.pitch_tap.direction == -1 and 15 or 2)
 		screen.move(0, 52)
 		screen.text('Ret.')
 	end
