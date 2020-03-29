@@ -1134,7 +1134,7 @@ function draw_voice_path(v, level)
 			end
 		end
 		if note_level > previous_note_level then
-			connector_level = util.round((note_level + previous_note_level) / 2)
+			connector_level = math.ceil((note_level + previous_note_level) / 2)
 		end
 		if previous_z <= 0 or z <= 0 then
 			screen.move(x, y)
@@ -1154,7 +1154,7 @@ function draw_voice_path(v, level)
 			screen.pixel(x, y)
 			screen.pixel(x + 2, y)
 			screen.pixel(x + 4, y)
-			screen.level(util.round(note_level / 2))
+			screen.level(math.ceil(note_level / 2))
 			screen.fill(0)
 		end
 		screen.move(x + screen_note_width, y)
