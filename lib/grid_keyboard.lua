@@ -12,9 +12,8 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.gate = false
 	-- set offset interval per row, rather than calculating it dynamically, so that "open tunings" are possible
 	instance.row_offsets = {}
-	instance.center_x = instance.x + math.floor(instance.width / 2)
-	for row = 1, height do
-		instance.row_offsets[row] = instance.scale.center_pitch_id + (math.floor(instance.height / 2) - row) * 5
+	for row = instance.y, instance.y2 do
+		instance.row_offsets[row] = instance.scale.center_pitch_id + (instance.y_center - row) * 5
 	end
 	-- this method can be redefined on the fly
 	instance.get_key_level = function(self, x, y, n)
@@ -27,7 +26,7 @@ function Keyboard:get_key_pitch_id(x, y)
 	if not self:should_handle_key(x, y) then
 		return nil
 	end
-	return x - self.center_x + self.row_offsets[y] + self.octave * self.scale.length
+	return x - self.x_center + self.row_offsets[y] + self.octave * self.scale.length
 end
 
 function Keyboard:get_key_id_pitch_id(id)

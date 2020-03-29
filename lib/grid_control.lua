@@ -9,6 +9,8 @@ function Control.new(x, y, width, height)
 	instance.height = height
 	instance.x2 = x + width - 1
 	instance.y2 = y + height - 1
+	instance.x_center = x + math.floor((width - 0.5) / 2)
+	instance.y_center = y + math.floor((height - 0.5) / 2)
 	return instance
 end
 

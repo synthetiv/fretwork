@@ -7,6 +7,7 @@ polysub = require 'we/lib/polysub'
 musicutil = require 'musicutil'
 BeatClock = require 'beatclock'
 
+X0XRoll = include 'lib/grid_x0x_roll'
 Keyboard = include 'lib/grid_keyboard'
 Select = include 'lib/grid_select'
 MultiSelect = include 'lib/grid_multi_select'
@@ -100,7 +101,10 @@ voices = {}
 n_voices = 4
 voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
-top_voice = {}
+for v = 1, n_voices do
+	voices[v] = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
+end
+top_voice = voices[top_voice_index]
 
 grid_mode_selector = Select.new(1, 1, 4, 1)
 grid_mode_pitch = 1
@@ -128,6 +132,11 @@ keyboards = { -- lookup array; indices match corresponding modes
 	transpose_keyboard
 }
 active_keyboard = pitch_keyboard
+
+mod_rolls = {}
+for v = 1, n_voices do
+	mod_rolls[v] = X0XRoll.new(6, 2 + v, 11, 1, voices[v])
+end
 
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
@@ -322,6 +331,8 @@ end
 
 function grid_redraw()
 
+	g:all(0)
+
 	-- mode buttons
 	grid_mode_selector:draw(g, 7, 2)
 
@@ -355,7 +366,9 @@ function grid_redraw()
 		active_keyboard:draw(g)
 	else
 		-- TODO: 'x0x-roll' interface for mod mode
-		-- 11 is the center
+		for v = 1, n_voices do
+			mod_rolls[v]:draw(g)
+		end
 	end
 
 	g:refresh()
@@ -508,11 +521,25 @@ function grid_octave_key(z, d)
 	end
 end
 
+function mod_rolls_should_handle_key(x, y)
+	if grid_mode_selector:is_selected(grid_mode_mod) then
+		for v = 1, n_voices do
+			print(mod_rolls[v].should_handle_key)
+			if mod_rolls[v]:should_handle_key(x, y) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 function grid_key(x, y, z)
 	if active_keyboard ~= nil and active_keyboard:should_handle_key(x, y) then
 		active_keyboard:key(x, y, z)
-	elseif false then
-		-- TODO: x0x-roll
+	elseif mod_rolls_should_handle_key(x, y) then
+		for v = 1, n_voices do
+			mod_rolls[v]:key(x, y, z)
+		end
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
 		voice_selector:key(x, y, z)
@@ -859,12 +886,6 @@ function add_params()
 end
 
 function init()
-
-	-- initialize voices
-	for v = 1, n_voices do
-		voices[v] = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
-	end
-	top_voice = voices[top_voice_index]
 
 	add_params()
 	params:add_separator()
