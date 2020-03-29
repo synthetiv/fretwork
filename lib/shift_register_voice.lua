@@ -3,16 +3,16 @@ local ShiftRegisterTap = include 'lib/shift_register_tap'
 local ShiftRegisterVoice = {}
 ShiftRegisterVoice.__index = ShiftRegisterVoice
 
-ShiftRegisterVoice.new = function(pitch_pos, mod_pos, shift_register, scale)
+ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod_register)
 	local voice = setmetatable({}, ShiftRegisterVoice)
 	voice.transpose = 0
 	voice.edit_transpose = 0
 	voice.pitch_raw = 0
 	voice.pitch_id = 1
 	voice.pitch = 0
-	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, shift_register)
+	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register)
 	voice.mod = 0
-	voice.mod_tap = ShiftRegisterTap.new(mod_pos, shift_register)
+	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register)
 	voice.scale = scale
 	return voice
 end
@@ -32,9 +32,17 @@ function ShiftRegisterVoice:update_values()
 	self.pitch = self.scale:get(self.pitch_id)
 end
 
-function ShiftRegisterVoice:shift(d)
+function ShiftRegisterVoice:shift_pitch(d)
 	self.pitch_tap:shift(d)
+end
+
+function ShiftRegisterVoice:shift_mod(d)
 	self.mod_tap:shift(d)
+end
+
+function ShiftRegisterVoice:shift(d)
+	self:shift_pitch(d)
+	self:shift_mod(d)
 end
 
 function ShiftRegisterVoice:get(t)

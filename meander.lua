@@ -49,7 +49,8 @@ memory_config = 3
 
 -- TODO: save/recall mask, loop, and config all at once
 
-shift_register = ShiftRegister.new(32)
+pitch_register = ShiftRegister.new(32)
+mod_register = ShiftRegister.new(16)
 
 source = 1
 source_names = {
@@ -166,13 +167,15 @@ function recall_loop()
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	shift_register:set_loop(0, saved_loops[loop_selector.selected])
-	shift_register.dirty = false
+	pitch_register:set_loop(0, saved_loops[loop_selector.selected])
+	pitch_register.dirty = false
+	-- TODO: mod too
 end
 
 function save_loop()
-	saved_loops[loop_selector.selected] = shift_register:get_loop(0)
-	shift_register.dirty = false
+	saved_loops[loop_selector.selected] = pitch_register:get_loop(0)
+	pitch_register.dirty = false
+	-- TODO: mod too
 end
 
 function recall_config()
@@ -184,8 +187,8 @@ function recall_config()
 		local config = saved_configs[c][v]
 		params:set(string.format('voice_%d_transpose', v), config.transpose)
 		params:set(string.format('voice_%d_scramble', v), config.scramble)
-		voices[v].pitch_pos = shift_register.head + (config.pitch_offset or config.offset)
-		voices[v].mod_pos = shift_register.head + (config.mod_offset or (config.offset + v))
+		voices[v].pitch_pos = pitch_register.head + (config.pitch_offset or config.offset)
+		voices[v].mod_pos = mod_register.head + (config.mod_offset or (config.offset + v))
 		params:set(string.format('voice_%d_direction', v), config.direction == -1 and 2 or 1)
 	end
 	config_dirty = false
@@ -223,7 +226,7 @@ function update_voices()
 	end
 end
 
-function get_write_value()
+function get_write_values()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
 	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		-- TODO: this is good for held keys, but maybe we should also _quantize_ key presses:
@@ -233,13 +236,14 @@ function get_write_value()
 		-- maybe you only perform the write/update on the next tick...?
 		-- that might feel strange unless you can also update voice(s) immediately without writing
 		print(string.format('writing grid pitch (source = %d)', source))
-		return input_keyboard:get_last_value()
+		return input_keyboard:get_last_value(), 1 -- TODO: mod values...
+		-- TODO: add a separate 'erase' key that leaves current pitch value but sets mod value to 0?
 	elseif source == source_pitch or source == source_grid_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
-		return pitch_in_value
+		return pitch_in_value, 1
 	elseif source == source_crow or source == source_grid_crow then
 		print(string.format('writing crow pitch (source = %d)', source))
-		return crow_in_values[2]
+		return crow_in_values[2], 1
 	end
 	print(string.format('nothing to write (source = %d)', source))
 	return false
@@ -248,15 +252,15 @@ end
 function maybe_write()
 	local prob = params:get('write_probability')
 	if prob > math.random(1, 100) then
-		local value = get_write_value()
-		if not value then
+		local pitch, mod = get_write_values()
+		if not pitch then
 			return
 		end
 		for v = 1, n_voices do
 			-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
 			if voice_selector:is_selected(v) then
 				local voice = voices[v]
-				voice:set(0, value, value) -- TODO
+				voice:set(0, pitch, mod) -- TODO
 				last_write = last_write % n_recent_writes + 1
 				recent_writes[last_write] = {
 					level = 15,
@@ -269,7 +273,8 @@ function maybe_write()
 end
 
 function shift(d)
-	shift_register:shift(d)
+	pitch_register:shift(d)
+	mod_register:shift(d)
 	for v = 1, n_voices do
 		voices[v]:shift(d)
 	end
@@ -318,7 +323,8 @@ function grid_redraw()
 	elseif memory_selector:is_selected(memory_config) then
 		config_selector:draw(g, config_dirty and blink_slow and 8 or 7, 2)
 	else
-		loop_selector:draw(g, shift_register.dirty and blink_slow and 8 or 7, 2)
+		loop_selector:draw(g, pitch_register.dirty and blink_slow and 8 or 7, 2)
+		-- TODO: mod too
 	end
 
 	-- shift + ctrl
@@ -348,7 +354,7 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if n == voice.pitch_id then
+		if voice.mod > 0 and n == voice.pitch_id then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
@@ -381,7 +387,8 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	end
 	-- highlight voice notes
 	for v = 1, n_voices do
-		if n == voices[v].pitch_id then
+		local voice = voices[v]
+		if voice.mod > 0 and n == voice.pitch_id then
 			if voice_selector:is_selected(v) then
 				level = 10
 			else
@@ -677,12 +684,13 @@ function add_params()
 		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
 		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now
 		action = function(value)
-			shift_register:set_length(value)
+			pitch_register:set_length(value)
 			update_voices()
 			dirty = true
 			show_info()
 		end
 	}
+	-- TODO: separate control for mod register length
 	
 	params:add_separator()
 	
@@ -795,7 +803,8 @@ function add_params()
 					end
 					if data.loops ~= nil then
 						saved_loops = data.loops
-						shift_register.dirty = true
+						pitch_register.dirty = true
+						-- TODO: mod too
 					end
 				end
 			end
@@ -824,7 +833,7 @@ function init()
 
 	-- initialize voices
 	for v = 1, n_voices do
-		voices[v] = ShiftRegisterVoice.new(v * -3, v * -4, shift_register, scale)
+		voices[v] = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
 	end
 	top_voice = voices[top_voice_index]
 
@@ -924,6 +933,24 @@ function init()
 	recall_config()
 	recall_loop()
 
+	-- initialize mod register
+	mod_register:write_loop(0, 2)
+	mod_register:write_loop(1, 1)
+	mod_register:write_loop(2, 0)
+	mod_register:write_loop(3, 0)
+	mod_register:write_loop(4, 2)
+	mod_register:write_loop(5, 0)
+	mod_register:write_loop(6, 1)
+	mod_register:write_loop(7, 0)
+	mod_register:write_loop(8, 2)
+	mod_register:write_loop(9, 0)
+	mod_register:write_loop(10, 0)
+	mod_register:write_loop(11, 1)
+	mod_register:write_loop(12, 2)
+	mod_register:write_loop(13, 0)
+	mod_register:write_loop(14, 1)
+	mod_register:write_loop(15, 0)
+
 	memory_selector.selected = memory_loop
 
 	pitch_poll:start()
@@ -1009,7 +1036,8 @@ function enc(n, d)
 		-- TODO: somehow do this more slowly / make it less sensitive?
 		for v = 1, n_voices do
 			if voice_selector:is_selected(v) then
-				voices[v]:shift(-d)
+				-- TODO: shift mod, shift pitch + mod together...
+				voices[v]:shift_pitch(-d)
 				update_voice(v)
 			end
 		end
@@ -1100,7 +1128,7 @@ function draw_voice_path(v, level)
 			local write = recent_writes[w]
 			if write ~= nil and write.level > 0 then
 				-- TODO: what about mod writes?
-				if shift_register:clamp_loop_pos(note.pitch_pos) == shift_register:clamp_loop_pos(write.pitch_pos) then
+				if pitch_register:clamp_loop_pos(note.pitch_pos) == pitch_register:clamp_loop_pos(write.pitch_pos) then
 					note_level = math.max(note_level, write.level)
 				end
 			end
@@ -1118,13 +1146,15 @@ function draw_voice_path(v, level)
 		-- draw this note
 		screen.move(x, y)
 		screen.line(x + screen_note_width, y)
-		screen.level(note_level)
-		screen.stroke()
-		if z <= 0 then
+		if z > 0 then
+			screen.level(note_level)
+			screen.stroke()
+		else
 			-- dotted line
-			screen.pixel(x + 1, y)
-			screen.pixel(x + 3, y)
-			screen.level(0)
+			screen.pixel(x, y)
+			screen.pixel(x + 2, y)
+			screen.pixel(x + 4, y)
+			screen.level(util.round(note_level / 2))
 			screen.fill(0)
 		end
 		screen.move(x + screen_note_width, y)
@@ -1164,9 +1194,11 @@ function redraw()
 	-- (but it shouldn't, ever)
 	for i, v in ipairs(voice_draw_order) do
 		local note = screen_notes[v][screen_note_center]
-		screen.pixel(note.x + 2, note.y)
-		screen.level(15)
-		screen.fill()
+		if note.z > 0 then
+			screen.pixel(note.x + 2, note.y)
+			screen.level(15)
+			screen.fill()
+		end
 	end
 
 	-- draw input indicators
@@ -1193,39 +1225,42 @@ function redraw()
 		screen.text(string.format('P: %d%%', util.round(params:get('write_probability') - 1)))
 
 		screen.move(0, 16)
-		screen.text(string.format('L: %d', shift_register.length))
+		screen.text(string.format('Lp: %d', pitch_register.length))
 
 		screen.move(0, 25)
-		screen.text(string.format('O: %d', top_voice.pitch_pos))
+		screen.text(string.format('Lm: %d', mod_register.length))
 
 		screen.move(0, 34)
-		screen.text(string.format('T: %.2f', top_voice.edit_transpose))
+		screen.text(string.format('O: %d', top_voice.pitch_pos))
 
 		screen.move(0, 43)
+		screen.text(string.format('T: %.2f', top_voice.edit_transpose))
+
+		screen.move(0, 52)
 		screen.text(string.format('S: %.1f', top_voice.pitch_tap.scramble))
 
 		screen.level(top_voice.pitch_tap.direction == -1 and 15 or 2)
-		screen.move(0, 52)
+		screen.move(0, 61)
 		screen.text('Ret.')
 	end
 
 	-- DEBUG: draw minibuffer, loop region, head
 	--[[
 	screen.move(0, 1)
-	screen.line_rel(shift_register.buffer_size, 0)
+	screen.line_rel(pitch_register.buffer_size, 0)
 	screen.level(1)
 	screen.stroke()
-	for offset = 1, shift_register.length do
-		local pos = shift_register:get_loop_pos(offset)
+	for offset = 1, pitch_register.length do
+		local pos = pitch_register:get_loop_pos(offset)
 		screen.pixel(pos - 1, 0)
 		screen.level(7)
-		if pos == shift_register.head then
+		if pos == pitch_register.head then
 			screen.level(15)
 		end
 		for v = 1, n_voices do
 			-- TODO: make it so that these _never_ move when you change loop length. no, not sure how.
 			-- currently they _sometimes_ stay in place. probably has something to do with modulo'ing to LCM
-			if voice_selector:is_selected(v) and pos == shift_register:get_loop_pos(voices[v]:get_pos(0)) then
+			if voice_selector:is_selected(v) and pos == pitch_register:get_loop_pos(voices[v]:get_pos(0)) then
 				screen.level(15)
 			end
 		end
