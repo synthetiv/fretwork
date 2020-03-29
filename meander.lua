@@ -128,6 +128,8 @@ n_recent_writes = 8
 last_write = 0
 
 key_shift = false
+key_pitch = false
+key_mod = false
 info_visible = false
 blink_slow = false
 blink_fast = false
@@ -962,22 +964,15 @@ function init()
 	dirty = true
 end
 
-function key_shift_clock(n)
-	if n == 2 then
-		rewind()
-	elseif n == 3 then
-		advance()
-	end
-end
-
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
 		show_info()
-	elseif z == 1 then
-		key_shift_clock(n)
+	elseif n == 2 then
+		key_pitch = z == 1
+	elseif n == 3 then
+		key_mod = z == 1
 	end
-	dirty = true
 end
 
 function params_multi_delta(param_format, selected, d)
@@ -1036,8 +1031,13 @@ function enc(n, d)
 		-- TODO: somehow do this more slowly / make it less sensitive?
 		for v = 1, n_voices do
 			if voice_selector:is_selected(v) then
-				-- TODO: shift mod, shift pitch + mod together...
-				voices[v]:shift_pitch(-d)
+				if (not key_pitch and not key_mod) or (key_pitch and key_mod) then
+					voices[v]:shift(-d)
+				elseif key_pitch then
+					voices[v]:shift_pitch(-d)
+				elseif key_mod then
+					voices[v]:shift_mod(-d)
+				end
 				update_voice(v)
 			end
 		end
