@@ -3,27 +3,32 @@ local Control = include 'lib/grid_control'
 local X0XRoll = setmetatable({}, Control)
 X0XRoll.__index = X0XRoll
 
-function X0XRoll.new(x, y, width, height, voice)
+function X0XRoll.new(x, y, width, height, shift_register)
 	local roll = setmetatable(Control.new(x, y, width, height), X0XRoll)
-	roll.voice = voice
+	roll.shift_register = shift_register
+	roll.offset = 0
 	return roll
 end
 
+function X0XRoll:shift(d)
+	self.offset = self.offset + d
+end
+
 function X0XRoll:get_offset(x)
-	return x - self.x_center
+	return x - self.x_center + self.offset
 end
 
 function X0XRoll:draw(g)
 	for x = self.x, self.x2 do
-		-- TODO: is it worth trying to generalize this type of grid control more, or is it fine for it to
-		-- always just read mod values from a voice?
-		local pitch, mod = self.voice:get(self:get_offset(x))
-		local level = math.max(0, util.round(7 * (mod / 2)))
-		if x == self.x_center then
-			level = level + 3
+		for y = self.y, self.y2 do
+			local value = self.shift_register:read_loop(self:get_offset(x))
+			local level = math.floor(10 * value / 5)
+			local bar_height = math.floor(self.height * value / 5)
+			if self.y2 - y > bar_height then
+				level = 0
+			end
+			g:led(x, y, level)
 		end
-		-- TODO: map y to mod too?
-		g:led(x, self.y, level)
 	end
 end
 
@@ -35,12 +40,8 @@ function X0XRoll:key(x, y, z)
 		return
 	end
 	local offset = self:get_offset(x)
-	local pitch, mod = self.voice:get(offset)
-	if mod > 0 then
-		self.voice:set(offset, pitch, 0)
-	else
-		self.voice:set(offset, pitch, 1)
-	end
+	local value = 5 * (self.y2 - y) / self.height
+	self.shift_register:write_loop(offset, value)
 end
 
 return X0XRoll

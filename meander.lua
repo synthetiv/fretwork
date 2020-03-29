@@ -52,7 +52,7 @@ memory_mod = 4
 -- TODO: save/recall mask, loop, and config all at once
 
 pitch_register = ShiftRegister.new(32)
-mod_register = ShiftRegister.new(16)
+mod_register = ShiftRegister.new(11)
 
 source = 1
 source_names = {
@@ -133,10 +133,7 @@ keyboards = { -- lookup array; indices match corresponding modes
 }
 active_keyboard = pitch_keyboard
 
-mod_rolls = {}
-for v = 1, n_voices do
-	mod_rolls[v] = X0XRoll.new(6, 2 + v, 11, 1, voices[v])
-end
+mod_roll = X0XRoll.new(6, 1, 11, 8, mod_register)
 
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
@@ -331,8 +328,6 @@ end
 
 function grid_redraw()
 
-	g:all(0)
-
 	-- mode buttons
 	grid_mode_selector:draw(g, 7, 2)
 
@@ -366,9 +361,7 @@ function grid_redraw()
 		active_keyboard:draw(g)
 	else
 		-- TODO: 'x0x-roll' interface for mod mode
-		for v = 1, n_voices do
-			mod_rolls[v]:draw(g)
-		end
+		mod_roll:draw(g)
 	end
 
 	g:refresh()
@@ -435,7 +428,7 @@ function transpose_keyboard:get_key_level(x, y, n)
 		level = 2
 	end
 	-- highlight transposition settings
-	-- TODO: show diff between transpose and edit_transpose
+	-- TODO: make top voice brighter so it's clear where the pivot point is
 	for v = 1, n_voices do
 		local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
 		local is_edit_transpose = n == self.scale:get_nearest_pitch_id(voices[v].edit_transpose)
@@ -521,25 +514,11 @@ function grid_octave_key(z, d)
 	end
 end
 
-function mod_rolls_should_handle_key(x, y)
-	if grid_mode_selector:is_selected(grid_mode_mod) then
-		for v = 1, n_voices do
-			print(mod_rolls[v].should_handle_key)
-			if mod_rolls[v]:should_handle_key(x, y) then
-				return true
-			end
-		end
-	end
-	return false
-end
-
 function grid_key(x, y, z)
 	if active_keyboard ~= nil and active_keyboard:should_handle_key(x, y) then
 		active_keyboard:key(x, y, z)
-	elseif mod_rolls_should_handle_key(x, y) then
-		for v = 1, n_voices do
-			mod_rolls[v]:key(x, y, z)
-		end
+	elseif mod_roll:should_handle_key(x, y) then
+		mod_roll:key(x, y, z)
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
 		voice_selector:key(x, y, z)
@@ -985,7 +964,7 @@ function init()
 	-- initialize mod register
 	mod_register:write_loop(0, 2)
 	mod_register:write_loop(1, 1)
-	mod_register:write_loop(2, 0)
+	mod_register:write_loop(2, 1)
 	mod_register:write_loop(3, 0)
 	mod_register:write_loop(4, 2)
 	mod_register:write_loop(5, 0)
@@ -994,11 +973,6 @@ function init()
 	mod_register:write_loop(8, 2)
 	mod_register:write_loop(9, 0)
 	mod_register:write_loop(10, 0)
-	mod_register:write_loop(11, 1)
-	mod_register:write_loop(12, 2)
-	mod_register:write_loop(13, 0)
-	mod_register:write_loop(14, 1)
-	mod_register:write_loop(15, 0)
 
 	memory_selector.selected = memory_loop
 
