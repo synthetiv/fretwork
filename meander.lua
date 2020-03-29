@@ -117,6 +117,8 @@ grid_shift = false
 grid_ctrl = false
 grid_octave_key_held = false
 
+view_octave = 0
+
 pitch_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 mask_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 transpose_keyboard = Keyboard.new(6, 1, 11, 8, scale)
@@ -343,11 +345,12 @@ function grid_redraw()
 	-- voice buttons
 	voice_selector:draw(g, 10, 5)
 
+	-- octave switches
+	g:led(3, 8, 2 - math.min(view_octave, 0))
+	g:led(4, 8, 2 + math.max(view_octave, 0))
+
 	if active_keyboard ~= nil then
 		-- keyboard, for keyboard-based modes
-		-- octave switches
-		g:led(3, 8, 2 - math.min(active_keyboard.octave, 0))
-		g:led(4, 8, 2 + math.max(active_keyboard.octave, 0))
 		-- keyboard
 		active_keyboard:draw(g)
 	else
@@ -492,14 +495,17 @@ end
 function grid_octave_key(z, d)
 	if z == 1 then
 		if grid_octave_key_held then
-			active_keyboard.octave = 0
+			view_octave = 0
 		else
-			active_keyboard.octave = active_keyboard.octave + d
+			view_octave = view_octave + d
 		end
 	end
 	-- TODO: track whether each key is held separately instead of this, because right now, holding -1,
 	-- then pressing and releasing +1 sets grid_octave_key_held to false
 	grid_octave_key_held = z == 1
+	if active_keyboard ~= nil then
+		active_keyboard.octave = view_octave
+	end
 end
 
 function grid_key(x, y, z)
@@ -1084,7 +1090,7 @@ function get_screen_note_y(value)
 	if value == nil then
 		return -1
 	end
-	return util.round(32 + (active_keyboard.octave - value) * scale.length)
+	return util.round(32 + (view_octave - value) * scale.length)
 end
 
 -- calculate coordinates for each visible note
