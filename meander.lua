@@ -42,10 +42,11 @@ config_selector = Select.new(1, 3, 4, 4)
 saved_loops = {}
 loop_selector = Select.new(1, 3, 4, 4)
 
-memory_selector = Select.new(1, 2, 3, 1)
+memory_selector = Select.new(1, 2, 4, 1)
 memory_loop = 1
 memory_mask = 2
 memory_config = 3
+memory_mod = 4
 
 -- TODO: save/recall mask, loop, and config all at once
 
@@ -101,10 +102,11 @@ voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
 top_voice = {}
 
-grid_mode_play = 1
+grid_mode_selector = Select.new(1, 1, 4, 1)
+grid_mode_pitch = 1
 grid_mode_mask = 2
 grid_mode_transpose = 3
-grid_mode = grid_mode_play
+grid_mode_mod = 4
 
 voice_selector = MultiSelect.new(5, 3, 1, 4)
 
@@ -114,9 +116,16 @@ m = midi.connect()
 grid_shift = false
 grid_ctrl = false
 grid_octave_key_held = false
-input_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-control_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-keyboard = input_keyboard
+
+pitch_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+mask_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+transpose_keyboard = Keyboard.new(6, 1, 11, 8, scale)
+keyboards = { -- lookup array; indices match corresponding modes
+	pitch_keyboard,
+	mask_keyboard,
+	transpose_keyboard
+}
+active_keyboard = pitch_keyboard
 
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
@@ -230,7 +239,7 @@ end
 
 function get_write_values()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
-	if input_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+	if pitch_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		-- TODO: this is good for held keys, but maybe we should also _quantize_ key presses:
 		-- when a key is pressed < 0.5 step after a clock tick, write to the current position and update outputs
 		-- when a key is pressed > 0.5 step after a clock tick, write to the NEXT position
@@ -238,7 +247,7 @@ function get_write_values()
 		-- maybe you only perform the write/update on the next tick...?
 		-- that might feel strange unless you can also update voice(s) immediately without writing
 		print(string.format('writing grid pitch (source = %d)', source))
-		return input_keyboard:get_last_value(), 1 -- TODO: mod values...
+		return pitch_keyboard:get_last_value(), 1 -- TODO: mod values...
 		-- TODO: add a separate 'erase' key that leaves current pitch value but sets mod value to 0?
 	elseif source == source_pitch or source == source_grid_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
@@ -312,9 +321,7 @@ end
 function grid_redraw()
 
 	-- mode buttons
-	g:led(1, 1, grid_mode == grid_mode_play and 7 or 2)
-	g:led(2, 1, grid_mode == grid_mode_mask and 7 or 2)
-	g:led(3, 1, grid_mode == grid_mode_transpose and 7 or 2)
+	grid_mode_selector:draw(g, 7, 2)
 
 	-- recall mode buttons
 	memory_selector:draw(g, 7, 2)
@@ -336,18 +343,22 @@ function grid_redraw()
 	-- voice buttons
 	voice_selector:draw(g, 10, 5)
 
-	-- keyboard octaves
-	g:led(3, 8, 2 - math.min(keyboard.octave, 0))
-	g:led(4, 8, 2 + math.max(keyboard.octave, 0))
+	if active_keyboard ~= nil then
+		-- keyboard, for keyboard-based modes
+		-- octave switches
+		g:led(3, 8, 2 - math.min(active_keyboard.octave, 0))
+		g:led(4, 8, 2 + math.max(active_keyboard.octave, 0))
+		-- keyboard
+		active_keyboard:draw(g)
+	else
+		-- TODO: 'x0x-roll' interface for mod mode
+		-- 11 is the center
+	end
 
-	-- keyboard
-	keyboard:draw(g)
 	g:refresh()
 end
 
-key_level_callbacks = {}
-
-key_level_callbacks[grid_mode_play] = function(self, x, y, n)
+function pitch_keyboard:get_key_level(x, y, n)
 	local level = 0
 	-- highlight mask
 	if self.scale:mask_contains(n) then
@@ -371,7 +382,7 @@ key_level_callbacks[grid_mode_play] = function(self, x, y, n)
 	return level
 end
 
-key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
+function mask_keyboard:get_key_level(x, y, n)
 	local level = 0
 	-- highlight white keys
 	if self:is_white_key(n) then
@@ -401,7 +412,7 @@ key_level_callbacks[grid_mode_mask] = function(self, x, y, n)
 	return level
 end
 
-key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
+function transpose_keyboard:get_key_level(x, y, n)
 	local level = 0
 	-- highlight octaves
 	if (n - self.scale.center_pitch_id) % self.scale.length == 1 then
@@ -433,50 +444,69 @@ key_level_callbacks[grid_mode_transpose] = function(self, x, y, n)
 	return level
 end
 
+function toggle_mask_class(pitch_id)
+	scale:toggle_class(pitch_id)
+	mask_dirty = true
+	if grid_ctrl then
+		scale:apply_edits()
+		update_voices()
+	end
+end
+
+function pitch_keyboard:key(x, y, z)
+	if grid_shift then
+		if z == 1 then
+			toggle_mask_class(self:get_key_pitch_id(x, y))
+		end
+		return
+	end
+	local previous_note = self:get_last_pitch_id()
+	self:note(x, y, z)
+	if self.gate and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
+		events.key()
+	end
+end
+
+function mask_keyboard:key(x, y, z)
+	if z == 1 then
+		toggle_mask_class(self:get_key_pitch_id(x, y))
+	end
+end
+
+function transpose_keyboard:key(x, y, z)
+	self:note(x, y, z)
+	if not self.gate then
+		return
+	end
+	local transpose = self:get_last_value() - top_voice.edit_transpose
+	for v = 1, n_voices do
+		if voice_selector:is_selected(v) then
+			params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
+		end
+	end
+	if grid_ctrl then
+		update_voices()
+	end
+end
+
 function grid_octave_key(z, d)
 	if z == 1 then
 		if grid_octave_key_held then
-			keyboard.octave = 0
+			active_keyboard.octave = 0
 		else
-			keyboard.octave = keyboard.octave + d
+			active_keyboard.octave = active_keyboard.octave + d
 		end
 	end
+	-- TODO: track whether each key is held separately instead of this, because right now, holding -1,
+	-- then pressing and releasing +1 sets grid_octave_key_held to false
 	grid_octave_key_held = z == 1
 end
 
 function grid_key(x, y, z)
-	if keyboard:should_handle_key(x, y) then
-		-- TODO: use events here too, maybe?
-		if grid_mode == grid_mode_play and not grid_shift then
-			local previous_note = keyboard:get_last_pitch_id()
-			keyboard:note(x, y, z)
-			if keyboard.gate and (previous_note ~= keyboard:get_last_pitch_id() or z == 1) then
-				events.key()
-			end
-		elseif grid_mode == grid_mode_mask or (grid_mode == grid_mode_play and grid_shift) then
-			if z == 1 then
-				local n = keyboard:get_key_pitch_id(x, y)
-				scale:toggle_class(n)
-				mask_dirty = true
-				if grid_ctrl then
-					scale:apply_edits()
-					update_voices()
-				end
-			end
-		elseif grid_mode == grid_mode_transpose then
-			keyboard:note(x, y, z)
-			if keyboard.gate then
-				local transpose = keyboard:get_last_value() - top_voice.edit_transpose
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
-					end
-				end
-				if grid_ctrl then
-					update_voices()
-				end
-			end
-		end
+	if active_keyboard ~= nil and active_keyboard:should_handle_key(x, y) then
+		active_keyboard:key(x, y, z)
+	elseif false then
+		-- TODO: x0x-roll
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
 		voice_selector:key(x, y, z)
@@ -485,23 +515,14 @@ function grid_key(x, y, z)
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
 		grid_octave_key(z, 1)
-	elseif x < 5 and y == 1 and z == 1 then
-		-- grid mode buttons
-		if x == 1 then
-			grid_mode = grid_mode_play
-			keyboard = input_keyboard
-		elseif x == 2 then
-			grid_mode = grid_mode_mask
-			keyboard = control_keyboard -- TODO: this still feels weird
-		elseif x == 3 then
-			grid_mode = grid_mode_transpose
-			keyboard = control_keyboard
+	elseif grid_mode_selector:should_handle_key(x, y) then
+		-- clear the current keyboard's held note stack, in order to prevent held notes from getting
+		-- stuck when switching to a mode that doesn't call `keyboard:note()`
+		if active_keyboard ~= nil then
+			active_keyboard:reset()
 		end
-		-- set the grid drawing routine based on new mode
-		keyboard.get_key_level = key_level_callbacks[grid_mode]
-		-- clear held note stack, in order to prevent held notes from getting stuck when switching to a
-		-- mode that doesn't call `keyboard:note()`
-		keyboard:reset()
+		grid_mode_selector:key(x, y, z)
+		active_keyboard = keyboards[grid_mode_selector.selected]
 	elseif memory_selector:should_handle_key(x, y) then
 		memory_selector:key(x, y, z)
 	elseif memory_selector:is_selected(memory_mask) and mask_selector:should_handle_key(x, y) then
@@ -862,8 +883,7 @@ function init()
 	crow_setup() -- calls params:bang()
 	
 	-- initialize grid controls
-	grid_mode = grid_mode_play
-	keyboard.get_key_level = key_level_callbacks[grid_mode]
+	grid_mode = grid_mode_pitch
 	voice_selector:reset(true)
 	update_active_heads()
 
@@ -1064,7 +1084,7 @@ function get_screen_note_y(value)
 	if value == nil then
 		return -1
 	end
-	return util.round(32 + (keyboard.octave - value) * scale.length)
+	return util.round(32 + (active_keyboard.octave - value) * scale.length)
 end
 
 -- calculate coordinates for each visible note
