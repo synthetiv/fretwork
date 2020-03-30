@@ -311,19 +311,22 @@ function rewind()
 	shift(-1)
 end
 
-function update_active_heads(last_voice) -- TODO: rename this, wtf
-	if last_voice then
-		local new_draw_order = {}
-		for i, o in ipairs(voice_draw_order) do
-			if o ~= last_voice then
-				table.insert(new_draw_order, o)
-			end
+function update_voice_order()
+	local selected = {}
+	local new_draw_order = {}
+	for i, v in ipairs(voice_draw_order) do
+		if voice_selector:is_selected(v) then
+			table.insert(selected, v)
+		else
+			table.insert(new_draw_order, v)
 		end
-		table.insert(new_draw_order, last_voice)
-		top_voice_index = new_draw_order[n_voices]
-		top_voice = voices[top_voice_index]
-		voice_draw_order = new_draw_order
 	end
+	for i, v in ipairs(selected) do
+		table.insert(new_draw_order, v)
+	end
+	top_voice_index = new_draw_order[n_voices]
+	top_voice = voices[top_voice_index]
+	voice_draw_order = new_draw_order
 end
 
 function grid_redraw()
@@ -530,7 +533,9 @@ function grid_key(x, y, z)
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
 		voice_selector:key(x, y, z)
-		update_active_heads(z == 1 and voice)
+		if z == 1 then
+			update_voice_order()
+		end
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
@@ -899,7 +904,7 @@ function init()
 	-- initialize grid controls
 	grid_mode = grid_mode_pitch
 	voice_selector:reset(true)
-	update_active_heads()
+	update_voice_order()
 
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
