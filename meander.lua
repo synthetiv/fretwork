@@ -648,6 +648,8 @@ function add_params()
 	-- TODO: read from crow input 2
 	-- TODO: and/or add a grid control
 
+	params:add_separator()
+
 	-- TODO: group params better
 	params:add_group('clock', 4)
 	params:add{
@@ -682,6 +684,23 @@ function add_params()
 	beatclock:add_clock_params()
 
 	params:add{
+		type = 'number',
+		id = 'loop_length',
+		name = 'loop length',
+		min = 2,
+		max = 128,
+		default = 16,
+		-- todo: make this adjust loop length with the top voice's current note as the loop end point,
+		-- so one could easily lock in the last few notes heard; i don't really get what it's doing now
+		action = function(value)
+			pitch_register:set_length(value)
+			update_voices()
+			dirty = true
+			show_info()
+		end
+	}
+	-- TODO: separate control for mod register length
+	params:add{
 		type = 'option',
 		id = 'shift_source',
 		name = 'sr source',
@@ -708,6 +727,7 @@ function add_params()
 			show_info()
 		end
 	}
+	-- TODO: can you do away with this, now that you're applying the current voice's transposition to all recorded notes?
 	params:add{
 		type = 'number',
 		id = 'pitch_in_octave',
@@ -722,28 +742,9 @@ function add_params()
 	
 	params:add_separator()
 	
-	params:add{
-		type = 'number',
-		id = 'loop_length',
-		name = 'loop length',
-		min = 2,
-		max = 128,
-		default = 16,
-		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
-		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now
-		action = function(value)
-			pitch_register:set_length(value)
-			update_voices()
-			dirty = true
-			show_info()
-		end
-	}
-	-- TODO: separate control for mod register length
-	
-	params:add_separator()
-	
 	for v = 1, n_voices do
 		local voice = voices[v]
+		params:add_group(string.format('voice %d', v), 6)
 		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
@@ -791,27 +792,6 @@ function add_params()
 		}
 		-- TODO: inversion too? value scaling?
 		-- TODO: maybe even different loop lengths... which implies multiple independent SRs
-	end
-
-	params:add_separator()
-
-	for v = 1, n_voices do
-		local voice = voices[v]
-		params:add{
-			type = 'control',
-			id = string.format('voice_%d_slew', v),
-			name = string.format('voice %d slew', v),
-			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
-			action = function(value)
-				crow.output[v].slew = value / 1000
-			end
-		}
-	end
-
-	params:add_separator()
-
-	for v = 1, n_voices do
-		local voice = voices[v]
 		params:add{
 			type = 'number',
 			id = string.format('voice_%d_clock_note', v),
@@ -832,6 +812,24 @@ function add_params()
 			default = 1,
 			action = function(value)
 				voice.clock_channel = value
+			end
+		}
+	end
+
+	params:add_separator()
+
+	params:add_group('polysub', 19)
+	polysub.params()
+
+	params:add_group('crow', 4)
+	for v = 1, n_voices do
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_slew', v),
+			name = string.format('voice %d slew', v),
+			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
+			action = function(value)
+				crow.output[v].slew = value / 1000
 			end
 		}
 	end
@@ -889,10 +887,6 @@ end
 function init()
 
 	add_params()
-	params:add_separator()
-	params:add_group('ENGINE', 19)
-	polysub.params()
-	-- params:set('detune', 0.17)
 	params:set('hzlag', 0.02)
 	params:set('cut', 8.32)
 	params:set('fgain', 1.26)
