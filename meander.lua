@@ -1102,7 +1102,7 @@ function get_screen_note_y(value)
 end
 
 -- calculate coordinates for each visible note
-function calculate_voice_path(v)
+function calculate_voice_path(v, level)
 	local voice = voices[v]
 	local path = voice:get_path(-screen_note_center, n_screen_notes - screen_note_center)
 	screen_notes[v] = {}
@@ -1112,6 +1112,16 @@ function calculate_voice_path(v)
 		note.y = get_screen_note_y(scale:snap(path[n].pitch))
 		note.z = path[n].mod
 		note.pitch_pos = path[n].pitch_pos
+		note.level = level
+		for w = 1, n_recent_writes do
+			local write = recent_writes[w]
+			if write ~= nil and write.level > 0 then
+				-- TODO: what about mod writes?
+				if pitch_register:clamp_loop_pos(note.pitch_pos) == pitch_register:clamp_loop_pos(write.pitch_pos) then
+					note.level = math.max(note.level, write.level)
+				end
+			end
+		end
 		screen_notes[v][n] = note
 	end
 end
@@ -1119,11 +1129,10 @@ end
 function draw_voice_path(v, level)
 	local voice = voices[v]
 
-	calculate_voice_path(v) -- TODO: don't do this every time, only when it changes
-
-	screen.line_cap('square')
+	calculate_voice_path(v, level)
 
 	-- draw background/outline
+	screen.line_cap('square')
 	screen.line_width(3)
 	screen.level(0)
 	local z = 0
@@ -1131,9 +1140,9 @@ function draw_voice_path(v, level)
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
-		local previous_z = z
+		local prev_z = z
 		z = note.z
-		if previous_z <= 0 or z <= 0 then
+		if prev_z <= 0 or z <= 0 then
 			screen.move(x, y)
 		else
 			screen.line(x, y)
@@ -1144,59 +1153,50 @@ function draw_voice_path(v, level)
 		screen.move(x + screen_note_width, y)
 	end
 	screen.stroke()
+	screen.line_cap('butt')
 
 	-- draw foreground/path
 	screen.line_width(1)
-	local note_level = level
+	z = nil
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
-		local x = note.x + 0.5
+		local x = note.x
 		local y = note.y + 0.5
-		local previous_z = z
-		z = note.z
-		-- if this note was just written, brighten it and the connecting line from the previous note
-		local previous_note_level = note_level
-		local connector_level = level
-		note_level = level
-		for w = 1, n_recent_writes do
-			local write = recent_writes[w]
-			if write ~= nil and write.level > 0 then
-				-- TODO: what about mod writes?
-				if pitch_register:clamp_loop_pos(note.pitch_pos) == pitch_register:clamp_loop_pos(write.pitch_pos) then
-					note_level = math.max(note_level, write.level)
-				end
-			end
-		end
-		if note_level > previous_note_level then
-			connector_level = math.ceil((note_level + previous_note_level) / 2)
-		end
-		if previous_z <= 0 or z <= 0 then
-			screen.move(x, y)
+		local z = note.z
+		local level = note.level
+		local prev_note = screen_notes[v][n - 1] or note
+		local prev_x = prev_note.x
+		local prev_y = prev_note.y + 0.5
+		local prev_z = prev_note.z
+		local prev_level = prev_note.level
+		if prev_z <= 0 or z <= 0 then
+			-- if this or the previous note is inactive, don't draw a connector
+			screen.move(x + 0.5, y)
 		else
-			screen.line(x, y)
+			local connector_level = math.min(level, prev_level) + math.floor(math.abs(level - prev_level) / 4)
+			local min_y = math.min(prev_y, y)
+			local max_y = math.max(prev_y, y)
+			screen.move(x + 0.5, math.min(max_y, min_y + 0.5))
+			screen.line(x + 0.5, math.max(min_y, max_y - 0.5))
+			screen.level(connector_level)
+			screen.stroke()
 		end
-		screen.level(connector_level)
-		screen.stroke()
-		-- draw this note
-		screen.move(x, y)
-		screen.line(x + screen_note_width, y)
 		if z > 0 then
 			-- solid line for active notes
-			screen.level(note_level)
+			screen.move(x, y)
+			screen.line(x + screen_note_width + 1, y)
+			screen.level(level)
 			screen.stroke()
 		else
 			-- dotted line for inactive notes
 			screen.pixel(x, y)
 			screen.pixel(x + 2, y)
 			screen.pixel(x + 4, y)
-			screen.level(math.ceil(note_level / 3))
+			screen.level(math.ceil(level / 3))
 			screen.fill(0)
 		end
-		screen.move(x + screen_note_width, y)
 	end
 	screen.stroke()
-
-	screen.line_cap('butt')
 end
 
 function redraw()
@@ -1238,8 +1238,7 @@ function redraw()
 		end
 	end
 
-	-- draw input indicators
-	-- TODO: when top voice is retrograde, this looks odd. not sure how to make it easier to follow.
+	-- fade write indicators
 	for w = 1, n_recent_writes do
 		local write = recent_writes[w]
 		if write ~= nil and write.level > 0 then
