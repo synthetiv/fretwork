@@ -1192,7 +1192,11 @@ function draw_voice_path(v, level)
 			screen.stroke()
 		else
 			-- dotted line for inactive notes
-			screen.pixel(x, y)
+			if prev_y ~= y then
+				-- no need to re-draw this pixel if it's already been drawn as part of the previous note
+				-- (possibly brighter, if prev note was active)
+				screen.pixel(x, y)
+			end
 			screen.pixel(x + 2, y)
 			screen.pixel(x + 4, y)
 			screen.level(math.ceil(level / 3))
