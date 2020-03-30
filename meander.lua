@@ -1206,13 +1206,6 @@ function redraw()
 	screen.font_face(2)
 	screen.font_size(8)
 
-	-- draw vertical output indicator
-	local output_x = get_screen_offset_x(-1) + 3
-	screen.move(output_x, 0)
-	screen.line(output_x, 64)
-	screen.level(1)
-	screen.stroke()
-
 	-- draw paths
 	for i, v in ipairs(voice_draw_order) do
 		local level = 1
@@ -1224,12 +1217,21 @@ function redraw()
 		draw_voice_path(v, level)
 	end
 
-	-- highlight current notes after drawing all snakes, lest some be covered by outlines
-	-- TODO: draw these based on voice.pitch in case that somehow ends up being different from what's shown on the screen??
-	-- (but it shouldn't, ever)
+	-- draw play head indicator, which will be interrupted by active notes but not by inactive ones
+	local output_x = get_screen_offset_x(-1) + 3
+	screen.move(output_x, 0)
+	screen.line(output_x, 64)
+	screen.level(1)
+	screen.stroke()
+
+	-- highlight current notes after drawing all snakes
 	for i, v in ipairs(voice_draw_order) do
 		local note = screen_notes[v][screen_note_center]
 		if note.z > 0 then
+			screen.move(note.x + 2.5, note.y - 1)
+			screen.line(note.x + 2.5, note.y + 2)
+			screen.level(0)
+			screen.stroke()
 			screen.pixel(note.x + 2, note.y)
 			screen.level(15)
 			screen.fill()
