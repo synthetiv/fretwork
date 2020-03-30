@@ -350,6 +350,9 @@ function grid_redraw()
 
 	-- voice buttons
 	voice_selector:draw(g, 10, 5)
+	-- highlight the top voice
+	local top_voice_x, top_voice_y = voice_selector:get_option_coords(top_voice_index)
+	g:led(top_voice_x, top_voice_y, 14)
 
 	-- octave switches
 	g:led(3, 8, 2 - math.min(view_octave, 0))
@@ -377,8 +380,10 @@ function pitch_keyboard:get_key_level(x, y, n)
 	for v = 1, n_voices do
 		local voice = voices[v]
 		if voice.mod > 0 and n == voice.pitch_id then
-			if voice_selector:is_selected(v) then
-				level = 10
+			if v == top_voice_index then
+				level = 14
+			elseif voice_selector:is_selected(v) then
+				level = math.max(level, 10)
 			else
 				level = math.max(level, 7)
 			end
@@ -411,8 +416,10 @@ function mask_keyboard:get_key_level(x, y, n)
 	for v = 1, n_voices do
 		local voice = voices[v]
 		if voice.mod > 0 and n == voice.pitch_id then
-			if voice_selector:is_selected(v) then
-				level = 10
+			if v == top_voice_index then
+				level = 14
+			elseif voice_selector:is_selected(v) then
+				level = math.max(level, 10)
 			else
 				level = math.max(level, 7)
 			end
@@ -428,26 +435,27 @@ function transpose_keyboard:get_key_level(x, y, n)
 		level = 2
 	end
 	-- highlight transposition settings
-	-- TODO: make top voice brighter so it's clear where the pivot point is
 	for v = 1, n_voices do
 		local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
 		local is_edit_transpose = n == self.scale:get_nearest_pitch_id(voices[v].edit_transpose)
-		if voice_selector:is_selected(v) then
-			if is_transpose and is_edit_transpose then
-				level = 10
-			elseif is_edit_transpose then
+		if is_transpose and is_edit_transpose then
+			if v == top_voice_index then
+				level = 14
+			elseif voice_selector:is_selected(v) then
+				level = math.max(level, 10)
+			else
+				level = math.max(level, 5)
+			end
+		elseif is_edit_transpose then
+			if v == top_voice_index then
+				level = math.max(level, 8)
+			elseif voice_selector:is_selected(v) then
 				level = math.max(level, 7)
-			elseif is_transpose then
-				level = math.max(level, 3)
-			end
-		else
-			if is_transpose and is_edit_transpose then
-				level = 5
-			elseif is_edit_transpose then
+			else
 				level = math.max(level, 4)
-			elseif is_transpose then
-				level = math.max(level, 3)
 			end
+		elseif is_transpose then
+			level = math.max(level, 3)
 		end
 	end
 	return level
