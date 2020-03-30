@@ -1176,14 +1176,15 @@ function draw_voice_path(v, level)
 		screen.move(x, y)
 		screen.line(x + screen_note_width, y)
 		if z > 0 then
+			-- solid line for active notes
 			screen.level(note_level)
 			screen.stroke()
 		else
-			-- dotted line
+			-- dotted line for inactive notes
 			screen.pixel(x, y)
 			screen.pixel(x + 2, y)
 			screen.pixel(x + 4, y)
-			screen.level(math.ceil(note_level / 2))
+			screen.level(math.ceil(note_level / 3))
 			screen.fill(0)
 		end
 		screen.move(x + screen_note_width, y)
