@@ -5,6 +5,7 @@ ShiftRegisterVoice.__index = ShiftRegisterVoice
 
 ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod_register)
 	local voice = setmetatable({}, ShiftRegisterVoice)
+	voice.detune = 0
 	voice.transpose = 0
 	voice.edit_transpose = 0
 	voice.pitch_raw = 0
@@ -26,10 +27,10 @@ function ShiftRegisterVoice:update_values()
 	self.pitch_raw, self.mod = self:get(0) -- unquantized
 	self.pitch_id = self.scale:get_nearest_mask_pitch_id(self.pitch_raw)
 	if self.pitch_id == -1 then
-		self.pitch = self.pitch_raw
+		self.pitch = self.pitch_raw + self.detune
 		return
 	end
-	self.pitch = self.scale:get(self.pitch_id)
+	self.pitch = self.scale:get(self.pitch_id) + self.detune
 end
 
 function ShiftRegisterVoice:shift_pitch(d)

@@ -747,6 +747,15 @@ function add_params()
 		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
+			id = string.format('voice_%d_detune', v),
+			name = string.format('voice %d detune', v),
+			controlspec = controlspec.new(-50, 50, 'lin', 0.5, (v - 2.5) * 2, 'cents'),
+			action = function(value)
+				voice.detune = value / 1200
+			end
+		}
+		params:add{
+			type = 'control',
 			id = string.format('voice_%d_transpose', v),
 			name = string.format('voice %d transpose', v),
 			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
