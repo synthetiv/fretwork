@@ -92,7 +92,6 @@ beatclock.on_stop = function()
 	clock_enable = false
 end
 
--- TODO: clock from MIDI notes
 clock_mode = 1
 clock_mode_names = {
 	'crow input 1',
@@ -659,6 +658,7 @@ function midi_event(data)
 			local voice = voices[v]
 			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
 				voice:shift(1)
+				update_voice(v)
 			end
 		end
 	end
