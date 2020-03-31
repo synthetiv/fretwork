@@ -1,5 +1,8 @@
--- follower
--- follow pitch, quantize, etc...
+-- fretwork
+--
+-- shift register sequencer,
+-- microtonal autoharp,
+-- etc.
 
 engine.name = 'PolySub'
 polysub = require 'we/lib/polysub'
@@ -840,7 +843,7 @@ function add_params()
 		type = 'file',
 		id = 'tuning_file',
 		name = 'tuning_file',
-		path = '/home/we/dust/data/meander/scales/y/young-lm_guitar.scl',
+		path = '/home/we/dust/data/fretwork/scales/y/young-lm_guitar.scl',
 		action = function(value)
 			print(value)
 			scale:read_scala_file(value)
