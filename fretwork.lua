@@ -164,19 +164,6 @@ info_metro = nil
 blink_metro = nil
 redraw_metro = nil
 
--- LOOP/MASK/TRANSPOSE QUANTIZATION
--- for each of these, maintain an 'edit buffer' separate from the version that's actually currently
--- being used by SR/voices
--- edits/changes are applied to this edit buffer, which replaces the in-use version on each beat
--- save/recall uses edit buffer too: if you edit the current mask, save your edit to a new slot, and
--- recall the current slot in the space of one beat, you won't have to hear your changes; then you
--- can queue them up to hear several beats later
--- saving/recalling loops will be slightly more complicated, since beats affect loop state (loop is
--- shifted with each beat).
--- so when you save a loop, that should save the _next_ state of the loop -- the shifted loop that
--- would be heard on the next beat. (so you can save the current loop + recall it within one beat
--- and it won't sound like any change was made.)
-
 function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
@@ -191,18 +178,20 @@ function save_mask()
 end
 
 function recall_loop()
-	-- TODO: queue up the recalled loop to start on the NEXT clock tick, unless Ctrl held
-	-- or, think of it as quantizing save/recall events, so they only happen on a tick, or every 4 ticks, or...
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	pitch_register:set_loop(0, saved_loops[loop_selector.selected])
-	pitch_register.dirty = false
+	if grid_ctrl then
+		pitch_register:set_loop(0, saved_loops[loop_selector.selected])
+	else
+		pitch_register:set_edit_loop(1, saved_loops[loop_selector.selected])
+	end
 	-- TODO: mod too
 end
 
 function save_loop()
-	saved_loops[loop_selector.selected] = pitch_register:get_loop(0)
+	local offset = grid_ctrl and 0 or 1 -- if ctrl is NOT held, save the future loop state (on the next tick)
+	saved_loops[loop_selector.selected] = pitch_register:get_loop(offset)
 	pitch_register.dirty = false
 	-- TODO: mod too
 end

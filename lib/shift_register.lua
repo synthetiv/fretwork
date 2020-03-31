@@ -81,6 +81,12 @@ function ShiftRegister:shift(delta)
 		-- if shifting backward, copy the value from after the end of the loop to the start
 		self:write_buffer_offset(-self.length + 1, self:read_buffer_offset(1), true)
 	end
+	if self.edit_loop_insert_offset ~= nil then
+		self.edit_loop_insert_offset = self.edit_loop_insert_offset - delta
+		if self.edit_loop_insert_offset == 0 then
+			self:apply_edit_loop()
+		end
+	end
 end
 
 function ShiftRegister:read_absolute(pos)
@@ -127,12 +133,23 @@ function ShiftRegister:write_head(value, clean)
 	self:write_absolute(self.head, value, clean)
 end
 
+function ShiftRegister:set_edit_loop(offset, loop)
+	-- prepare a new loop to replace the current one once we reach a certain offset
+	self.edit_loop_insert_offset = offset
+	self.edit_loop = loop
+end
+
+function ShiftRegister:apply_edit_loop()
+	self.edit_loop_insert_offset = nil
+	self:set_loop(0, self.edit_loop)
+end
+
 function ShiftRegister:set_loop(offset, loop)
 	self:set_length(#loop)
 	for i = 1, self.length do
 		self:write_loop_offset(offset + i - 1, loop[i])
 	end
-	self.dirty = true
+	self.dirty = false -- assume the loop that's just been set has been saved somewhere
 end
 
 function ShiftRegister:get_loop(offset)
