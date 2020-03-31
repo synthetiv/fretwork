@@ -29,11 +29,6 @@ et12 = {} -- 12TET
 for p = 1, 12 do 
 	et12[p] = p / 12
 end
--- et41 = {} -- 41TET -- TODO: use!
--- for p = 1, 41 do 
--- 	et41[p] = p / 41
--- end
--- TODO: add uneven/JI scales
 scale = Scale.new(et12)
 saved_masks = {}
 mask_dirty = false
