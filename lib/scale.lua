@@ -146,7 +146,7 @@ function Scale:get_nearest_mask_pitch_id(value)
 		return self.values[self.mask_pitch_ids[i]] > value
 	end)
 	mask_pitch_id = get_nearest(mask_pitch_id, value, function(i)
-		return self.mask_pitch_ids[i] ~= null and self.values[self.mask_pitch_ids[i]] or 2
+		return self.mask_pitch_ids[i] ~= nil and self.values[self.mask_pitch_ids[i]] or 2
 	end)
 	return self.mask_pitch_ids[mask_pitch_id]
 end
