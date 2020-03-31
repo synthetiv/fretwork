@@ -24,11 +24,11 @@ crow_in_values = { 0, 0 }
 -- calculate pitch class values
 et12 = {} -- 12TET
 for p = 1, 12 do 
-	et12[p] = (p - 1) / 12
+	et12[p] = p / 12
 end
 -- et41 = {} -- 41TET -- TODO: use!
 -- for p = 1, 41 do 
--- 	et41[p] = (p - 1) / 41
+-- 	et41[p] = p / 41
 -- end
 -- TODO: add uneven/JI scales
 scale = Scale.new(et12)
@@ -171,12 +171,12 @@ function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
 	end
-	scale:set_edit_mask(saved_masks[mask_selector.selected])
+	scale:set_edit_mask(scale:pitches_to_mask(saved_masks[mask_selector.selected]))
 	mask_dirty = false
 end
 
 function save_mask()
-	saved_masks[mask_selector.selected] = scale:get_edit_mask()
+	saved_masks[mask_selector.selected] = scale:mask_to_pitches(scale:get_edit_mask())
 	mask_dirty = false
 end
 
@@ -837,6 +837,17 @@ function add_params()
 	params:add_separator()
 
 	params:add{
+		type = 'file',
+		id = 'tuning_file',
+		name = 'tuning_file',
+		path = '/home/we/dust/data/meander/scales/y/young-lm_guitar.scl',
+		action = function(value)
+			print(value)
+			scale:read_scala_file(value)
+		end
+	}
+
+	params:add{
 		type = 'trigger',
 		id = 'restore_memory',
 		name = 'restore memory',
@@ -1101,7 +1112,7 @@ function get_screen_note_y(value)
 	if value == nil then
 		return -1
 	end
-	return util.round(32 + (view_octave - value) * scale.length)
+	return util.round(32 + (view_octave - value) * 12)
 end
 
 -- calculate coordinates for each visible note

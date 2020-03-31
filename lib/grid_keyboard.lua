@@ -106,7 +106,7 @@ end
 
 -- TODO: obviously this won't be accurate for non-12TET scales
 function Keyboard:is_white_key(n)
-	local class = (n - self.scale.center_pitch_id - 1) % 12 + 1
+	local class = self.scale:get_pitch_class(n)
 	return (class == 1 or class == 3 or class == 5 or class == 6 or class == 8 or class == 10 or class == 12)
 end
 

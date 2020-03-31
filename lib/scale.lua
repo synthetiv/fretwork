@@ -14,26 +14,25 @@ function Scale.new(pitch_class_values)
 	for p = 1, instance.length do
 		mask[p] = true
 	end
-	instance.edit_mask = mask
-	instance:apply_edits()
+	instance:set_mask(mask)
 	return instance
 end
 
 function Scale:init(pitch_class_values)
 	self.length = #pitch_class_values
-	self.pitch_class_values = pitch_class_values
+	self.span = pitch_class_values[#pitch_class_values]
 	-- precalculate all pitch values across all octaves
 	self.center_pitch_id = n_values / 2
 	self.values = {}
 	local pitch_class = 1
-	local octave = 0
+	local span = 0
 	for p = 0, self.center_pitch_id do
-		self.values[p + self.center_pitch_id + 1] = self.pitch_class_values[pitch_class] + octave
-		self.values[self.center_pitch_id - p] = self.pitch_class_values[self.length - pitch_class + 1] - octave - 1
+		self.values[self.center_pitch_id + p + 1] = pitch_class_values[pitch_class] + span * self.span
+		self.values[self.center_pitch_id - p] = pitch_class_values[self.length - pitch_class + 1] - (span + 1) * self.span
 		pitch_class = pitch_class + 1
 		if pitch_class > self.length then
 			pitch_class = 1
-			octave = octave + 1
+			span = span + 1
 		end
 	end
 end
@@ -47,6 +46,7 @@ function Scale:copy_mask(mask)
 end
 
 function Scale:set_mask(mask)
+	self.edit_mask = self:copy_mask(mask)
 	self.mask = self:copy_mask(mask)
 	self:update_mask_pitch_ids()
 end
@@ -67,7 +67,7 @@ function Scale:update_mask_pitch_ids()
 	local i = 1
 	self.mask_pitch_ids = {}
 	for p = 1, n_values do
-		if self.mask[(p - 1) % self.length + 1] then
+		if self:mask_contains(p) then
 			self.mask_pitch_ids[i] = p
 			i = i + 1
 		end
@@ -76,7 +76,7 @@ function Scale:update_mask_pitch_ids()
 end
 
 function Scale:get_pitch_class(pitch_id)
-	return (pitch_id - 1) % self.length + 1
+	return (pitch_id - self.center_pitch_id) % self.length + 1
 end
 
 function Scale:mask_contains(pitch_id)
@@ -161,6 +161,124 @@ function Scale:snap(value)
 		return value
 	end
 	return self:get(nearest_mask_pitch_id)
+end
+
+function Scale:mask_to_pitches(mask)
+	local pitches = {}
+	for class = 1, self.length do
+		if mask[class] then
+			table.insert(pitches, self:get(self.center_pitch_id + class - 1))
+		end
+	end
+	return pitches
+end
+
+function Scale:pitches_to_mask(pitches)
+	local mask = {}
+	for class = 1, self.length do
+		mask[class] = false
+	end
+	for i, pitch in ipairs(pitches) do
+		local pitch_id = self:get_nearest_pitch_id(pitch)
+		local class = self:get_pitch_class(pitch_id)
+		mask[class] = true
+	end
+	return mask
+end
+
+function Scale.parse_cents(value)
+	value = tonumber(value)
+	print('cents', value)
+	if not value then
+		return nil
+	end
+	return value / 1200
+end
+
+function Scale.parse_ratio(value)
+	-- get numerator
+	local num, den = string.match(value, '^(.+)/(.+)$')
+	if num == nil then
+		-- no /? read whole value as a number
+		num = tonumber(value)
+		if value == nil then
+			return nil
+		end
+		den = 1
+	else
+		num = tonumber(num)
+		den = tonumber(den)
+		if den == nil or num == nil then
+			return nil
+		end
+	end
+	print('ratio', num, den)
+	return math.log(num / den) / math.log(2)
+end
+
+-- switch to new scale values, preserving the current mask as much as possible
+function Scale:reinit(pitches)
+	local mask_pitches = self:mask_to_pitches(self.mask)
+	self:init(pitches)
+	self:set_mask(self:pitches_to_mask(mask_pitches))
+end
+
+function Scale:read_scala_file(path)
+	print('reading scala file', path)
+	local file = io.open(path, 'r')
+	if file == nil then
+		print('missing file')
+		return
+	end
+	local desc = nil
+	local length = 0
+	local pitches = {}
+	for line in io.lines(path) do
+		line = string.gsub(line, '\r', '') -- trim pesky CR characters that make debugging a pain
+		if string.sub(line, 1, 1) == '!' then
+			print('comment', string.sub(line, 1, -1))
+		else
+			if desc == nil then
+				desc = line
+				print('set desc', desc)
+			else
+				local value = string.match(line, '(%S+)')
+				print('trimmed', value)
+				if length == 0 then
+					length = tonumber(value)
+					print('set length')
+					if length == nil then
+						print('bad length', value)
+						return
+					end
+				else
+					print('hmm', value)
+					if string.find(value, '%.') ~= nil then
+						value = self.parse_cents(value)
+					else
+						value = self.parse_ratio(value)
+					end
+					if value == nil then
+						print('bad value', value)
+						return
+					end
+					if #pitches > 0 and value <= pitches[#pitches] then
+						print('non-ascending value')
+						return
+					end
+					table.insert(pitches, value)
+					print('added value', value)
+				end
+			end
+		end
+	end
+	if #pitches ~= length then
+		print('bad length')
+		return
+	end
+	print('ok')
+	tab.print(pitches)
+	self:reinit(pitches)
 end
 
 return Scale
