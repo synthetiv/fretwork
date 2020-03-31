@@ -80,11 +80,21 @@ events = {
 	key = noop
 }
 
+write_enable = true
+write_probability = 0
+
+clock_enable = false
 beatclock = BeatClock.new()
 beatclock.on_step = function()
 	if beatclock.step == 0 or beatclock.step == 2 then
 		events.beat()
 	end
+end
+beatclock.on_start = function()
+	clock_enable = true
+end
+beatclock.on_stop = function()
+	clock_enable = false
 end
 
 -- TODO: clock from MIDI notes
@@ -153,8 +163,11 @@ key_mod = false
 info_visible = false
 blink_slow = false
 blink_fast = false
+blink_play = false
+blink_record = false
 dirty = false
 info_metro = nil
+blink_metro = nil
 redraw_metro = nil
 
 -- LOOP/MASK/TRANSPOSE QUANTIZATION
@@ -267,13 +280,12 @@ function get_write_values()
 		print(string.format('writing crow pitch (source = %d)', source))
 		return crow_in_values[2], 1
 	end
-	print(string.format('nothing to write (source = %d)', source))
+	-- print(string.format('nothing to write (source = %d)', source))
 	return false
 end
 
 function maybe_write()
-	local prob = params:get('write_probability')
-	if prob > math.random(1, 100) then
+	if write_enable and write_probability > math.random(1, 100) then
 		local pitch, mod = get_write_values()
 		if not pitch then
 			return
@@ -291,6 +303,8 @@ function maybe_write()
 				}
 			end
 		end
+		blink_record = true
+		blink_record_metro:start()
 	end
 end
 
@@ -312,6 +326,15 @@ end
 
 function rewind()
 	shift(-1)
+end
+
+function tick()
+	if not clock_enable then
+		return
+	end
+	advance()
+	blink_play = true
+	blink_play_metro:start()
 end
 
 function update_voice_order()
@@ -369,9 +392,29 @@ function grid_redraw()
 		-- keyboard
 		active_keyboard:draw(g)
 	else
-		-- TODO: 'x0x-roll' interface for mod mode
+		-- 'x0x-roll' interface for mod mode
 		mod_roll:draw(g)
 	end
+
+	-- transport
+	local play_button_level = 3
+	if blink_play then
+		play_button_level = 8
+	elseif clock_enable then
+		play_button_level = 7
+	end
+	g:led(3, 7, play_button_level)
+	local record_button_level = 3
+	if blink_record then
+		record_button_level = 8
+	elseif write_enable then
+		if write_probability > 0 then
+			record_button_level = 7
+		else
+			record_button_level = 4
+		end
+	end
+	g:led(4, 7, record_button_level)
 
 	g:refresh()
 end
@@ -595,6 +638,21 @@ function grid_key(x, y, z)
 		if x == 1 then
 			grid_ctrl = z == 1
 		end
+	elseif x == 3 and y == 7 and z == 1 then
+		-- play key
+		if clock_mode == clock_mode_beatclock then
+			if clock_enable then
+				beatclock:stop()
+			else
+				beatclock:reset()
+				beatclock:start()
+			end
+		else
+			clock_enable = not clock_enable
+		end
+	elseif x == 4 and y == 7 and z == 1 then
+		-- record key
+		write_enable = not write_enable
 	end
 	dirty = true
 end
@@ -624,8 +682,7 @@ function show_info()
 	info_visible = true
 	dirty = true
 	if not key_shift then
-		info_metro:stop()
-		info_metro:start(0.75)
+		info_metro:start()
 	end
 end
 
@@ -664,19 +721,19 @@ function add_params()
 		action = function(value)
 			clock_mode = value
 			if clock_mode == clock_mode_grid or clock_mode == clock_mode_trig_grid then
-				events.key = advance
+				events.key = tick
 			else
 				events.key = noop
 			end
 			if clock_mode == clock_mode_trig or clock_mode == clock_mode_trig_grid then
-				events.trigger1 = advance
+				events.trigger1 = tick
 				crow.input[1].mode('change', 2.0, 0.25, 'rising')
 			else
 				events.trigger1 = noop
 				crow.input[1].mode('none')
 			end
 			if clock_mode == clock_mode_beatclock then
-				events.beat = advance
+				events.beat = tick
 				beatclock:start()
 			else
 				events.beat = noop
@@ -727,6 +784,7 @@ function add_params()
 			return string.format('%1.f%%', param:get() - 1)
 		end,
 		action = function(value)
+			write_probability = value - 1
 			show_info()
 		end
 	}
@@ -909,11 +967,28 @@ function init()
 	params:set('output_level', -48)
 
 	info_metro = metro.init()
+	info_metro.time = 0.75
+	info_metro.count = 1
 	info_metro.event = function()
 		info_visible = false
 		dirty = true
 	end
-	info_metro.count = 1
+
+	blink_play_metro = metro.init()
+	blink_play_metro.time = 1 / 15
+	blink_play_metro.count = 1
+	blink_play_metro.event = function()
+		blink_play = false
+		dirty = true
+	end
+	
+	blink_record_metro = metro.init()
+	blink_record_metro.time = 1 / 15
+	blink_record_metro.count = 1
+	blink_record_metro.event = function()
+		blink_record = false
+		dirty = true
+	end
 	
 	crow.add = crow_setup -- when crow is connected
 	crow_setup() -- calls params:bang()
@@ -1279,7 +1354,7 @@ function redraw()
 		screen.level(15)
 
 		screen.move(0, 7)
-		screen.text(string.format('P: %d%%', util.round(params:get('write_probability') - 1)))
+		screen.text(string.format('P: %d%%', util.round(write_probability)))
 
 		screen.move(0, 16)
 		screen.text(string.format('Lp: %d', pitch_register.length))
