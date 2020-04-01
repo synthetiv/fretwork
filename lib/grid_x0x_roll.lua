@@ -36,20 +36,20 @@ function X0XRoll:shift(d)
 	self.held_pos = self.held_pos + d
 end
 
-function X0XRoll:draw(g)
+function X0XRoll:draw(g, head_level_on, head_level_off, level_on, level_off)
 	-- TODO: animate 'catching up' with taps after hold is released
 	for x = self.x, self.x2 do
 		local offset = self:get_offset(x)
 		local mod = self.voice:get_mod(offset)
-		local level = 0
+		local level = level_off
 		if mod > 0 then
 			if offset == 0 then
-				level = 10
+				level = head_level_on
 			else
-				level = 4
+				level = level_on
 			end
 		elseif offset == 0 then
-			level = 2
+			level = head_level_off
 		end
 		g:led(x, self.y, level)
 	end

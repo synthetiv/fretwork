@@ -50,7 +50,7 @@ memory_mod = 4
 -- TODO: save/recall mask, loop, and config all at once
 
 pitch_register = ShiftRegister.new(32)
-mod_register = ShiftRegister.new(16)
+mod_register = ShiftRegister.new(11)
 
 source = 1
 source_names = {
@@ -390,7 +390,13 @@ function grid_redraw()
 		local hold = false
 		for v = 1, n_voices do
 			local roll = voices[v].mod_roll
-			roll:draw(g)
+			if v == top_voice_index then
+				roll:draw(g, 15, 2, 7, 0)
+			elseif voice_selector:is_selected(v) then
+				roll:draw(g, 12, 2, 4, 0)
+			else
+				roll:draw(g, 7, 0, 3, 0)
+			end
 			hold = hold or roll.hold
 		end
 		g:led(14, 8, held_keys.mod_shift_left and 7 or 2)
@@ -1128,22 +1134,17 @@ function init()
 	recall_loop()
 
 	-- initialize mod register
-	mod_register:write_loop(0, 1)
+	mod_register:write_loop(0, 2)
 	mod_register:write_loop(1, 1)
 	mod_register:write_loop(2, 1)
 	mod_register:write_loop(3, 0)
-	mod_register:write_loop(4, 0)
-	mod_register:write_loop(5, 1)
+	mod_register:write_loop(4, 2)
+	mod_register:write_loop(5, 0)
 	mod_register:write_loop(6, 1)
-	mod_register:write_loop(7, 1)
-	mod_register:write_loop(8, 0)
+	mod_register:write_loop(7, 0)
+	mod_register:write_loop(8, 2)
 	mod_register:write_loop(9, 0)
 	mod_register:write_loop(10, 0)
-	mod_register:write_loop(11, 1)
-	mod_register:write_loop(12, 0)
-	mod_register:write_loop(13, 1)
-	mod_register:write_loop(14, 0)
-	mod_register:write_loop(15, 0)
 
 	memory_selector.selected = memory_loop
 
