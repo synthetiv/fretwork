@@ -130,6 +130,7 @@ grid_octave_key_held = false
 
 view_octave = 0
 
+pitch_keyboard_played = false -- i.e. played since last tick
 pitch_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 mask_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 transpose_keyboard = Keyboard.new(6, 1, 11, 8, scale)
@@ -246,7 +247,8 @@ end
 
 function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
-	if pitch_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+	if (pitch_keyboard_played or pitch_keyboard.gate) and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+		pitch_keyboard_played = false
 		-- TODO: this is good for held keys, but maybe we should also _quantize_ key presses:
 		-- when a key is pressed < 0.5 step after a clock tick, write to the current position and update outputs
 		-- when a key is pressed > 0.5 step after a clock tick, write to the NEXT position
@@ -270,25 +272,28 @@ end
 function maybe_write()
 	if write_enable and write_probability > math.random(1, 100) then
 		local pitch = get_write_pitch()
-		if not pitch then
-			return
+		if pitch then
+			write(pitch)
 		end
-		for v = 1, n_voices do
-			-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
-			if voice_selector:is_selected(v) then
-				local voice = voices[v]
-				voice:set_pitch(0, pitch)
-				last_write = last_write % n_recent_writes + 1
-				recent_writes[last_write] = {
-					level = 15,
-					pitch_pos = voice.pitch_tap:get_pos(0),
-					mod_pos = voice.mod_tap:get_pos(0)
-				}
-			end
-		end
-		blink_record = true
-		blink_record_metro:start()
 	end
+end
+
+function write(pitch)
+	for v = 1, n_voices do
+		-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
+		if voice_selector:is_selected(v) then
+			local voice = voices[v]
+			voice:set_pitch(0, pitch)
+			last_write = last_write % n_recent_writes + 1
+			recent_writes[last_write] = {
+				level = 15,
+				pitch_pos = voice.pitch_tap:get_pos(0),
+				mod_pos = voice.mod_tap:get_pos(0)
+			}
+		end
+	end
+	blink_record = true
+	blink_record_metro:start()
 end
 
 function shift(d)
@@ -512,6 +517,13 @@ function pitch_keyboard:key(x, y, z)
 	local previous_note = self:get_last_pitch_id()
 	self:note(x, y, z)
 	if self.gate and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
+		if write_enable then
+			if grid_ctrl then
+				write(self:get_last_value())
+			else
+				pitch_keyboard_played = true
+			end
+		end
 		events.key()
 	end
 end
