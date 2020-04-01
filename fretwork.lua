@@ -803,10 +803,11 @@ function add_params()
 	}
 	beatclock:add_clock_params()
 
+	-- TODO: update this param when switching loops!
 	params:add{
 		type = 'number',
-		id = 'loop_length',
-		name = 'loop length',
+		id = 'pitch_loop_length',
+		name = 'pitch loop length',
 		min = 2,
 		max = 128,
 		default = 16,
@@ -819,7 +820,21 @@ function add_params()
 			dirty = true
 		end
 	}
-	-- TODO: separate control for mod register length
+	-- TODO: control from main screen
+	params:add{
+		type = 'number',
+		id = 'mod_loop_length',
+		name = 'mod loop length',
+		min = 2,
+		max = 128,
+		default = 18,
+		action = function(value)
+			mod_register:set_length(value)
+			update_voices()
+			blinkers.info:start()
+			dirty = true
+		end
+	}
 	params:add{
 		type = 'option',
 		id = 'shift_source',
