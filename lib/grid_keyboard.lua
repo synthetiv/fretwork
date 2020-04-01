@@ -15,6 +15,7 @@ function Keyboard.new(x, y, width, height, scale)
 	for row = instance.y, instance.y2 do
 		instance.row_offsets[row] = instance.scale.center_pitch_id + (instance.y_center - row) * 5
 	end
+	instance:set_white_keys()
 	-- this method can be redefined on the fly
 	instance.get_key_level = function(self, x, y, n)
 		return instance:is_white_key(n) and 2 or 0
@@ -104,10 +105,27 @@ function Keyboard:draw(g)
 	end
 end
 
--- TODO: obviously this won't be accurate for non-12TET scales
+function Keyboard:set_white_keys()
+	local white_key_pitches = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 }
+	local white_key_pitch_ids = {}
+	local white_keys = {}
+	for k = 1, 7 do
+		white_key_pitch_ids[k] = self.scale:get_pitch_class(self.scale:get_nearest_pitch_id(white_key_pitches[k]))
+	end
+	local k = 1
+	for c = 1, self.scale.length do
+		if c == white_key_pitch_ids[k] then
+			white_keys[c] = true
+			k = k + 1
+		else
+			white_keys[c] = false
+		end
+	end
+	self.white_keys = white_keys
+end
+
 function Keyboard:is_white_key(n)
-	local class = self.scale:get_pitch_class(n)
-	return (class == 1 or class == 3 or class == 5 or class == 6 or class == 8 or class == 10 or class == 12)
+	return self.white_keys[self.scale:get_pitch_class(n)]
 end
 
 return Keyboard

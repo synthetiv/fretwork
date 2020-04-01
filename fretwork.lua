@@ -923,6 +923,7 @@ function add_params()
 		action = function(value)
 			print(value)
 			scale:read_scala_file(value)
+			mask_keyboard:set_white_keys()
 		end
 	}
 
