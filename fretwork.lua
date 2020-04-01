@@ -50,7 +50,7 @@ memory_mod = 4
 -- TODO: save/recall mask, loop, and config all at once
 
 pitch_register = ShiftRegister.new(32)
-mod_register = ShiftRegister.new(11)
+mod_register = ShiftRegister.new(16)
 
 source = 1
 source_names = {
@@ -111,7 +111,9 @@ n_voices = 4
 voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
 for v = 1, n_voices do
-	voices[v] = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
+	local voice = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
+	voice.mod_roll = X0XRoll.new(6, 2 + v, 11, 1, voice)
+	voices[v] = voice
 end
 top_voice = voices[top_voice_index]
 
@@ -126,9 +128,15 @@ voice_selector = MultiSelect.new(5, 3, 1, 4)
 g = grid.connect()
 m = midi.connect()
 
-grid_shift = false
-grid_ctrl = false
-grid_octave_key_held = false
+held_keys = {
+	ctrl = false,
+	shift = false,
+	octave_down = false,
+	octave_up = false,
+	mod_shift_left = false,
+	mod_hold = false,
+	mod_shift_right = false
+}
 
 view_octave = 0
 
@@ -142,8 +150,6 @@ keyboards = { -- lookup array; indices match corresponding modes
 	transpose_keyboard
 }
 active_keyboard = pitch_keyboard
-
-mod_roll = X0XRoll.new(6, 1, 11, 8, mod_register)
 
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
@@ -183,7 +189,7 @@ function recall_loop()
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	if grid_ctrl then
+	if held_keys.ctrl then
 		pitch_register:set_loop(0, saved_loops[loop_selector.selected])
 	else
 		pitch_register:set_edit_loop(1, saved_loops[loop_selector.selected])
@@ -192,7 +198,7 @@ function recall_loop()
 end
 
 function save_loop()
-	local offset = grid_ctrl and 0 or 1 -- if ctrl is NOT held, save the future loop state (on the next tick)
+	local offset = held_keys.ctrl and 0 or 1 -- if ctrl is NOT held, save the future loop state (on the next tick)
 	saved_loops[loop_selector.selected] = pitch_register:get_loop(offset)
 	pitch_register.dirty = false
 	-- TODO: mod too
@@ -343,6 +349,8 @@ end
 
 function grid_redraw()
 
+	g:all(0)
+
 	-- mode buttons
 	grid_mode_selector:draw(g, 7, 2)
 
@@ -360,8 +368,8 @@ function grid_redraw()
 	end
 
 	-- shift + ctrl
-	g:led(1, 7, grid_shift and 15 or 2)
-	g:led(1, 8, grid_ctrl and 15 or 2)
+	g:led(1, 7, held_keys.shift and 15 or 2)
+	g:led(1, 8, held_keys.ctrl and 15 or 2)
 
 	-- voice buttons
 	voice_selector:draw(g, 10, 5)
@@ -379,7 +387,15 @@ function grid_redraw()
 		active_keyboard:draw(g)
 	else
 		-- 'x0x-roll' interface for mod mode
-		mod_roll:draw(g)
+		local hold = false
+		for v = 1, n_voices do
+			local roll = voices[v].mod_roll
+			roll:draw(g)
+			hold = hold or roll.hold
+		end
+		g:led(14, 8, held_keys.mod_shift_left and 7 or 2)
+		g:led(15, 8, hold and 2 or 7)
+		g:led(16, 8, held_keys.mod_shift_right and 7 or 2)
 	end
 
 	-- transport
@@ -499,14 +515,14 @@ end
 function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
 	mask_dirty = true
-	if grid_ctrl then
+	if held_keys.ctrl then
 		scale:apply_edits()
 		update_voices()
 	end
 end
 
 function pitch_keyboard:key(x, y, z)
-	if grid_shift then
+	if held_keys.shift then
 		-- TODO: fix stuck notes when holding a key, holding shift, then letting go of key
 		if z == 1 then
 			toggle_mask_class(self:get_key_pitch_id(x, y))
@@ -517,7 +533,7 @@ function pitch_keyboard:key(x, y, z)
 	self:note(x, y, z)
 	if self.gate and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
 		if write_enable then
-			if grid_ctrl then
+			if held_keys.ctrl then
 				write(self:get_last_value())
 			else
 				pitch_keyboard_played = true
@@ -544,32 +560,65 @@ function transpose_keyboard:key(x, y, z)
 			params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
 		end
 	end
-	if grid_ctrl then
+	if held_keys.ctrl then
 		update_voices()
 	end
 end
 
 function grid_octave_key(z, d)
+	if d < 0 then
+		held_keys.octave_down = z == 1
+	elseif d > 0 then
+		held_keys.octave_up = z == 1
+	end
 	if z == 1 then
-		if grid_octave_key_held then
+		if held_keys.octave_down and held_keys.octave_up then
 			view_octave = 0
 		else
 			view_octave = view_octave + d
 		end
 	end
-	-- TODO: track whether each key is held separately instead of this, because right now, holding -1,
-	-- then pressing and releasing +1 sets grid_octave_key_held to false
-	grid_octave_key_held = z == 1
 	if active_keyboard ~= nil then
 		active_keyboard.octave = view_octave
 	end
 end
 
+function mod_rolls_should_handle_key(x, y)
+	for v = 1, n_voices do
+		if voices[v].mod_roll:should_handle_key(x, y) then
+			return true
+		end
+	end
+	return false
+end
+
 function grid_key(x, y, z)
 	if active_keyboard ~= nil and active_keyboard:should_handle_key(x, y) then
 		active_keyboard:key(x, y, z)
-	elseif mod_roll:should_handle_key(x, y) then
-		mod_roll:key(x, y, z)
+	elseif grid_mode_selector:is_selected(grid_mode_mod) and mod_rolls_should_handle_key(x, y) then
+		for v = 1, n_voices do
+			voices[v].mod_roll:key(x, y, z)
+		end
+	elseif grid_mode_selector:is_selected(grid_mode_mod) and x >= 14 and x <= 16 and y == 8 then
+		if x == 14 then
+			held_keys.mod_shift_left = z == 1
+		elseif x == 15 then
+			held_keys.mod_hold = z == 1
+		elseif x == 16 then
+			held_keys.mod_shift_right = z == 1
+		end
+		if z == 1 then
+			for v = 1, n_voices do
+				local roll = voices[v].mod_roll
+				if x == 14 then
+					roll:shift(-1)
+				elseif x == 15 then
+					roll:toggle_hold()
+				elseif x == 16 then
+					roll:shift(1)
+				end
+			end
+		end
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
 		-- TODO: when shift is held, mute/unmute voices instead of selecting
@@ -595,11 +644,11 @@ function grid_key(x, y, z)
 		mask_selector:key(x, y, z)
 		-- TODO: these should be callbacks/handlers, properties on the selector objects
 		if z == 1 then
-			if grid_shift then
+			if held_keys.shift then
 				save_mask()
 			else
 				recall_mask()
-				if grid_ctrl then
+				if held_keys.ctrl then
 					update_voices()
 				end
 			end
@@ -607,11 +656,11 @@ function grid_key(x, y, z)
 	elseif memory_selector:is_selected(memory_config) and config_selector:should_handle_key(x, y) then
 		config_selector:key(x, y, z)
 		if z == 1 then
-			if grid_shift then
+			if held_keys.shift then
 				save_config()
 			else
 				recall_config()
-				if grid_ctrl then
+				if held_keys.ctrl then
 					update_voices()
 				end
 			end
@@ -619,22 +668,22 @@ function grid_key(x, y, z)
 	elseif memory_selector:is_selected(memory_loop) and loop_selector:should_handle_key(x, y) then
 		loop_selector:key(x, y, z)
 		if z == 1 then
-			if grid_shift then
+			if held_keys.shift then
 				save_loop()
 			else
 				recall_loop()
-				if grid_ctrl then
+				if held_keys.ctrl then
 					update_voices()
 				end
 			end
 		end
 	elseif x == 1 and y == 7 then
 		-- shift key
-		grid_shift = z == 1
+		held_keys.shift = z == 1
 	elseif x == 1 and y == 8 then
 		-- ctrl key
 		if x == 1 then
-			grid_ctrl = z == 1
+			held_keys.ctrl = z == 1
 		end
 	elseif x == 3 and y == 7 and z == 1 then
 		-- play key
@@ -1079,17 +1128,22 @@ function init()
 	recall_loop()
 
 	-- initialize mod register
-	mod_register:write_loop(0, 2)
+	mod_register:write_loop(0, 1)
 	mod_register:write_loop(1, 1)
 	mod_register:write_loop(2, 1)
 	mod_register:write_loop(3, 0)
-	mod_register:write_loop(4, 2)
-	mod_register:write_loop(5, 0)
+	mod_register:write_loop(4, 0)
+	mod_register:write_loop(5, 1)
 	mod_register:write_loop(6, 1)
-	mod_register:write_loop(7, 0)
-	mod_register:write_loop(8, 2)
+	mod_register:write_loop(7, 1)
+	mod_register:write_loop(8, 0)
 	mod_register:write_loop(9, 0)
 	mod_register:write_loop(10, 0)
+	mod_register:write_loop(11, 1)
+	mod_register:write_loop(12, 0)
+	mod_register:write_loop(13, 1)
+	mod_register:write_loop(14, 0)
+	mod_register:write_loop(15, 0)
 
 	memory_selector.selected = memory_loop
 
@@ -1172,12 +1226,22 @@ function enc(n, d)
 		-- TODO: somehow do this more slowly / make it less sensitive?
 		for v = 1, n_voices do
 			if voice_selector:is_selected(v) then
+				local voice = voices[v]
+				local mod_roll = voices[v].mod_roll
 				if key_pitch and not key_mod then
-					voices[v]:shift_pitch(-d)
+					voice:shift_pitch(-d)
 				elseif key_mod and not key_pitch then
-					voices[v]:shift_mod(-d)
+					voice:shift_mod(-d)
+					-- even if mod roll position is decoupled from voice position, we want to shift them
+					-- together here, so all the mod rolls always line up
+					if mod_roll.hold then
+						mod_roll:shift(-d)
+					end
 				else
-					voices[v]:shift(-d)
+					voice:shift(-d)
+					if mod_roll.hold then
+						mod_roll:shift(-d)
+					end
 				end
 				update_voice(v)
 			end

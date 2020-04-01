@@ -1,4 +1,5 @@
 local ShiftRegisterTap = include 'lib/shift_register_tap'
+local X0XRoll = include 'lib/grid_control'
 
 local ShiftRegisterVoice = {}
 ShiftRegisterVoice.__index = ShiftRegisterVoice
@@ -12,9 +13,9 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.pitch_id = 1
 	voice.pitch = 0
 	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register)
+	voice.scale = scale
 	voice.mod = 0
 	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register)
-	voice.scale = scale
 	return voice
 end
 
@@ -46,8 +47,16 @@ function ShiftRegisterVoice:shift(d)
 	self:shift_mod(d)
 end
 
+function ShiftRegisterVoice:get_pitch(t)
+	return self.pitch_tap:get(t) + self.transpose
+end
+
+function ShiftRegisterVoice:get_mod(t)
+	return self.mod_tap:get(t)
+end
+
 function ShiftRegisterVoice:get(t)
-	return self.pitch_tap:get(t) + self.transpose, self.mod_tap:get(t)
+	return self:get_pitch(t), self:get_mod(t)
 end
 
 function ShiftRegisterVoice:set_pitch(t, pitch)
@@ -59,6 +68,13 @@ end
 
 function ShiftRegisterVoice:set_mod(t, mod)
 	self.mod_tap:set(t, mod)
+	if t == 0 then
+		self:update_values()
+	end
+end
+
+function ShiftRegisterVoice:toggle_mod(t)
+	self:set_mod(t, self:get_mod(t) > 0 and 0 or 1)
 	if t == 0 then
 		self:update_values()
 	end

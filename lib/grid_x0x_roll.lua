@@ -3,32 +3,55 @@ local Control = include 'lib/grid_control'
 local X0XRoll = setmetatable({}, Control)
 X0XRoll.__index = X0XRoll
 
-function X0XRoll.new(x, y, width, height, shift_register)
+function X0XRoll.new(x, y, width, height, voice)
 	local roll = setmetatable(Control.new(x, y, width, height), X0XRoll)
-	roll.shift_register = shift_register
-	roll.offset = 0
+	roll.voice = voice
+	roll.tap = voice.mod_tap
+	roll.hold = false
+	roll.held_pos = 0
 	return roll
 end
 
-function X0XRoll:shift(d)
-	self.offset = self.offset + d
+function X0XRoll:get_offset(x)
+	local offset = x - self.x_center
+	if self.hold then
+		offset = offset - self.tap.pos + self.held_pos
+	end
+	return self.tap.shift_register:clamp_loop_offset(offset)
 end
 
-function X0XRoll:get_offset(x)
-	return x - self.x_center + self.offset
+function X0XRoll:set_hold(state)
+	if state and not self.hold then
+		self.held_pos = self.tap.pos
+	end
+	self.hold = state
+end
+
+function X0XRoll:toggle_hold()
+	self:set_hold(not self.hold)
+end
+
+function X0XRoll:shift(d)
+	self:set_hold(true)
+	self.held_pos = self.held_pos + d
 end
 
 function X0XRoll:draw(g)
+	-- TODO: animate 'catching up' with taps after hold is released
 	for x = self.x, self.x2 do
-		for y = self.y, self.y2 do
-			local value = self.shift_register:read_loop(self:get_offset(x))
-			local level = math.floor(10 * value / 5)
-			local bar_height = math.floor(self.height * value / 5)
-			if self.y2 - y > bar_height then
-				level = 0
+		local offset = self:get_offset(x)
+		local mod = self.voice:get_mod(offset)
+		local level = 0
+		if mod > 0 then
+			if offset == 0 then
+				level = 10
+			else
+				level = 4
 			end
-			g:led(x, y, level)
+		elseif offset == 0 then
+			level = 2
 		end
+		g:led(x, self.y, level)
 	end
 end
 
@@ -39,9 +62,7 @@ function X0XRoll:key(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return
 	end
-	local offset = self:get_offset(x)
-	local value = 5 * (self.y2 - y) / self.height
-	self.shift_register:write_loop(offset, value)
+	self.voice:toggle_mod(self:get_offset(x))
 end
 
 return X0XRoll
