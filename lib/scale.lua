@@ -188,7 +188,6 @@ end
 
 function Scale.parse_cents(value)
 	value = tonumber(value)
-	print('cents', value)
 	if not value then
 		return nil
 	end
@@ -212,7 +211,6 @@ function Scale.parse_ratio(value)
 			return nil
 		end
 	end
-	print('ratio', num, den)
 	return math.log(num / den) / math.log(2)
 end
 
@@ -243,16 +241,14 @@ function Scale:read_scala_file(path)
 				print('set desc', desc)
 			else
 				local value = string.match(line, '(%S+)')
-				print('trimmed', value)
 				if length == 0 then
 					length = tonumber(value)
-					print('set length')
+					print('set length', length)
 					if length == nil then
 						print('bad length', value)
 						return
 					end
 				else
-					print('hmm', value)
 					if string.find(value, '%.') ~= nil then
 						value = self.parse_cents(value)
 					else
@@ -267,13 +263,12 @@ function Scale:read_scala_file(path)
 						return
 					end
 					table.insert(pitches, value)
-					print('added value', value)
 				end
 			end
 		end
 	end
 	if #pitches ~= length then
-		print('bad length')
+		print('length mismatch')
 		return
 	end
 	print('ok')

@@ -81,6 +81,8 @@ write_probability = 0
 clock_enable = false
 beatclock = BeatClock.new()
 beatclock.on_step = function()
+	-- TODO: take advantage of this resolution: give voices/taps fractional shift rates
+	-- (positive or negative), instead of directions
 	if beatclock.step == 0 or beatclock.step == 2 then
 		events.beat()
 	end
@@ -570,6 +572,7 @@ function grid_key(x, y, z)
 		mod_roll:key(x, y, z)
 	elseif voice_selector:should_handle_key(x, y) then
 		local voice = voice_selector:get_key_option(x, y)
+		-- TODO: when shift is held, mute/unmute voices instead of selecting
 		voice_selector:key(x, y, z)
 		if z == 1 then
 			update_voice_order()
@@ -915,6 +918,7 @@ function add_params()
 
 	params:add_separator()
 
+	-- TODO: set tuning root note (as scale degree, or in 12 equal?)
 	params:add{
 		type = 'file',
 		id = 'tuning_file',
