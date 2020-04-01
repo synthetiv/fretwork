@@ -56,8 +56,8 @@ source = 1
 source_names = {
 	'grid',
 	'pitch track',
-	'crow input 2',
-	'grid OR pitch',
+	'crow input 2', -- TODO: make sure this works
+	'grid OR pitch', -- TODO: when would you NOT want to read from the grid?
 	'grid OR crow'
 	-- TODO: random, LFO
 }
@@ -157,7 +157,6 @@ key_pitch = false
 key_mod = false
 info_visible = false
 blink_slow = false
-blink_fast = false
 blink_play = false
 blink_record = false
 dirty = false
@@ -212,9 +211,6 @@ function recall_config()
 		params:set(string.format('voice_%d_mod_scramble', v), config.mod_scramble or 0)
 		params:set(string.format('voice_%d_mod_direction', v), config.mod_direction == -1 and 2 or 1)
 	end
-	if grid_ctrl then
-		update_voices()
-	end
 	config_dirty = false
 end
 
@@ -256,15 +252,8 @@ function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
 	if (pitch_keyboard_played or pitch_keyboard.gate) and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		pitch_keyboard_played = false
-		-- TODO: this is good for held keys, but maybe we should also _quantize_ key presses:
-		-- when a key is pressed < 0.5 step after a clock tick, write to the current position and update outputs
-		-- when a key is pressed > 0.5 step after a clock tick, write to the NEXT position
-		-- ...that won't work with irregular clocks, though
-		-- maybe you only perform the write/update on the next tick...?
-		-- that might feel strange unless you can also update voice(s) immediately without writing
 		print(string.format('writing grid pitch (source = %d)', source))
 		return pitch_keyboard:get_last_value()
-		-- TODO: add a separate 'erase' key that leaves current pitch value but sets mod value to 0?
 	elseif source == source_pitch or source == source_grid_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
 		return pitch_in_value
@@ -287,7 +276,6 @@ end
 
 function write(pitch)
 	for v = 1, n_voices do
-		-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
 		if voice_selector:is_selected(v) then
 			local voice = voices[v]
 			voice:set_pitch(0, pitch)
@@ -517,6 +505,7 @@ end
 
 function pitch_keyboard:key(x, y, z)
 	if grid_shift then
+		-- TODO: fix stuck notes when holding a key, holding shift, then letting go of key
 		if z == 1 then
 			toggle_mask_class(self:get_key_pitch_id(x, y))
 		end
@@ -619,6 +608,9 @@ function grid_key(x, y, z)
 				save_config()
 			else
 				recall_config()
+				if grid_ctrl then
+					update_voices()
+				end
 			end
 		end
 	elseif memory_selector:is_selected(memory_loop) and loop_selector:should_handle_key(x, y) then
@@ -709,12 +701,9 @@ function crow_setup()
 end
 
 function add_params()
-	-- TODO: read from crow input 2
-	-- TODO: and/or add a grid control
 
 	params:add_separator()
 
-	-- TODO: group params better
 	params:add_group('clock', 4)
 	params:add{
 		type = 'option',
@@ -809,7 +798,7 @@ function add_params()
 	
 	for v = 1, n_voices do
 		local voice = voices[v]
-		params:add_group(string.format('voice %d', v), 6)
+		params:add_group(string.format('voice %d', v), 8)
 		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
@@ -974,9 +963,6 @@ function add_params()
 		action = function()
 			local data_file = norns.state.data .. 'memory.lua'
 			local data = {}
-			-- TODO: convert saved masks to tables of continuum values:
-			-- { 0, 0.13, 0.9 } not { pitch ID = true/false }
-			-- this would make switching between microtonal scales less painful
 			data.masks = saved_masks
 			data.configs = saved_configs
 			data.loops = saved_loops
@@ -1029,19 +1015,11 @@ function init()
 
 	redraw_metro = metro.init()
 	redraw_metro.event = function(tick)
-		-- TODO: stop blinking after n seconds of inactivity?
 		if not blink_slow and tick % 8 > 3 then
 			blink_slow = true
 			dirty = true
 		elseif blink_slow and tick % 8 <= 3 then
 			blink_slow = false
-			dirty = true
-		end
-		if not blink_fast and tick % 4 > 1 then
-			blink_fast = true
-			dirty = true
-		elseif blink_fast and tick % 4 <= 1 then
-			blink_fast = false
 			dirty = true
 		end
 		if dirty then
@@ -1131,6 +1109,9 @@ function key(n, z)
 end
 
 function params_multi_delta(param_format, selected, d)
+	-- TODO: do I always want to retain the current relationship between the voices? in the case of
+	-- scramble, I often want to zero it out for all voices at once, even if they currently have
+	-- different values
 	-- note: this assumes number params with identical range!
 	local min = 0
 	local max = 0

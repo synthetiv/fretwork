@@ -53,8 +53,6 @@ function MultiSelect:key(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return
 	end
-	-- TODO: does this tap & hold selection method make sense, or would it feel more normal to select
-	-- multiples using shift?
 	local option = self:get_key_option(x, y)
 	if z == 1 then
 		if not self:is_held() then
