@@ -17,6 +17,7 @@ MultiSelect = include 'lib/grid_multi_select'
 ShiftRegister = include 'lib/shift_register'
 ShiftRegisterVoice = include 'lib/shift_register_voice'
 Scale = include 'lib/scale'
+Blinker = include 'lib/blinker'
 
 pitch_poll = nil
 pitch_in_value = 0
@@ -163,14 +164,32 @@ last_write = 0
 key_shift = false
 key_pitch = false
 key_mod = false
-info_visible = false
 blink_slow = false
-blink_play = false
-blink_record = false
+framerate = 1 / 15
+blinkers = {
+	info = Blinker.new(0.75),
+	play = Blinker.new(framerate),
+	record = Blinker.new(framerate)
+}
 dirty = false
-info_metro = nil
-blink_metro = nil
-redraw_metro = nil
+
+redraw_metro = metro.init{
+	time = framerate,
+	event = function(tick)
+		if not blink_slow and tick % 8 > 3 then
+			blink_slow = true
+			dirty = true
+		elseif blink_slow and tick % 8 <= 3 then
+			blink_slow = false
+			dirty = true
+		end
+		if dirty then
+			grid_redraw()
+			redraw()
+			dirty = false
+		end
+	end
+}
 
 function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
@@ -296,8 +315,7 @@ function write(pitch)
 			update_voice(v)
 		end
 	end
-	blink_record = true
-	blink_record_metro:start()
+	blinkers.record:start()
 end
 
 function shift(d)
@@ -325,8 +343,7 @@ function tick()
 		return
 	end
 	advance()
-	blink_play = true
-	blink_play_metro:start()
+	blinkers.play:start()
 end
 
 function update_voice_order()
@@ -406,14 +423,14 @@ function grid_redraw()
 
 	-- transport
 	local play_button_level = 3
-	if blink_play then
+	if blinkers.play.on then
 		play_button_level = 8
 	elseif clock_enable then
 		play_button_level = 7
 	end
 	g:led(3, 7, play_button_level)
 	local record_button_level = 3
-	if blink_record then
+	if blinkers.record.on then
 		record_button_level = 8
 	elseif write_enable then
 		if write_probability > 0 then
@@ -732,14 +749,6 @@ function update_freq(value)
 	end
 end
 
-function show_info()
-	info_visible = true
-	dirty = true
-	if not key_shift then
-		info_metro:start()
-	end
-end
-
 function crow_setup()
 	crow.clear()
 	-- input modes will be set by params
@@ -806,8 +815,8 @@ function add_params()
 		action = function(value)
 			pitch_register:set_length(value)
 			update_voices()
+			blinkers.info:start()
 			dirty = true
-			show_info()
 		end
 	}
 	-- TODO: separate control for mod register length
@@ -836,7 +845,7 @@ function add_params()
 		end,
 		action = function(value)
 			write_probability = value - 1
-			show_info()
+			blinkers.info:start()
 		end
 	}
 	-- TODO: can you do away with this, now that you're applying the current voice's transposition to all recorded notes?
@@ -1040,30 +1049,6 @@ function init()
 	params:set('ampatk', 0.03)
 	params:set('ampdec', 0.17)
 	params:set('output_level', -48)
-
-	info_metro = metro.init()
-	info_metro.time = 0.75
-	info_metro.count = 1
-	info_metro.event = function()
-		info_visible = false
-		dirty = true
-	end
-
-	blink_play_metro = metro.init()
-	blink_play_metro.time = 1 / 15
-	blink_play_metro.count = 1
-	blink_play_metro.event = function()
-		blink_play = false
-		dirty = true
-	end
-	
-	blink_record_metro = metro.init()
-	blink_record_metro.time = 1 / 15
-	blink_record_metro.count = 1
-	blink_record_metro.event = function()
-		blink_record = false
-		dirty = true
-	end
 	
 	crow.add = crow_setup -- when crow is connected
 	crow_setup() -- calls params:bang()
@@ -1072,24 +1057,6 @@ function init()
 	grid_mode = grid_mode_pitch
 	voice_selector:reset(true)
 	update_voice_order()
-
-	redraw_metro = metro.init()
-	redraw_metro.event = function(tick)
-		if not blink_slow and tick % 8 > 3 then
-			blink_slow = true
-			dirty = true
-		elseif blink_slow and tick % 8 <= 3 then
-			blink_slow = false
-			dirty = true
-		end
-		if dirty then
-			grid_redraw()
-			redraw()
-			dirty = false
-		end
-	end
-
-	redraw_metro:start(1 / 15)
 
 	pitch_poll = poll.set('pitch_in_l', update_freq)
 	pitch_poll.time = 1 / 10 -- was 8, is 10 OK?
@@ -1155,12 +1122,13 @@ function init()
 	update_voices()
 
 	dirty = true
+	redraw_metro:start()
 end
 
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
-		show_info()
+		blinkers.info:start()
 	elseif n == 2 then
 		key_pitch = z == 1
 	elseif n == 3 then
@@ -1429,7 +1397,7 @@ function redraw()
 		end
 	end
 
-	if info_visible then
+	if blinkers.info.on then
 		screen.rect(0, 0, 26, 64)
 		screen.level(0)
 		screen.fill()
@@ -1491,10 +1459,11 @@ function redraw()
 end
 
 function cleanup()
+	redraw_metro:stop()
 	if pitch_poll ~= nil then
 		pitch_poll:stop()
 	end
-	if redraw_metro ~= nil then
-		redraw_metro:stop()
+	for i, blinker in ipairs(blinkers) do
+		blinker:stop()
 	end
 end
