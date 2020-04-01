@@ -50,8 +50,14 @@ function ShiftRegisterVoice:get(t)
 	return self.pitch_tap:get(t) + self.transpose, self.mod_tap:get(t)
 end
 
-function ShiftRegisterVoice:set(t, pitch, mod)
+function ShiftRegisterVoice:set_pitch(t, pitch)
 	self.pitch_tap:set(t, pitch - self.transpose)
+	if t == 0 then
+		self:update_values()
+	end
+end
+
+function ShiftRegisterVoice:set_mod(t, mod)
 	self.mod_tap:set(t, mod)
 	if t == 0 then
 		self:update_values()

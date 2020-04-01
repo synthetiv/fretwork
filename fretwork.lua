@@ -244,7 +244,7 @@ function update_voices()
 	end
 end
 
-function get_write_values()
+function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
 	if pitch_keyboard.gate and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
 		-- TODO: this is good for held keys, but maybe we should also _quantize_ key presses:
@@ -254,14 +254,14 @@ function get_write_values()
 		-- maybe you only perform the write/update on the next tick...?
 		-- that might feel strange unless you can also update voice(s) immediately without writing
 		print(string.format('writing grid pitch (source = %d)', source))
-		return pitch_keyboard:get_last_value(), 1 -- TODO: mod values...
+		return pitch_keyboard:get_last_value()
 		-- TODO: add a separate 'erase' key that leaves current pitch value but sets mod value to 0?
 	elseif source == source_pitch or source == source_grid_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
-		return pitch_in_value, 1
+		return pitch_in_value
 	elseif source == source_crow or source == source_grid_crow then
 		print(string.format('writing crow pitch (source = %d)', source))
-		return crow_in_values[2], 1
+		return crow_in_values[2]
 	end
 	-- print(string.format('nothing to write (source = %d)', source))
 	return false
@@ -269,7 +269,7 @@ end
 
 function maybe_write()
 	if write_enable and write_probability > math.random(1, 100) then
-		local pitch, mod = get_write_values()
+		local pitch = get_write_pitch()
 		if not pitch then
 			return
 		end
@@ -277,7 +277,7 @@ function maybe_write()
 			-- TODO: this should probably happen whenever a key is pressed, NOT (just?) on clock ticks
 			if voice_selector:is_selected(v) then
 				local voice = voices[v]
-				voice:set(0, pitch, mod) -- TODO
+				voice:set_pitch(0, pitch)
 				last_write = last_write % n_recent_writes + 1
 				recent_writes[last_write] = {
 					level = 15,
