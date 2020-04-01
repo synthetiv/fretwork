@@ -210,6 +210,9 @@ function recall_config()
 		voices[v].mod_pos = mod_register.head + (config.mod_offset or (config.offset + v))
 		params:set(string.format('voice_%d_direction', v), config.direction == -1 and 2 or 1)
 	end
+	if grid_ctrl then
+		update_voices()
+	end
 	config_dirty = false
 end
 
@@ -290,6 +293,7 @@ function write(pitch)
 				pitch_pos = voice.pitch_tap:get_pos(0),
 				mod_pos = voice.mod_tap:get_pos(0)
 			}
+			update_voice(v)
 		end
 	end
 	blink_record = true
