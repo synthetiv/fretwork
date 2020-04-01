@@ -205,10 +205,12 @@ function recall_config()
 	for v = 1, n_voices do
 		local config = saved_configs[c][v]
 		params:set(string.format('voice_%d_transpose', v), config.transpose)
-		params:set(string.format('voice_%d_scramble', v), config.scramble)
 		voices[v].pitch_pos = pitch_register.head + (config.pitch_offset or config.offset)
+		params:set(string.format('voice_%d_pitch_scramble', v), config.pitch_scramble or config.scramble)
+		params:set(string.format('voice_%d_pitch_direction', v), (config.pitch_direction or config.direction) == -1 and 2 or 1)
 		voices[v].mod_pos = mod_register.head + (config.mod_offset or (config.offset + v))
-		params:set(string.format('voice_%d_direction', v), config.direction == -1 and 2 or 1)
+		params:set(string.format('voice_%d_mod_scramble', v), config.mod_scramble or 0)
+		params:set(string.format('voice_%d_mod_direction', v), config.mod_direction == -1 and 2 or 1)
 	end
 	if grid_ctrl then
 		update_voices()
@@ -220,11 +222,13 @@ function save_config()
 	local config = {}
 	for v = 1, n_voices do
 		config[v] = {
-			pitch_offset = voices[v].pitch_tap:get_loop_offset(0),
-			mod_offset = voices[v].mod_tap:get_loop_offset(0),
 			transpose = voices[v].edit_transpose,
-			scramble = voices[v].pitch_tap.scramble, -- TODO: separate mod scramble
-			direction = voices[v].pitch_tap.direction
+			pitch_offset = voices[v].pitch_tap:get_loop_offset(0),
+			pitch_scramble = voices[v].pitch_tap.scramble,
+			pitch_direction = voices[v].pitch_tap.direction,
+			mod_offset = voices[v].mod_tap:get_loop_offset(0),
+			mod_scramble = voices[v].mod_tap.scramble,
+			mod_direction = voices[v].mod_tap.direction
 		}
 	end
 	saved_configs[config_selector.selected] = config
@@ -828,8 +832,8 @@ function add_params()
 		}
 		params:add{
 			type = 'control',
-			id = string.format('voice_%d_scramble', v),
-			name = string.format('voice %d scramble', v),
+			id = string.format('voice_%d_pitch_scramble', v),
+			name = string.format('voice %d pitch scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
 				voice.pitch_tap.scramble = value
@@ -839,14 +843,39 @@ function add_params()
 		}
 		params:add{
 			type = 'option',
-			id = string.format('voice_%d_direction', v),
-			name = string.format('voice %d direction', v),
+			id = string.format('voice_%d_pitch_direction', v),
+			name = string.format('voice %d pitch direction', v),
 			options = {
 				'forward',
 				'retrograde'
 			},
 			action = function(value)
 				voice.pitch_tap.direction = value == 2 and -1 or 1
+				dirty = true
+				config_dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_mod_scramble', v),
+			name = string.format('voice %d mod scramble', v),
+			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
+			action = function(value)
+				voice.mod_tap.scramble = value
+				dirty = true
+				config_dirty = true
+			end
+		}
+		params:add{
+			type = 'option',
+			id = string.format('voice_%d_mod_direction', v),
+			name = string.format('voice %d mod direction', v),
+			options = {
+				'forward',
+				'retrograde'
+			},
+			action = function(value)
+				voice.mod_tap.direction = value == 2 and -1 or 1
 				dirty = true
 				config_dirty = true
 			end
@@ -1157,12 +1186,12 @@ function enc(n, d)
 		-- TODO: somehow do this more slowly / make it less sensitive?
 		for v = 1, n_voices do
 			if voice_selector:is_selected(v) then
-				if (not key_pitch and not key_mod) or (key_pitch and key_mod) then
-					voices[v]:shift(-d)
-				elseif key_pitch then
+				if key_pitch and not key_mod then
 					voices[v]:shift_pitch(-d)
-				elseif key_mod then
+				elseif key_mod and not key_pitch then
 					voices[v]:shift_mod(-d)
+				else
+					voices[v]:shift(-d)
 				end
 				update_voice(v)
 			end
@@ -1172,12 +1201,19 @@ function enc(n, d)
 	elseif n == 3 then
 		if key_shift then
 			-- change voice randomness
-			params_multi_delta('voice_%d_scramble', voice_selector.selected, d)
+			if key_pitch and not key_mod then
+				params_multi_delta('voice_%d_pitch_scramble', voice_selector.selected, d)
+			elseif key_mod and not key_pitch then
+				params_multi_delta('voice_%d_mod_scramble', voice_selector.selected, d)
+			else
+				params_multi_delta('voice_%d_pitch_scramble', voice_selector.selected, d)
+				params_multi_delta('voice_%d_mod_scramble', voice_selector.selected, d)
+			end
 		else
 			-- transpose voice(s)
 			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
-			update_voices()
 		end
+		update_voices()
 	end
 	dirty = true
 end
