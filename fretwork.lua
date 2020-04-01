@@ -1460,6 +1460,7 @@ end
 
 function cleanup()
 	redraw_metro:stop()
+	beatclock:stop()
 	if pitch_poll ~= nil then
 		pitch_poll:stop()
 	end
