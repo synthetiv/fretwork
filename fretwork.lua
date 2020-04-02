@@ -42,6 +42,7 @@ config_selector = Select.new(1, 3, 4, 4)
 saved_loops = {}
 loop_selector = Select.new(1, 3, 4, 4)
 
+-- TODO: use a multi select for chaining
 memory_selector = Select.new(1, 2, 4, 1)
 memory_loop = 1
 memory_mask = 2
