@@ -49,6 +49,7 @@ function MultiSelect:is_selected(option)
 	return self.selected[option]
 end
 
+-- TODO: double-press any key to select all
 function MultiSelect:key(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return

@@ -261,7 +261,7 @@ end
 function update_voice(v)
 	local voice = voices[v]
 	voice:update_values()
-	if voice.mod > 0 then
+	if voice.active and voice.mod > 0 then
 		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
 		-- crow.output[v].volts = voice.value
 	else
@@ -389,10 +389,30 @@ function grid_redraw()
 	g:led(1, 8, held_keys.ctrl and 15 or 2)
 
 	-- voice buttons
-	voice_selector:draw(g, 10, 5)
-	-- highlight the top voice
-	local top_voice_x, top_voice_y = voice_selector:get_option_coords(top_voice_index)
-	g:led(top_voice_x, top_voice_y, 14)
+	for y = voice_selector.y, voice_selector.y2 do
+		local level = 0
+		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
+		local voice = voices[voice_index]
+		local mod_high = voice.mod > 0
+		if voice.active then
+			if voice_index == top_voice_index then
+				level = mod_high and 15 or 14
+			elseif voice_selector:is_selected(voice_index) then
+				level = mod_high and 10 or 9
+			else
+				level = mod_high and 4 or 3
+			end
+		else
+			if voice_index == top_voice_index then
+				level = 12
+			elseif voice_selector:is_selected(voice_index) then
+				level = 7
+			else
+				level = 1
+			end
+		end
+		g:led(voice_selector.x, y, level)
+	end
 
 	-- octave switches
 	g:led(3, 8, 2 - math.min(view_octave, 0))
@@ -406,13 +426,14 @@ function grid_redraw()
 		-- 'x0x-roll' interface for mod mode
 		local hold = false
 		for v = 1, n_voices do
-			local roll = voices[v].mod_roll
+			local voice = voices[v]
+			local roll = voice.mod_roll
 			if v == top_voice_index then
-				roll:draw(g, 15, 2, 7, 0)
+				roll:draw(g, voice.active and 15 or 7, 2, 7, 0)
 			elseif voice_selector:is_selected(v) then
-				roll:draw(g, 12, 2, 4, 0)
+				roll:draw(g, voice.active and 12 or 4, 2, 4, 0)
 			else
-				roll:draw(g, 7, 0, 3, 0)
+				roll:draw(g, voice.active and 7 or 3, 0, 3, 0)
 			end
 			hold = hold or roll.hold
 		end
@@ -453,7 +474,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if voice.mod > 0 and n == voice.pitch_id then
+		if voice.active and voice.mod > 0 and n == voice.pitch_id then
 			if v == top_voice_index then
 				level = 14
 			elseif voice_selector:is_selected(v) then
@@ -489,7 +510,7 @@ function mask_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if voice.mod > 0 and n == voice.pitch_id then
+		if voice.active and voice.mod > 0 and n == voice.pitch_id then
 			if v == top_voice_index then
 				level = 14
 			elseif voice_selector:is_selected(v) then
@@ -510,26 +531,29 @@ function transpose_keyboard:get_key_level(x, y, n)
 	end
 	-- highlight transposition settings
 	for v = 1, n_voices do
-		local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
-		local is_edit_transpose = n == self.scale:get_nearest_pitch_id(voices[v].edit_transpose)
-		if is_transpose and is_edit_transpose then
-			if v == top_voice_index then
-				level = 14
-			elseif voice_selector:is_selected(v) then
-				level = math.max(level, 10)
-			else
-				level = math.max(level, 5)
+		local voice = voices[v]
+		if voice.active then
+			local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
+			local is_edit_transpose = n == self.scale:get_nearest_pitch_id(voices[v].edit_transpose)
+			if is_transpose and is_edit_transpose then
+				if v == top_voice_index then
+					level = 14
+				elseif voice_selector:is_selected(v) then
+					level = math.max(level, 10)
+				else
+					level = math.max(level, 5)
+				end
+			elseif is_edit_transpose then
+				if v == top_voice_index then
+					level = math.max(level, 8)
+				elseif voice_selector:is_selected(v) then
+					level = math.max(level, 7)
+				else
+					level = math.max(level, 4)
+				end
+			elseif is_transpose then
+				level = math.max(level, 3)
 			end
-		elseif is_edit_transpose then
-			if v == top_voice_index then
-				level = math.max(level, 8)
-			elseif voice_selector:is_selected(v) then
-				level = math.max(level, 7)
-			else
-				level = math.max(level, 4)
-			end
-		elseif is_transpose then
-			level = math.max(level, 3)
 		end
 	end
 	return level
@@ -643,11 +667,20 @@ function grid_key(x, y, z)
 			end
 		end
 	elseif voice_selector:should_handle_key(x, y) then
-		local voice = voice_selector:get_key_option(x, y)
-		-- TODO: when shift is held, mute/unmute voices instead of selecting
-		voice_selector:key(x, y, z)
-		if z == 1 then
-			update_voice_order()
+		if held_keys.shift then
+			if z == 1 then
+				local voice_index = voice_selector:get_key_option(x, y)
+				local voice = voices[voice_index]
+				voice.active = not voice.active
+				if held_keys.ctrl then
+					update_voice(voice_index)
+				end
+			end
+		else
+			voice_selector:key(x, y, z)
+			if z == 1 then
+				update_voice_order()
+			end
 		end
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
@@ -706,6 +739,7 @@ function grid_key(x, y, z)
 	elseif x == 1 and y == 8 then
 		-- ctrl key
 		if x == 1 then
+			-- TODO: double press to lock/unlock
 			held_keys.ctrl = z == 1
 		end
 	elseif x == 3 and y == 7 and z == 1 then
@@ -1212,20 +1246,20 @@ function enc(n, d)
 			if voice_selector:is_selected(v) then
 				local voice = voices[v]
 				local mod_roll = voices[v].mod_roll
-				if key_pitch and not key_mod then
-					voice:shift_pitch(-d)
-				elseif key_mod and not key_pitch then
-					voice:shift_mod(-d)
+				if key_pitch == key_mod then -- neither or both held
+					voice:shift(-d)
 					-- even if mod roll position is decoupled from voice position, we want to shift them
 					-- together here, so all the mod rolls always line up
 					if mod_roll.hold then
 						mod_roll:shift(-d)
 					end
-				else
-					voice:shift(-d)
+				elseif key_mod then
+					voice:shift_mod(-d)
 					if mod_roll.hold then
 						mod_roll:shift(-d)
 					end
+				elseif key_pitch then
+					voice:shift_pitch(-d)
 				end
 				update_voice(v)
 			end
@@ -1297,13 +1331,13 @@ function draw_voice_path(v, level)
 	screen.line_cap('square')
 	screen.line_width(3)
 	screen.level(0)
-	local z = 0
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
-		local prev_z = z
-		z = note.z
+		local z = voice.active and note.z or 0
+		local prev_note = screen_notes[v][n - 1] or note
+		local prev_z = voice.active and prev_note.z or 0
 		if prev_z <= 0 or z <= 0 then
 			screen.move(x, y)
 		else
@@ -1319,17 +1353,16 @@ function draw_voice_path(v, level)
 
 	-- draw foreground/path
 	screen.line_width(1)
-	z = nil
 	for n = 1, n_screen_notes do
 		local note = screen_notes[v][n]
 		local x = note.x
 		local y = note.y + 0.5
-		local z = note.z
+		local z = voice.active and note.z or 0
 		local level = note.level
 		local prev_note = screen_notes[v][n - 1] or note
 		local prev_x = prev_note.x
 		local prev_y = prev_note.y + 0.5
-		local prev_z = prev_note.z
+		local prev_z = voice.active and prev_note.z or 0
 		local prev_level = prev_note.level
 		if prev_z <= 0 or z <= 0 then
 			-- if this or the previous note is inactive, don't draw a connector
@@ -1351,6 +1384,7 @@ function draw_voice_path(v, level)
 			screen.stroke()
 		else
 			-- dotted line for inactive notes
+			-- TODO: maybe only for the top voice?
 			if prev_y ~= y then
 				-- no need to re-draw this pixel if it's already been drawn as part of the previous note
 				-- (possibly brighter, if prev note was active)
@@ -1374,13 +1408,15 @@ function redraw()
 
 	-- draw paths
 	for i, v in ipairs(voice_draw_order) do
-		local level = 1
+		local level = voices[v].active and 1 or 0
 		if v == top_voice_index then
 			level = 15
 		elseif voice_selector:is_selected(v) then
 			level = 4
 		end
-		draw_voice_path(v, level)
+		if level > 0 then
+			draw_voice_path(v, level)
+		end
 	end
 
 	-- draw play head indicator, which will be interrupted by active notes but not by inactive ones
@@ -1392,15 +1428,17 @@ function redraw()
 
 	-- highlight current notes after drawing all snakes
 	for i, v in ipairs(voice_draw_order) do
-		local note = screen_notes[v][screen_note_center]
-		if note.z > 0 then
-			screen.move(note.x + 2.5, note.y - 1)
-			screen.line(note.x + 2.5, note.y + 2)
-			screen.level(0)
-			screen.stroke()
-			screen.pixel(note.x + 2, note.y)
-			screen.level(15)
-			screen.fill()
+		if voices[v].active then
+			local note = screen_notes[v][screen_note_center]
+			if note.z > 0 then
+				screen.move(note.x + 2.5, note.y - 1)
+				screen.line(note.x + 2.5, note.y + 2)
+				screen.level(0)
+				screen.stroke()
+				screen.pixel(note.x + 2, note.y)
+				screen.level(15)
+				screen.fill()
+			end
 		end
 	end
 
