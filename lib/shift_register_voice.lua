@@ -7,6 +7,7 @@ ShiftRegisterVoice.__index = ShiftRegisterVoice
 ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod_register)
 	local voice = setmetatable({}, ShiftRegisterVoice)
 	voice.active = true
+	voice.edit_active = true
 	voice.detune = 0
 	voice.transpose = 0
 	voice.edit_transpose = 0
@@ -21,6 +22,7 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 end
 
 function ShiftRegisterVoice:apply_edits()
+	self.active = self.edit_active
 	self.transpose = self.edit_transpose
 end
 

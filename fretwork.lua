@@ -191,6 +191,11 @@ redraw_metro = metro.init{
 	end
 }
 
+function quantization_off()
+	-- don't quantize events if ctrl is held or clock is paused
+	return held_keys.ctrl == clock_enable
+end
+
 function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
@@ -208,7 +213,7 @@ function recall_loop()
 	if saved_loops[loop_selector.selected] == nil then
 		return
 	end
-	if held_keys.ctrl then
+	if quantization_off() then
 		pitch_register:set_loop(0, saved_loops[loop_selector.selected])
 	else
 		pitch_register:set_edit_loop(1, saved_loops[loop_selector.selected])
@@ -217,7 +222,7 @@ function recall_loop()
 end
 
 function save_loop()
-	local offset = held_keys.ctrl and 0 or 1 -- if ctrl is NOT held, save the future loop state (on the next tick)
+	local offset = quantization_off() and 0 or 1 -- if quantizing, save the future loop state (on the next tick)
 	saved_loops[loop_selector.selected] = pitch_register:get_loop(offset)
 	pitch_register.dirty = false
 	-- TODO: mod too
@@ -393,6 +398,7 @@ function grid_redraw()
 		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
 		local voice = voices[voice_index]
 		local mod_high = voice.mod > 0
+		-- TODO: indicate edit active status?
 		if voice.active then
 			if voice_index == top_voice_index then
 				level = mod_high and 15 or 14
@@ -585,7 +591,7 @@ end
 function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
 	mask_dirty = true
-	if held_keys.ctrl then
+	if quantization_off() then
 		scale:apply_edits()
 		update_voices()
 	end
@@ -603,7 +609,7 @@ function pitch_keyboard:key(x, y, z)
 	self:note(x, y, z)
 	if self.gate and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
 		if write_enable then
-			if held_keys.ctrl then
+			if quantization_off() then
 				write(self:get_last_value())
 			else
 				pitch_keyboard_played = true
@@ -630,7 +636,7 @@ function transpose_keyboard:key(x, y, z)
 			params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
 		end
 	end
-	if held_keys.ctrl then
+	if quantization_off() then
 		update_voices()
 	end
 end
@@ -663,8 +669,8 @@ function grid_key(x, y, z)
 			if z == 1 then
 				local voice_index = voice_selector:get_key_option(x, y)
 				local voice = voices[voice_index]
-				voice.active = not voice.active
-				if held_keys.ctrl then
+				voice.edit_active = not voice.active
+				if quantization_off() then
 					update_voice(voice_index)
 				end
 			end
@@ -696,7 +702,7 @@ function grid_key(x, y, z)
 				save_mask()
 			else
 				recall_mask()
-				if held_keys.ctrl then
+				if quantization_off() then
 					update_voices()
 				end
 			end
@@ -708,7 +714,7 @@ function grid_key(x, y, z)
 				save_config()
 			else
 				recall_config()
-				if held_keys.ctrl then
+				if quantization_off() then
 					update_voices()
 				end
 			end
@@ -720,7 +726,7 @@ function grid_key(x, y, z)
 				save_loop()
 			else
 				recall_loop()
-				if held_keys.ctrl then
+				if quantization_off() then
 					update_voices()
 				end
 			end
