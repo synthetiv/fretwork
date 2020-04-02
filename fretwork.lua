@@ -113,7 +113,6 @@ voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
 for v = 1, n_voices do
 	local voice = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
-	voice.mod_roll = X0XRoll.new(6, 2 + v, 11, 1, voice)
 	voices[v] = voice
 end
 top_voice = voices[top_voice_index]
@@ -134,9 +133,6 @@ held_keys = {
 	shift = false,
 	octave_down = false,
 	octave_up = false,
-	mod_shift_left = false,
-	mod_hold = false,
-	mod_shift_right = false
 }
 
 view_octave = 0
@@ -151,6 +147,8 @@ keyboards = { -- lookup array; indices match corresponding modes
 	transpose_keyboard
 }
 active_keyboard = pitch_keyboard
+
+x0x_roll = X0XRoll.new(6, 1, 11, 8, n_voices, voices)
 
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
@@ -176,6 +174,7 @@ dirty = false
 redraw_metro = metro.init{
 	time = framerate,
 	event = function(tick)
+		x0x_roll:smooth_hold_distance()
 		if not blink_slow and tick % 8 > 3 then
 			blink_slow = true
 			dirty = true
@@ -321,6 +320,7 @@ end
 function shift(d)
 	pitch_register:shift(d)
 	mod_register:shift(d)
+	x0x_roll:shift(-d)
 	for v = 1, n_voices do
 		voices[v]:shift(d)
 	end
@@ -365,8 +365,6 @@ function update_voice_order()
 end
 
 function grid_redraw()
-
-	g:all(0)
 
 	-- mode buttons
 	grid_mode_selector:draw(g, 7, 2)
@@ -420,26 +418,10 @@ function grid_redraw()
 
 	if active_keyboard ~= nil then
 		-- keyboard, for keyboard-based modes
-		-- keyboard
 		active_keyboard:draw(g)
 	else
 		-- 'x0x-roll' interface for mod mode
-		local hold = false
-		for v = 1, n_voices do
-			local voice = voices[v]
-			local roll = voice.mod_roll
-			if v == top_voice_index then
-				roll:draw(g, voice.active and 15 or 7, 2, 7, 0)
-			elseif voice_selector:is_selected(v) then
-				roll:draw(g, voice.active and 12 or 4, 2, 4, 0)
-			else
-				roll:draw(g, voice.active and 7 or 3, 0, 3, 0)
-			end
-			hold = hold or roll.hold
-		end
-		g:led(14, 8, held_keys.mod_shift_left and 7 or 2)
-		g:led(15, 8, hold and 2 or 7)
-		g:led(16, 8, held_keys.mod_shift_right and 7 or 2)
+		x0x_roll:draw(g)
 	end
 
 	-- transport
@@ -559,6 +541,46 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return level
 end
 
+function x0x_roll:get_key_level(x, y, v, offset, value)
+	local head = offset == 0
+	local gate = value > 0
+	local active = voices[v].active
+	if not active then
+		if gate then
+			return 2
+		elseif head then
+			return 1
+		end
+	elseif v == top_voice_index then
+		if gate then
+			if head then
+				return 14
+			end
+			return 9
+		elseif head then
+			return 2
+		end
+	elseif voice_selector:is_selected(v) then
+		if gate then
+			if head then
+				return 12
+			end
+			return 7
+		elseif head then
+			return 2
+		end
+	end
+	if gate then
+		if head then
+			return 6
+		end
+		return 4
+	elseif head then
+		return 2
+	end
+	return 0
+end
+
 function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
 	mask_dirty = true
@@ -630,42 +652,11 @@ function grid_octave_key(z, d)
 	end
 end
 
-function mod_rolls_should_handle_key(x, y)
-	for v = 1, n_voices do
-		if voices[v].mod_roll:should_handle_key(x, y) then
-			return true
-		end
-	end
-	return false
-end
-
 function grid_key(x, y, z)
 	if active_keyboard ~= nil and active_keyboard:should_handle_key(x, y) then
 		active_keyboard:key(x, y, z)
-	elseif grid_mode_selector:is_selected(grid_mode_mod) and mod_rolls_should_handle_key(x, y) then
-		for v = 1, n_voices do
-			voices[v].mod_roll:key(x, y, z)
-		end
-	elseif grid_mode_selector:is_selected(grid_mode_mod) and x >= 14 and x <= 16 and y == 8 then
-		if x == 14 then
-			held_keys.mod_shift_left = z == 1
-		elseif x == 15 then
-			held_keys.mod_hold = z == 1
-		elseif x == 16 then
-			held_keys.mod_shift_right = z == 1
-		end
-		if z == 1 then
-			for v = 1, n_voices do
-				local roll = voices[v].mod_roll
-				if x == 14 then
-					roll:shift(-1)
-				elseif x == 15 then
-					roll:toggle_hold()
-				elseif x == 16 then
-					roll:shift(1)
-				end
-			end
-		end
+	elseif grid_mode_selector:is_selected(grid_mode_mod) and x0x_roll:should_handle_key(x, y) then
+		x0x_roll:key(x, y, z)
 	elseif voice_selector:should_handle_key(x, y) then
 		if held_keys.shift then
 			if z == 1 then
@@ -769,6 +760,7 @@ function midi_event(data)
 			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
 				voice:shift(1)
 				update_voice(v)
+				dirty = true
 			end
 		end
 	end
@@ -1248,16 +1240,8 @@ function enc(n, d)
 				local mod_roll = voices[v].mod_roll
 				if key_pitch == key_mod then -- neither or both held
 					voice:shift(-d)
-					-- even if mod roll position is decoupled from voice position, we want to shift them
-					-- together here, so all the mod rolls always line up
-					if mod_roll.hold then
-						mod_roll:shift(-d)
-					end
 				elseif key_mod then
 					voice:shift_mod(-d)
-					if mod_roll.hold then
-						mod_roll:shift(-d)
-					end
 				elseif key_pitch then
 					voice:shift_pitch(-d)
 				end
