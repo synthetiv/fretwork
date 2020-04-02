@@ -1338,15 +1338,18 @@ function draw_voice_path(v, level)
 		local z = voice.active and note.z or 0
 		local prev_note = screen_notes[v][n - 1] or note
 		local prev_z = voice.active and prev_note.z or 0
-		if prev_z <= 0 or z <= 0 then
-			screen.move(x, y)
-		else
+		-- draw connector, if this note and the previous note are active
+		if prev_z > 0 and z > 0 then
 			screen.line(x, y)
+		else
+			screen.move(x, y)
 		end
-		-- draw this note
-		screen.line(x + screen_note_width, y)
-		screen.stroke()
-		screen.move(x + screen_note_width, y)
+		-- draw this note, if active; draw all notes for selected voices
+		if z > 0 or voice_selector:is_selected(v) then
+			screen.line(x + screen_note_width, y)
+			screen.stroke()
+			screen.move(x + screen_note_width, y)
+		end
 	end
 	screen.stroke()
 	screen.line_cap('butt')
@@ -1364,10 +1367,8 @@ function draw_voice_path(v, level)
 		local prev_y = prev_note.y + 0.5
 		local prev_z = voice.active and prev_note.z or 0
 		local prev_level = prev_note.level
-		if prev_z <= 0 or z <= 0 then
-			-- if this or the previous note is inactive, don't draw a connector
-			screen.move(x + 0.5, y)
-		else
+		-- draw connector
+		if prev_z > 0 and z > 0 then
 			local connector_level = math.min(level, prev_level) + math.floor(math.abs(level - prev_level) / 4)
 			local min_y = math.min(prev_y, y)
 			local max_y = math.max(prev_y, y)
@@ -1375,16 +1376,18 @@ function draw_voice_path(v, level)
 			screen.line(x + 0.5, math.max(min_y, max_y - 0.5))
 			screen.level(connector_level)
 			screen.stroke()
+		else
+			screen.move(x + 0.5, y)
 		end
+		-- draw this note, including dotted lines for inactive notes in selected voices
 		if z > 0 then
 			-- solid line for active notes
 			screen.move(x, y)
 			screen.line(x + screen_note_width + 1, y)
 			screen.level(level)
 			screen.stroke()
-		else
+		elseif voice_selector:is_selected(v) then
 			-- dotted line for inactive notes
-			-- TODO: maybe only for the top voice?
 			if prev_y ~= y then
 				-- no need to re-draw this pixel if it's already been drawn as part of the previous note
 				-- (possibly brighter, if prev note was active)
