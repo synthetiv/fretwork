@@ -419,23 +419,22 @@ function grid_redraw()
 		local level = 0
 		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
 		local voice = voices[voice_index]
-		local mod_high = voice.mod > 0
-		-- TODO: indicate edit active status?
-		if voice.active then
+		local mod_level = (voice.active and voice.mod > 0) and 1 or 0
+		if voice.edit_active then
 			if voice_index == top_voice_index then
-				level = mod_high and 15 or 14
+				level = 14 + mod_level
 			elseif voice_selector:is_selected(voice_index) then
-				level = mod_high and 10 or 9
+				level = 9 + mod_level
 			else
-				level = mod_high and 4 or 3
+				level = 3 + mod_level
 			end
 		else
 			if voice_index == top_voice_index then
-				level = 12
+				level = 12 + mod_level
 			elseif voice_selector:is_selected(voice_index) then
-				level = 7
+				level = 7 + mod_level
 			else
-				level = 1
+				level = 1 + mod_level
 			end
 		end
 		g:led(voice_selector.x, y, level)
