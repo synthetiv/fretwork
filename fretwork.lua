@@ -35,19 +35,22 @@ saved_masks = {}
 mask_dirty = false
 mask_selector = Select.new(1, 3, 4, 4)
 
-config_dirty = false
 saved_configs = {}
+config_dirty = false
 config_selector = Select.new(1, 3, 4, 4)
 
-saved_loops = {}
-loop_selector = Select.new(1, 3, 4, 4)
+saved_pitch_loops = {}
+pitch_loop_selector = Select.new(1, 3, 4, 4)
+
+saved_mod_loops = {}
+mod_loop_selector = Select.new(1, 3, 4, 4)
 
 -- TODO: use a multi select for chaining
 memory_selector = Select.new(1, 2, 4, 1)
-memory_loop = 1
+memory_pitch_loop = 1
 memory_mask = 2
 memory_config = 3
-memory_mod = 4
+memory_mod_loop = 4
 
 -- TODO: save/recall mask, loop, and config all at once
 
@@ -209,23 +212,42 @@ function save_mask()
 	mask_dirty = false
 end
 
-function recall_loop()
-	if saved_loops[loop_selector.selected] == nil then
+function recall_pitch_loop()
+	loop = saved_pitch_loops[pitch_loop_selector.selected]
+	if loop == nil then
 		return
 	end
 	if quantization_off() then
-		pitch_register:set_loop(0, saved_loops[loop_selector.selected])
+		pitch_register:set_loop(0, loop)
+		params:set('pitch_loop_length', pitch_register.length, true)
 	else
-		pitch_register:set_edit_loop(1, saved_loops[loop_selector.selected])
+		pitch_register:set_edit_loop(1, loop)
 	end
-	-- TODO: mod too
 end
 
-function save_loop()
+function save_pitch_loop()
 	local offset = quantization_off() and 0 or 1 -- if quantizing, save the future loop state (on the next tick)
-	saved_loops[loop_selector.selected] = pitch_register:get_loop(offset)
+	saved_pitch_loops[pitch_loop_selector.selected] = pitch_register:get_loop(offset)
 	pitch_register.dirty = false
-	-- TODO: mod too
+end
+
+function recall_mod_loop()
+	loop = saved_mod_loops[mod_loop_selector.selected]
+	if loop == nil then
+		return
+	end
+	if quantization_off() then
+		mod_register:set_loop(0, loop)
+		params:set('mod_loop_length', mod_register.length, true)
+	else
+		mod_register:set_edit_loop(1, loop)
+	end
+end
+
+function save_mod_loop()
+	local offset = quantization_off() and 0 or 1
+	saved_mod_loops[mod_loop_selector.selected] = mod_register:get_loop(offset)
+	mod_register.dirty = false
 end
 
 function recall_config()
@@ -333,6 +355,9 @@ function shift(d)
 	maybe_write()
 	scale:apply_edits()
 	update_voices()
+	-- silently update loop length params, as they may have changed after shift
+	params:set('pitch_loop_length', pitch_register.length, true)
+	params:set('mod_loop_length', mod_register.length, true)
 	dirty = true
 end
 
@@ -383,9 +408,10 @@ function grid_redraw()
 		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
 	elseif memory_selector:is_selected(memory_config) then
 		config_selector:draw(g, config_dirty and blink_slow and 8 or 7, 2)
-	else
-		loop_selector:draw(g, pitch_register.dirty and blink_slow and 8 or 7, 2)
-		-- TODO: mod too
+	elseif memory_selector:is_selected(memory_pitch_loop) then
+		pitch_loop_selector:draw(g, pitch_register.dirty and blink_slow and 8 or 7, 2)
+	elseif memory_selector:is_selected(memory_mod_loop) then
+		mod_loop_selector:draw(g, mod_register.dirty and blink_slow and 8 or 7, 2)
 	end
 
 	-- shift + ctrl
@@ -722,13 +748,25 @@ function grid_key(x, y, z)
 				end
 			end
 		end
-	elseif memory_selector:is_selected(memory_loop) and loop_selector:should_handle_key(x, y) then
-		loop_selector:key(x, y, z)
+	elseif memory_selector:is_selected(memory_pitch_loop) and pitch_loop_selector:should_handle_key(x, y) then
+		pitch_loop_selector:key(x, y, z)
 		if z == 1 then
 			if held_keys.shift then
-				save_loop()
+				save_pitch_loop()
 			else
-				recall_loop()
+				recall_pitch_loop()
+				if quantization_off() then
+					update_voices()
+				end
+			end
+		end
+	elseif memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:should_handle_key(x, y) then
+		mod_loop_selector:key(x, y, z)
+		if z == 1 then
+			if held_keys.shift then
+				save_mod_loop()
+			else
+				recall_mod_loop()
 				if quantization_off() then
 					update_voices()
 				end
@@ -839,7 +877,6 @@ function add_params()
 	}
 	beatclock:add_clock_params()
 
-	-- TODO: update this param when switching loops!
 	params:add{
 		type = 'number',
 		id = 'pitch_loop_length',
@@ -890,7 +927,7 @@ function add_params()
 		type = 'control',
 		id = 'write_probability',
 		name = 'write probability',
-		controlspec = controlspec.new(1, 101, 'exp', 1, 1),
+		controlspec = controlspec.new(1, 101, 'exp', 1, 101),
 		formatter = function(param)
 			return string.format('%1.f%%', param:get() - 1)
 		end,
@@ -1040,7 +1077,6 @@ function add_params()
 		name = 'tuning_file',
 		path = '/home/we/dust/data/fretwork/scales/y/young-lm_guitar.scl',
 		action = function(value)
-			print(value)
 			scale:read_scala_file(value)
 			mask_keyboard:set_white_keys()
 		end
@@ -1066,10 +1102,13 @@ function add_params()
 						saved_configs = data.configs
 						config_dirty = true
 					end
-					if data.loops ~= nil then
-						saved_loops = data.loops
+					if data.pitch_loops ~= nil then
+						saved_pitch_loops = data.pitch_loops
 						pitch_register.dirty = true
-						-- TODO: mod too
+					end
+					if data.mod_loops ~= nil then
+						saved_mod_loops = data.mod_loops
+						mod_register.dirty = true
 					end
 				end
 			end
@@ -1085,7 +1124,8 @@ function add_params()
 			local data = {}
 			data.masks = saved_masks
 			data.configs = saved_configs
-			data.loops = saved_loops
+			data.pitch_loops = saved_pitch_loops
+			data.mod_loops = saved_mod_loops
 			tab.save(data, data_file)
 		end
 	}
@@ -1118,53 +1158,39 @@ function init()
 			saved_masks[m][i] = false
 		end
 	end
-	for pitch = 1, 12 do
-		-- C maj pentatonic
-		scale:set_class(pitch, pitch == 2 or pitch == 4 or pitch == 7 or pitch == 9 or pitch == 12)
-	end
-	mask_selector.selected = 1
-	save_mask()
 
 	for t = 1, 16 do
 		saved_configs[t] = {}
 		for v = 1, n_voices do
-			saved_configs[t][v] = 0
+			saved_configs[t][v] = {
+				transpose = 0,
+				pitch_offset = 0,
+				pitch_scramble = 0,
+				pitch_direction = 0,
+				mod_offset = 0,
+				mod_scramble = 0,
+				mod_direction = 0
+			}
 		end
 	end
-	config_selector.selected = 1
-	save_config() -- read & save defaults from params
 
 	for l = 1, 16 do
-		saved_loops[l] = {}
+		saved_pitch_loops[l] = {}
+		saved_mod_loops[l] = {}
 		for i = 1, 16 do
-			saved_loops[l][i] = 24
+			saved_pitch_loops[l][i] = 0
+			saved_mod_loops[l][i] = 0
 		end
 	end
-	for i = 1, 16 do
-		saved_loops[1][i] = 24 + i * 3
-	end
-	loop_selector.selected = 1
-	recall_loop()
 
+	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
 	params:set('restore_memory')
 	recall_mask()
 	recall_config()
-	recall_loop()
+	recall_pitch_loop()
+	recall_mod_loop()
 
-	-- initialize mod register
-	mod_register:write_loop(0, 2)
-	mod_register:write_loop(1, 1)
-	mod_register:write_loop(2, 1)
-	mod_register:write_loop(3, 0)
-	mod_register:write_loop(4, 2)
-	mod_register:write_loop(5, 0)
-	mod_register:write_loop(6, 1)
-	mod_register:write_loop(7, 0)
-	mod_register:write_loop(8, 2)
-	mod_register:write_loop(9, 0)
-	mod_register:write_loop(10, 0)
-
-	memory_selector.selected = memory_loop
+	memory_selector.selected = memory_pitch_loop
 
 	pitch_poll:start()
 	g.key = grid_key
@@ -1237,9 +1263,16 @@ end
 function enc(n, d)
 	if n == 1 then
 		if key_shift then
-			params:delta('loop_length', d)
-		else
 			params:delta('write_probability', d)
+		else
+			if key_pitch and not key_mod then
+				params:delta('pitch_loop_length', d)
+			elseif key_mod and not key_pitch then
+				params:delta('mod_loop_length', d)
+			else
+				params:delta('pitch_loop_length', d)
+				params:delta('mod_loop_length', d)
+			end
 		end
 	elseif n == 2 then
 		-- shift voices
@@ -1262,6 +1295,9 @@ function enc(n, d)
 		dirty = true
 	elseif n == 3 then
 		if key_shift then
+			-- transpose voice(s)
+			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
+		else
 			-- change voice randomness
 			if key_pitch and not key_mod then
 				params_multi_delta('voice_%d_pitch_scramble', voice_selector.selected, d)
@@ -1271,9 +1307,6 @@ function enc(n, d)
 				params_multi_delta('voice_%d_pitch_scramble', voice_selector.selected, d)
 				params_multi_delta('voice_%d_mod_scramble', voice_selector.selected, d)
 			end
-		else
-			-- transpose voice(s)
-			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
 		end
 		update_voices()
 	end
