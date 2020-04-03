@@ -1251,12 +1251,6 @@ function params_multi_delta(param_format, selected, d)
 			max_value = math.max(max_value, value)
 		end
 	end
-	-- TODO: getting errors that seem to suggest this is happening -- why??
-	if selected_params[1] == nil then
-		print('params_multi_delta fail: %s (selected follows)', param_format)
-		tab.print(selected)
-		return
-	end
 	if d > 0 then
 		d = math.min(d,	max - max_value)
 	elseif d < 0 then
