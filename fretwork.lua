@@ -1402,6 +1402,7 @@ function redraw()
 	screen.line_width(1)
 	screen.font_face(2)
 	screen.font_size(8)
+	screen.line_cap('butt')
 
 	-- draw paths
 	for i, v in ipairs(voice_draw_order) do
