@@ -7,6 +7,7 @@ function Select.new(x, y, width, height)
 	local instance = setmetatable(Control.new(x, y, width, height), Select)
 	instance.count = width * height
 	instance.selected = 1
+	instance.on_select = function() end
 	return instance
 end
 
@@ -33,6 +34,7 @@ function Select:key(x, y, z)
 	if z == 1 then
 		local option = self:get_key_option(x, y)
 		self.selected = option
+		self.on_select(option)
 	end
 end
 

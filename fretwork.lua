@@ -31,28 +31,55 @@ for p = 1, 12 do
 	et12[p] = p / 12
 end
 scale = Scale.new(et12)
+
 saved_masks = {}
 mask_dirty = false
 mask_selector = Select.new(1, 3, 4, 4)
+mask_selector.on_select = function(m)
+	if held_keys.shift then
+		save_mask(m)
+	else
+		recall_mask(m)
+	end
+end
 
 saved_configs = {}
 config_dirty = false
 config_selector = Select.new(1, 3, 4, 4)
+config_selector.on_select = function(c)
+	if held_keys.shift then
+		save_config(c)
+	else
+		recall_config(c)
+	end
+end
 
 saved_pitch_loops = {}
+-- TODO: multi selects for 'pattern chaining'... or maybe pattern_time
 pitch_loop_selector = Select.new(1, 3, 4, 4)
+pitch_loop_selector.on_select = function(l)
+	if held_keys.shift then
+		save_pitch_loop(l)
+	else
+		recall_pitch_loop(l)
+	end
+end
 
 saved_mod_loops = {}
 mod_loop_selector = Select.new(1, 3, 4, 4)
+mod_loop_selector.on_select = function(l)
+	if held_keys.shift then
+		save_mod_loop(l)
+	else
+		recall_mod_loop(l)
+	end
+end
 
--- TODO: use a multi select for chaining
-memory_selector = Select.new(1, 2, 4, 1)
+memory_selector = MultiSelect.new(1, 2, 4, 1)
 memory_pitch_loop = 1
 memory_mask = 2
 memory_config = 3
 memory_mod_loop = 4
-
--- TODO: save/recall mask, loop, and config all at once
 
 pitch_register = ShiftRegister.new(32)
 mod_register = ShiftRegister.new(11)
@@ -200,6 +227,9 @@ function recall_mask()
 		return
 	end
 	scale:set_edit_mask(scale:pitches_to_mask(saved_masks[mask_selector.selected]))
+	if quantization_off() then
+		update_voices()
+	end
 	mask_dirty = false
 end
 
@@ -216,6 +246,7 @@ function recall_pitch_loop()
 	if quantization_off() then
 		pitch_register:set_loop(0, loop)
 		params:set('pitch_loop_length', pitch_register.length, true)
+		update_voices()
 	else
 		pitch_register:set_edit_loop(1, loop)
 	end
@@ -235,6 +266,7 @@ function recall_mod_loop()
 	if quantization_off() then
 		mod_register:set_loop(0, loop)
 		params:set('mod_loop_length', mod_register.length, true)
+		update_voices()
 	else
 		mod_register:set_edit_loop(1, loop)
 	end
@@ -261,6 +293,9 @@ function recall_config()
 		voices[v].mod_pos = mod_register.head + (config.mod_offset or (config.offset + v))
 		params:set(string.format('voice_%d_mod_scramble', v), config.mod_scramble or 0)
 		params:set(string.format('voice_%d_mod_direction', v), config.mod_direction == -1 and 2 or 1)
+	end
+	if quantization_off() then
+		update_voices()
 	end
 	config_dirty = false
 end
@@ -400,15 +435,24 @@ function grid_redraw()
 	-- recall mode buttons
 	memory_selector:draw(g, 7, 2)
 
-	-- recall buttons
-	if memory_selector:is_selected(memory_mask) then
-		mask_selector:draw(g, mask_dirty and blink_slow and 8 or 7, 2)
-	elseif memory_selector:is_selected(memory_config) then
-		config_selector:draw(g, config_dirty and blink_slow and 8 or 7, 2)
-	elseif memory_selector:is_selected(memory_pitch_loop) then
-		pitch_loop_selector:draw(g, pitch_register.dirty and blink_slow and 8 or 7, 2)
-	elseif memory_selector:is_selected(memory_mod_loop) then
-		mod_loop_selector:draw(g, mod_register.dirty and blink_slow and 8 or 7, 2)
+	-- recall buttons, for all selected memory types
+	for x = 1, 4 do
+		for y = 3, 6 do
+			local level = 2
+			if memory_selector:is_selected(memory_pitch_loop) and pitch_loop_selector:is_selected(pitch_loop_selector:get_key_option(x, y)) then
+				level = math.max(level, pitch_register.dirty and blink_slow and 8 or 7)
+			end
+			if memory_selector:is_selected(memory_mask) and mask_selector:is_selected(mask_selector:get_key_option(x, y)) then
+				level = math.max(level, mask_dirty and blink_slow and 8 or 7)
+			end
+			if memory_selector:is_selected(memory_config) and config_selector:is_selected(config_selector:get_key_option(x, y)) then
+				level = math.max(level, config_dirty and blink_slow and 8 or 7)
+			end
+			if memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:is_selected(mod_loop_selector:get_key_option(x, y)) then
+				level = math.max(level, mod_register.dirty and blink_slow and 8 or 7)
+			end
+			g:led(x, y, level)
+		end
 	end
 
 	-- shift + ctrl
@@ -719,54 +763,18 @@ function grid_key(x, y, z)
 		active_keyboard = keyboards[grid_mode_selector.selected]
 	elseif memory_selector:should_handle_key(x, y) then
 		memory_selector:key(x, y, z)
-	elseif memory_selector:is_selected(memory_mask) and mask_selector:should_handle_key(x, y) then
-		mask_selector:key(x, y, z)
-		-- TODO: these should be callbacks/handlers, properties on the selector objects
-		if z == 1 then
-			if held_keys.shift then
-				save_mask()
-			else
-				recall_mask()
-				if quantization_off() then
-					update_voices()
-				end
-			end
+	elseif x <= 4 and y >= 3 and y <= 6 then
+		if memory_selector:is_selected(memory_mask) then
+			mask_selector:key(x, y, z)
 		end
-	elseif memory_selector:is_selected(memory_config) and config_selector:should_handle_key(x, y) then
-		config_selector:key(x, y, z)
-		if z == 1 then
-			if held_keys.shift then
-				save_config()
-			else
-				recall_config()
-				if quantization_off() then
-					update_voices()
-				end
-			end
+		if memory_selector:is_selected(memory_config) then
+			config_selector:key(x, y, z)
 		end
-	elseif memory_selector:is_selected(memory_pitch_loop) and pitch_loop_selector:should_handle_key(x, y) then
-		pitch_loop_selector:key(x, y, z)
-		if z == 1 then
-			if held_keys.shift then
-				save_pitch_loop()
-			else
-				recall_pitch_loop()
-				if quantization_off() then
-					update_voices()
-				end
-			end
+		if memory_selector:is_selected(memory_pitch_loop) then
+			pitch_loop_selector:key(x, y, z)
 		end
-	elseif memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:should_handle_key(x, y) then
-		mod_loop_selector:key(x, y, z)
-		if z == 1 then
-			if held_keys.shift then
-				save_mod_loop()
-			else
-				recall_mod_loop()
-				if quantization_off() then
-					update_voices()
-				end
-			end
+		if memory_selector:is_selected(memory_mod_loop) then
+			mod_loop_selector:key(x, y, z)
 		end
 	elseif x == 1 and y == 7 then
 		-- shift key
@@ -1142,6 +1150,7 @@ function init()
 	-- initialize grid controls
 	grid_mode = grid_mode_pitch
 	voice_selector:reset(true)
+	memory_selector:reset(true)
 	update_voice_order()
 
 	pitch_poll = poll.set('pitch_in_l', update_freq)
@@ -1184,8 +1193,6 @@ function init()
 	recall_config()
 	recall_pitch_loop()
 	recall_mod_loop()
-
-	memory_selector.selected = memory_pitch_loop
 
 	pitch_poll:start()
 	g.key = grid_key
