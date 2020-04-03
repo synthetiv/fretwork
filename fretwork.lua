@@ -157,6 +157,7 @@ m = midi.connect()
 
 held_keys = {
 	ctrl = false,
+	ctrl_lock = false,
 	shift = false,
 	octave_down = false,
 	octave_up = false,
@@ -218,8 +219,8 @@ redraw_metro = metro.init{
 }
 
 function quantization_off()
-	-- don't quantize events if ctrl is held or clock is paused
-	return held_keys.ctrl == clock_enable
+	-- disable quantization if ctrl is held/locked or clock is paused
+	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
 end
 
 function recall_mask()
@@ -278,7 +279,7 @@ function save_mod_loop()
 	mod_register.dirty = false
 end
 
--- TODO: save scramble and direction with loops instead
+-- TODO: save scramble, offset, and direction with loops instead
 function recall_config()
 	local c = config_selector.selected
 	if saved_configs[c] == nil then
@@ -457,7 +458,11 @@ function grid_redraw()
 
 	-- shift + ctrl
 	g:led(1, 7, held_keys.shift and 15 or 2)
-	g:led(1, 8, held_keys.ctrl and 15 or 2)
+	if held_keys.ctrl_lock then
+		g:led(1, 8, held_keys.ctrl and 2 or 10)
+	else
+		g:led(1, 8, held_keys.ctrl and 15 or 2)
+	end
 
 	-- voice buttons
 	for y = voice_selector.y, voice_selector.y2 do
@@ -781,10 +786,10 @@ function grid_key(x, y, z)
 		held_keys.shift = z == 1
 	elseif x == 1 and y == 8 then
 		-- ctrl key
-		if x == 1 then
-			-- TODO: double press to lock/unlock
-			held_keys.ctrl = z == 1
+		if z == 1 and held_keys.shift then
+			held_keys.ctrl_lock = not held_keys.ctrl_lock
 		end
+		held_keys.ctrl = z == 1
 	elseif x == 3 and y == 7 and z == 1 then
 		-- play key
 		if clock_mode == clock_mode_beatclock then
