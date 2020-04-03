@@ -59,18 +59,14 @@ mod_register = ShiftRegister.new(11)
 
 source = 1
 source_names = {
-	'grid',
+	'grid only',
 	'pitch track',
-	'crow input 2', -- TODO: make sure this works
-	'grid OR pitch', -- TODO: when would you NOT want to read from the grid?
-	'grid OR crow'
+	'crow input 2' -- TODO: make sure this works
 	-- TODO: random, LFO
 }
-source_grid = 1
+source_grid_only = 1
 source_pitch = 2
 source_crow = 3
-source_grid_pitch = 4
-source_grid_crow = 5
 
 noop = function() end
 events = {
@@ -304,14 +300,14 @@ end
 
 function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
-	if (pitch_keyboard_played or pitch_keyboard.gate) and (source == source_grid or source == source_grid_pitch or source == source_grid_crow) then
+	if (pitch_keyboard_played or pitch_keyboard.gate) then
 		pitch_keyboard_played = false
 		print(string.format('writing grid pitch (source = %d)', source))
 		return pitch_keyboard:get_last_value()
-	elseif source == source_pitch or source == source_grid_pitch then
+	elseif source == source_pitch then
 		print(string.format('writing audio pitch (source = %d)', source))
 		return pitch_in_value
-	elseif source == source_crow or source == source_grid_crow then
+	elseif source == source_crow then
 		print(string.format('writing crow pitch (source = %d)', source))
 		return crow_in_values[2]
 	end
@@ -913,7 +909,7 @@ function add_params()
 		id = 'shift_source',
 		name = 'sr source',
 		options = source_names,
-		default = source_grid,
+		default = source_grid_only,
 		action = function(value)
 			source = value
 			if source == source_crow then
