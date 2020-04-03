@@ -246,6 +246,7 @@ function save_mod_loop()
 	mod_register.dirty = false
 end
 
+-- TODO: save scramble and direction with loops instead
 function recall_config()
 	local c = config_selector.selected
 	if saved_configs[c] == nil then
@@ -879,8 +880,8 @@ function add_params()
 		min = 2,
 		max = 128,
 		default = 16,
-		-- todo: make this adjust loop length with the top voice's current note as the loop end point,
-		-- so one could easily lock in the last few notes heard; i don't really get what it's doing now
+		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
+		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now
 		action = function(value)
 			pitch_register:set_length(value)
 			update_voices()
@@ -888,7 +889,6 @@ function add_params()
 			dirty = true
 		end
 	}
-	-- TODO: control from main screen
 	params:add{
 		type = 'number',
 		id = 'mod_loop_length',
