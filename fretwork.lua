@@ -664,6 +664,9 @@ function grid_key(x, y, z)
 		active_keyboard:key(x, y, z)
 	elseif grid_mode_selector:is_selected(grid_mode_mod) and x0x_roll:should_handle_key(x, y) then
 		x0x_roll:key(x, y, z)
+		if quantization_off() then
+			update_voices()
+		end
 	elseif voice_selector:should_handle_key(x, y) then
 		if held_keys.shift then
 			if z == 1 then
