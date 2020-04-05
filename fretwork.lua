@@ -1212,7 +1212,9 @@ end
 function key(n, z)
 	if n == 1 then
 		key_shift = z == 1
-		blinkers.info:start()
+		if not key_shift then
+			blinkers.info:start()
+		end
 	elseif n == 2 then
 		key_pitch = z == 1
 	elseif n == 3 then
@@ -1482,7 +1484,7 @@ function redraw()
 		end
 	end
 
-	if blinkers.info.on then
+	if key_shift or blinkers.info.on then
 		screen.rect(0, 0, 26, 64)
 		screen.level(0)
 		screen.fill()
