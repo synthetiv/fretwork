@@ -46,21 +46,21 @@ function Scale:copy_mask(mask)
 end
 
 function Scale:set_mask(mask)
-	self.edit_mask = self:copy_mask(mask)
+	self.next_mask = self:copy_mask(mask)
 	self.mask = self:copy_mask(mask)
 	self:update_mask_pitch_ids()
 end
 
-function Scale:get_edit_mask()
-	return self:copy_mask(self.edit_mask)
+function Scale:get_next_mask()
+	return self:copy_mask(self.next_mask)
 end
 
-function Scale:set_edit_mask(mask)
-	self.edit_mask = self:copy_mask(mask)
+function Scale:set_next_mask(mask)
+	self.next_mask = self:copy_mask(mask)
 end
 
 function Scale:apply_edits()
-	self:set_mask(self.edit_mask)
+	self:set_mask(self.next_mask)
 end
 
 function Scale:update_mask_pitch_ids()
@@ -83,17 +83,17 @@ function Scale:mask_contains(pitch_id)
 	return self.mask[self:get_pitch_class(pitch_id)]
 end
 
-function Scale:edit_mask_contains(pitch_id)
-	return self.edit_mask[self:get_pitch_class(pitch_id)]
+function Scale:next_mask_contains(pitch_id)
+	return self.next_mask[self:get_pitch_class(pitch_id)]
 end
 
 function Scale:set_class(pitch_id, enable)
-	self.edit_mask[self:get_pitch_class(pitch_id)] = enable
+	self.next_mask[self:get_pitch_class(pitch_id)] = enable
 end
 
 function Scale:toggle_class(pitch_id)
 	local pitch_class = self:get_pitch_class(pitch_id)
-	self.edit_mask[pitch_class] = not self.edit_mask[pitch_class]
+	self.next_mask[pitch_class] = not self.next_mask[pitch_class]
 end
 
 local function binary_search(first, last, v, predicate)

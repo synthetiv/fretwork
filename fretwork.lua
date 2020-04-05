@@ -227,7 +227,7 @@ function recall_mask()
 	if saved_masks[mask_selector.selected] == nil then
 		return
 	end
-	scale:set_edit_mask(scale:pitches_to_mask(saved_masks[mask_selector.selected]))
+	scale:set_next_mask(scale:pitches_to_mask(saved_masks[mask_selector.selected]))
 	if quantization_off() then
 		update_voices()
 	end
@@ -235,7 +235,7 @@ function recall_mask()
 end
 
 function save_mask()
-	saved_masks[mask_selector.selected] = scale:mask_to_pitches(scale:get_edit_mask())
+	saved_masks[mask_selector.selected] = scale:mask_to_pitches(scale:get_next_mask())
 	mask_dirty = false
 end
 
@@ -249,7 +249,7 @@ function recall_pitch_loop()
 		params:set('pitch_loop_length', pitch_register.length, true)
 		update_voices()
 	else
-		pitch_register:set_edit_loop(1, loop)
+		pitch_register:set_next_loop(1, loop)
 	end
 end
 
@@ -269,7 +269,7 @@ function recall_mod_loop()
 		params:set('mod_loop_length', mod_register.length, true)
 		update_voices()
 	else
-		mod_register:set_edit_loop(1, loop)
+		mod_register:set_next_loop(1, loop)
 	end
 end
 
@@ -305,7 +305,7 @@ function save_config()
 	local config = {}
 	for v = 1, n_voices do
 		config[v] = {
-			transpose = voices[v].edit_transpose,
+			transpose = voices[v].next_transpose,
 			pitch_offset = voices[v].pitch_tap:get_loop_offset(0),
 			pitch_scramble = voices[v].pitch_tap.scramble,
 			pitch_direction = voices[v].pitch_tap.direction,
@@ -470,7 +470,7 @@ function grid_redraw()
 		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
 		local voice = voices[voice_index]
 		local mod_level = (voice.active and voice.mod > 0) and 1 or 0
-		if voice.edit_active then
+		if voice.next_active then
 			if voice_index == top_voice_index then
 				level = 14 + mod_level
 			elseif voice_selector:is_selected(voice_index) then
@@ -559,10 +559,10 @@ function mask_keyboard:get_key_level(x, y, n)
 	end
 	-- highlight mask
 	local in_mask = self.scale:mask_contains(n)
-	local in_edit_mask = self.scale:edit_mask_contains(n)
-	if in_mask and in_edit_mask then
+	local in_next_mask = self.scale:next_mask_contains(n)
+	if in_mask and in_next_mask then
 		level = 5
-	elseif in_edit_mask then
+	elseif in_next_mask then
 		level = 4
 	elseif in_mask then
 		level = 3
@@ -594,8 +594,8 @@ function transpose_keyboard:get_key_level(x, y, n)
 		local voice = voices[v]
 		if voice.active then
 			local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
-			local is_edit_transpose = n == self.scale:get_nearest_pitch_id(voices[v].edit_transpose)
-			if is_transpose and is_edit_transpose then
+			local is_next_transpose = n == self.scale:get_nearest_pitch_id(voices[v].next_transpose)
+			if is_transpose and is_next_transpose then
 				if v == top_voice_index then
 					level = 14
 				elseif voice_selector:is_selected(v) then
@@ -603,7 +603,7 @@ function transpose_keyboard:get_key_level(x, y, n)
 				else
 					level = math.max(level, 5)
 				end
-			elseif is_edit_transpose then
+			elseif is_next_transpose then
 				if v == top_voice_index then
 					level = math.max(level, 8)
 				elseif voice_selector:is_selected(v) then
@@ -701,10 +701,10 @@ function transpose_keyboard:key(x, y, z)
 	if not self.gate then
 		return
 	end
-	local transpose = self:get_last_value() - top_voice.edit_transpose
+	local transpose = self:get_last_value() - top_voice.next_transpose
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
-			params:set(string.format('voice_%d_transpose', v), voices[v].edit_transpose + transpose)
+			params:set(string.format('voice_%d_transpose', v), voices[v].next_transpose + transpose)
 		end
 	end
 	if quantization_off() then
@@ -743,7 +743,7 @@ function grid_key(x, y, z)
 			if z == 1 then
 				local voice_index = voice_selector:get_key_option(x, y)
 				local voice = voices[voice_index]
-				voice.edit_active = not voice.active
+				voice.next_active = not voice.active
 				if quantization_off() then
 					update_voice(voice_index)
 				end
@@ -978,7 +978,7 @@ function add_params()
 			name = string.format('voice %d transpose', v),
 			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
 			action = function(value)
-				voice.edit_transpose = value
+				voice.next_transpose = value
 				config_dirty = true
 			end
 		}
@@ -1506,7 +1506,7 @@ function redraw()
 		screen.text(string.format('O: %d', top_voice.pitch_pos))
 
 		screen.move(0, 43)
-		screen.text(string.format('T: %.2f', top_voice.edit_transpose))
+		screen.text(string.format('T: %.2f', top_voice.next_transpose))
 
 		screen.move(0, 52)
 		screen.text(string.format('S: %.1f', top_voice.pitch_tap.scramble))
