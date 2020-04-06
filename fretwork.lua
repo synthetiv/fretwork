@@ -288,10 +288,10 @@ function recall_config()
 	for v = 1, n_voices do
 		local config = saved_configs[c][v]
 		params:set(string.format('voice_%d_transpose', v), config.transpose)
-		voices[v].pitch_pos = pitch_register.head + (config.pitch_offset or config.offset)
+		voices[v].pitch_tap:set_offset(config.pitch_offset or config.offset)
 		params:set(string.format('voice_%d_pitch_scramble', v), config.pitch_scramble or config.scramble)
 		params:set(string.format('voice_%d_pitch_direction', v), (config.pitch_direction or config.direction) == -1 and 2 or 1)
-		voices[v].mod_pos = mod_register.head + (config.mod_offset or (config.offset + v))
+		voices[v].mod_tap:set_offset(config.mod_offset or (config.offset + v))
 		params:set(string.format('voice_%d_mod_scramble', v), config.mod_scramble or 0)
 		params:set(string.format('voice_%d_mod_direction', v), config.mod_direction == -1 and 2 or 1)
 	end
@@ -306,10 +306,10 @@ function save_config()
 	for v = 1, n_voices do
 		config[v] = {
 			transpose = voices[v].next_transpose,
-			pitch_offset = voices[v].pitch_tap:get_loop_offset(0),
+			pitch_offset = voices[v].pitch_tap:get_offset(0),
 			pitch_scramble = voices[v].pitch_tap.scramble,
 			pitch_direction = voices[v].pitch_tap.direction,
-			mod_offset = voices[v].mod_tap:get_loop_offset(0),
+			mod_offset = voices[v].mod_tap:get_offset(0),
 			mod_scramble = voices[v].mod_tap.scramble,
 			mod_direction = voices[v].mod_tap.direction
 		}
@@ -1107,7 +1107,17 @@ function add_params()
 						mask_dirty = true
 					end
 					if data.configs ~= nil then
-						saved_configs = data.configs
+						saved_configs = {}
+						for i = 1, 16 do
+							local config = data.configs[i]
+							-- add SOMETHING in place of all the missing offsets
+							-- TODO: save offsets with loops instead
+							for v = 1, 4 do
+								config[v].pitch_offset = v * -3
+								config[v].mod_offset = v * -4
+							end
+							saved_configs[i] = config
+						end
 						config_dirty = true
 					end
 					if data.pitch_loops ~= nil then
@@ -1505,7 +1515,7 @@ function redraw()
 		screen.text(string.format('Lm: %d', mod_register.length))
 
 		screen.move(0, 34)
-		screen.text(string.format('O: %d', top_voice.pitch_pos))
+		screen.text(string.format('O: %d', top_voice.pitch_tap:get_offset()))
 
 		screen.move(0, 43)
 		screen.text(string.format('T: %.2f', top_voice.next_transpose))
@@ -1525,16 +1535,11 @@ function redraw()
 	screen.level(1)
 	screen.stroke()
 	for offset = 1, pitch_register.length do
-		local pos = pitch_register:get_loop_pos(offset)
+		local pos = pitch_register:clamp_buffer_pos(pitch_register:get_loop_offset_pos(offset))
 		screen.pixel(pos - 1, 0)
 		screen.level(7)
-		if pos == pitch_register.head then
-			screen.level(15)
-		end
 		for v = 1, n_voices do
-			-- TODO: make it so that these _never_ move when you change loop length. no, not sure how.
-			-- currently they _sometimes_ stay in place. probably has something to do with modulo'ing to LCM
-			if voice_selector:is_selected(v) and pos == pitch_register:get_loop_pos(voices[v]:get_pos(0)) then
+			if voice_selector:is_selected(v) and pos == pitch_register:clamp_buffer_pos(pitch_register:clamp_loop_pos(voices[v].pitch_tap:get_pos(0))) then
 				screen.level(15)
 			end
 		end

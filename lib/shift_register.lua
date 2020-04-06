@@ -1,35 +1,12 @@
 local ShiftRegister = {}
 ShiftRegister.__index = ShiftRegister
--- TODO: the main advantage this design (variable length loop within a larger ring buffer) provides
--- is that when the loop length is changed, the newly 'revealed' values will be recently
--- played/heard/recorded ones; and adjusting length from long -> short -> long will eventually
--- reveal old values that weren't part of the short loop.
--- 1. is that even all that good?
--- 2. can something similar be achieved without all this headache-inducing ring buffer math?
--- a couple options:
--- A. variable length ring buffer, with magic 'virtual' values inserted when loop length changes (??)
---    (virtual values would get locked in when they were played, but could change until then --
---    allowing gradual changes in loop length)
--- B. 'real' shift register of variable length; calling 'shift()' really actually shifts values
---    adjusting length would change how values were read (i % min(new_length, old_length) or
---    something), until next shift which would lock in the new length
+
 ShiftRegister.buffer_size = 128
-
-local function gcd(a, b)
-	if b == 0 then
-		return a
-	else
-		return gcd(b, a % b)
-	end
-end
-
-local function lcm(a, b)
-	return a * b / gcd(a, b)
-end
+ShiftRegister.half_buffer_size = ShiftRegister.buffer_size / 2
 
 ShiftRegister.new = function(length)
 	local instance = setmetatable({}, ShiftRegister)
-	instance.head = 1
+	instance.start = 1
 	instance.buffer = {}
 	for i = 1, instance.buffer_size do
 		instance.buffer[i] = 0
@@ -39,125 +16,124 @@ ShiftRegister.new = function(length)
 	return instance
 end
 
+--- change the length of the loop 
 function ShiftRegister:set_length(length)
+	-- set loop length
 	self.length = length
-	self.length_lcm = lcm(self.length, self.buffer_size)
+	-- set half length, used for clamp_loop_offset_bipolar (for human-friendly readouts)
+	self.half_length = math.floor(length / 2)
+	-- set 'virtual buffer' size. because the virtual buffer is evenly divisible by both buffer size
+	-- and loop length, for any two points A and B in the virtual buffer, the distance from A to B,
+	-- and the distance from B to A wrapping across the end of the virtual buffer, are equal modulo
+	-- the loop length. without this, clamp_loop_pos() doesn't work consistently.
+	self.virtual_size = length * self.buffer_size
 end
 
-function ShiftRegister:get_buffer_pos(pos)
+--- constrain an absolute position to [1, buffer_size]
+function ShiftRegister:clamp_buffer_pos(pos)
 	return (pos - 1) % self.buffer_size + 1
 end
 
-function ShiftRegister:get_buffer_offset_pos(offset)
-	return (self.head + offset - 1) % self.buffer_size + 1
+--- constrain an absolute position to [1, virtual_size]
+function ShiftRegister:clamp_virtual_pos(pos)
+	return (pos - 1) % self.virtual_size + 1
 end
 
+--- constrain an absolute position to [start, end]
+-- note that if start + length > virtual_size, end < start
 function ShiftRegister:clamp_loop_pos(pos)
-	local start = self.head - self.length
-	return (pos - start - 1) % self.length + start + 1
+	return self:clamp_virtual_pos((pos - self.start) % self.length + self.start)
 end
 
-function ShiftRegister:clamp_loop_offset(offset)
-	return (offset - 1) % self.length - self.length + 1
+--- constrain a relative offset to the range [-floor(length/2), ceil(length/2)]
+-- TODO: do you really need this...?
+function ShiftRegister:clamp_loop_offset_bipolar(offset)
+	return (offset + self.half_length) % self.length - self.half_length
 end
 
-function ShiftRegister:get_loop_pos(pos)
-	return self:get_buffer_pos(self:clamp_loop_pos(pos))
-end
-
+--- convert a relative offset from the start point to an absolute position [start, end]
 function ShiftRegister:get_loop_offset_pos(offset)
-	return self:get_buffer_offset_pos(self:clamp_loop_offset(offset))
+	-- return self.start + self:clamp_loop_offset(offset)
+	return self:clamp_loop_pos(self.start + offset)
 end
 
+--- move loop start + end points within the virtual buffer by `delta`
+-- and replace loop contents with `next_loop`, if appropriate
 function ShiftRegister:shift(delta)
-	-- constrain head to the least common multiple of loop length and buffer size, because we don't
-	-- want it to increase infinitely but simply constraining to loop length or buffer size causes
-	-- discontinuities (loop appears to jump) when head position is wrapped
-	self.head = (self.head + delta - 1) % self.length_lcm + 1
 	if delta > 0 then
-		-- if shifting forward, copy the value from before the start of the loop to the end
-		self:write_buffer_offset(0, self:read_buffer_offset(-self.length), true)
+		-- if shifting forward, copy the value from the start of the old loop to the end of the new
+		local carry = self:read_offset(0)
+		self.start = self:clamp_virtual_pos(self.start + delta)
+		self.buffer[self:clamp_buffer_pos(self:get_loop_offset_pos(-1))] = carry -- write directly to avoid setting `self.dirty`
 	elseif delta < 0 then
-		-- if shifting backward, copy the value from after the end of the loop to the start
-		self:write_buffer_offset(-self.length + 1, self:read_buffer_offset(1), true)
+		-- if shifting backward, copy the value from the end of the old loop to the start of the new
+		local carry = self:read_offset(-1)
+		self.start = self:clamp_virtual_pos(self.start + delta)
+		self.buffer[self:clamp_buffer_pos(self:get_loop_offset_pos(0))] = carry
 	end
+	-- if we have a new loop queued up, check whether it's time to replace the current loop yet
 	if self.next_loop_insert_offset ~= nil then
-		self.next_loop_insert_offset = self.next_loop_insert_offset - delta
+		self.next_loop_insert_offset = (self.next_loop_insert_offset - delta) % self.length
 		if self.next_loop_insert_offset == 0 then
+			-- it's time, let's go
 			self:apply_next_loop()
 		end
 	end
 end
 
-function ShiftRegister:read_absolute(pos)
-	return self.buffer[pos]
+--- read from the loop at an absolute position
+function ShiftRegister:read(pos)
+	-- return self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos) % self.length)]
+	return self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos))]
 end
 
-function ShiftRegister:read_loop(pos)
-	return self:read_absolute(self:get_loop_pos(pos))
+--- write to the loop at an absolute position
+function ShiftRegister:write(pos, value)
+	-- self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos) % self.length)] = value
+	self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos))] = value
+	self.dirty = true
 end
 
-function ShiftRegister:read_loop_offset(offset)
-	return self:read_absolute(self:get_loop_offset_pos(offset))
+--- read from the loop at an offset from the start point
+function ShiftRegister:read_offset(offset)
+	return self.buffer[self:clamp_buffer_pos(self:get_loop_offset_pos(offset))]
 end
 
-function ShiftRegister:read_buffer_offset(offset)
-	return self:read_absolute(self:get_buffer_offset_pos(offset))
+--- write to the loop at an offset from the start point
+function ShiftRegister:write_offset(offset, value)
+	self.buffer[self:clamp_buffer_pos(self:get_loop_offset_pos(offset))] = value
+	self.dirty = true
 end
 
-function ShiftRegister:write_absolute(pos, value, clean)
-	if self.buffer[pos] == value then
-		return
+--- return a table of the entire current loop contents, starting at offset
+function ShiftRegister:get_loop(offset)
+	local loop = {}
+	for i = 1, self.length do
+		loop[i] = self:read_offset(offset + i - 1)
 	end
-	self.buffer[pos] = value
-	-- slightly weird hack since we use this method internally for looping: sometimes we're writing to
-	-- _preserve_ the loop contents, in which case this doesn't 'dirty' the loop
-	if not clean then
-		self.dirty = true
-	end
+	return loop
 end
 
-function ShiftRegister:write_loop(pos, value, clean)
-	self:write_absolute(self:get_buffer_pos(self:clamp_loop_pos(pos)), value, clean)
-end
-
-function ShiftRegister:write_loop_offset(offset, value, clean)
-	self:write_absolute(self:get_loop_offset_pos(offset), value, clean)
-end
-
-function ShiftRegister:write_buffer_offset(offset, value, clean)
-	self:write_absolute(self:get_buffer_offset_pos(offset), value, clean)
-end
-
-function ShiftRegister:write_head(value, clean)
-	self:write_absolute(self.head, value, clean)
-end
-
-function ShiftRegister:set_next_loop(offset, loop)
-	-- prepare a new loop to replace the current one once we reach a certain offset
-	self.next_loop_insert_offset = offset
-	self.next_loop = loop
-end
-
-function ShiftRegister:apply_next_loop()
-	self.next_loop_insert_offset = nil
-	self:set_loop(0, self.next_loop)
-end
-
+--- set the loop contents and length to match the provided table of values
 function ShiftRegister:set_loop(offset, loop)
 	self:set_length(#loop)
 	for i = 1, self.length do
-		self:write_loop_offset(offset + i - 1, loop[i])
+		self:write_offset(offset + i - 1, loop[i])
 	end
 	self.dirty = false -- assume the loop that's just been set has been saved somewhere
 end
 
-function ShiftRegister:get_loop(offset)
-	local loop = {}
-	for i = 1, self.length do
-		loop[i] = self:read_loop_offset(offset + i - 1)
-	end
-	return loop
+--- prepare a new loop to replace the current one once the start point reaches `offset`
+function ShiftRegister:set_next_loop(offset, loop)
+	self.next_loop_insert_offset = offset
+	self.next_loop = loop
+end
+
+--- replace the current loop with the queued 'next' loop
+function ShiftRegister:apply_next_loop()
+	-- clear insert offset so we don't do this again
+	self.next_loop_insert_offset = nil
+	self:set_loop(0, self.next_loop)
 end
 
 return ShiftRegister

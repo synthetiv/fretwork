@@ -24,6 +24,8 @@ end
 function ShiftRegisterVoice:apply_edits()
 	self.active = self.next_active
 	self.transpose = self.next_transpose
+	self.pitch_tap:apply_edits()
+	self.mod_tap:apply_edits()
 end
 
 function ShiftRegisterVoice:update_values()
