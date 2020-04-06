@@ -223,9 +223,6 @@ function quantization_off()
 	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
 end
 
--- TODO: the way voice offsets are recalled seems to be inconsistent when restoring a loop along
--- with config, if the new loop length is different from the current loop length; it's probably
--- important to make sure loop length and offsets are saved/restored in a consistent order
 function recall_pitch_loop()
 	local loop = saved_pitch_loops[pitch_loop_selector.selected]
 	for v = 1, n_voices do
@@ -240,8 +237,6 @@ function recall_pitch_loop()
 		update_voices()
 	else
 		pitch_register:set_next_loop(1, loop.values)
-		-- TODO: make sure the voices only get updated AFTER the loop is applied, otherwise length +
-		-- offsets will get weird
 	end
 end
 
@@ -311,8 +306,6 @@ function recall_mod_loop()
 		update_voices()
 	else
 		mod_register:set_next_loop(1, loop.values)
-		-- TODO: make sure the voices only get updated AFTER the loop is applied, otherwise length +
-		-- offsets will get weird
 	end
 end
 
