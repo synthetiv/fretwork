@@ -306,7 +306,7 @@ function recall_mod_loop()
 	end
 	if quantization_off() then
 		mod_register:set_loop(0, loop.values)
-		-- silently update the lopo length
+		-- silently update the loop length
 		params:set('mod_loop_length', mod_register.length, true)
 		update_voices()
 	else
@@ -1157,30 +1157,15 @@ function set_memory(data)
 		if data.pitch_loops ~= nil and data.pitch_loops[l] ~= nil then
 			-- restore
 			local old_loop = data.pitch_loops[l]
-			if old_loop.values ~= nil then
-				-- newest format
-				for i, v in ipairs(old_loop.values) do
-					loop.values[i] = v
-				end
-				for v = 1, n_voices do
-					loop.voices[v] = {
-						offset = old_loop.voices[v].offset,
-						scramble = old_loop.voices[v].scramble or 0, -- TODO: remove these fallbacks once everything's converted
-						direction = old_loop.voices[v].direction or 1
-					}
-				end
-			else
-				-- old format
-				for i, v in ipairs(old_loop) do
-					loop.values[i] = v
-				end
-				for v = 1, n_voices do
-					loop.voices[v] = {
-						offset = v * -3,
-						scramble = data.configs[l][v].pitch_scramble or 0,
-						direction = data.configs[l][v].pitch_direction or 1
-					}
-				end
+			for i, v in ipairs(old_loop.values) do
+				loop.values[i] = v
+			end
+			for v = 1, n_voices do
+				loop.voices[v] = {
+					offset = old_loop.voices[v].offset,
+					scramble = old_loop.voices[v].scramble,
+					direction = old_loop.voices[v].direction
+				}
 			end
 		else
 			-- initialize
@@ -1227,11 +1212,6 @@ function set_memory(data)
 			for v = 1, n_voices do
 				transposition[v] = data.transpositions[t][v]
 			end
-		elseif data.configs ~= nil and data.configs[t] ~= nil then
-			-- restore old format
-			for v = 1, n_voices do
-				transposition[v] = data.configs[t][v].transpose
-			end
 		else
 			-- initialize
 			for v = 1, n_voices do
@@ -1252,30 +1232,15 @@ function set_memory(data)
 		if data.mod_loops ~= nil and data.mod_loops[l] ~= nil then
 			-- restore
 			local old_loop = data.mod_loops[l]
-			if old_loop.values ~= nil then
-				-- newest format
-				for i, v in ipairs(old_loop.values) do
-					loop.values[i] = v
-				end
-				for v = 1, n_voices do
-					loop.voices[v] = {
-						offset = old_loop.voices[v].offset,
-						scramble = old_loop.voices[v].scramble or 0,
-						direction = old_loop.voices[v].direction or 1
-					}
-				end
-			else
-				-- old format
-				for i, v in ipairs(old_loop) do
-					loop.values[i] = v
-				end
-				for v = 1, n_voices do
-					loop.voices[v] = {
-						offset = v * -4,
-						scramble = data.configs[l][v].mod_scramble or 0,
-						direction = data.configs[l][v].mod_direction or 1
-					}
-				end
+			for i, v in ipairs(old_loop.values) do
+				loop.values[i] = v
+			end
+			for v = 1, n_voices do
+				loop.voices[v] = {
+					offset = old_loop.voices[v].offset,
+					scramble = old_loop.voices[v].scramble,
+					direction = old_loop.voices[v].direction
+				}
 			end
 		else
 			-- initialize
