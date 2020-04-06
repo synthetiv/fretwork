@@ -43,14 +43,14 @@ mask_selector.on_select = function(m)
 	end
 end
 
-saved_configs = {}
-config_dirty = false
-config_selector = Select.new(1, 3, 4, 4)
-config_selector.on_select = function(c)
+saved_transpositions = {}
+transposition_dirty = false
+transposition_selector = Select.new(1, 3, 4, 4)
+transposition_selector.on_select = function(c)
 	if held_keys.shift then
-		save_config(c)
+		save_transposition(c)
 	else
-		recall_config(c)
+		recall_transposition(c)
 	end
 end
 
@@ -78,7 +78,7 @@ end
 memory_selector = MultiSelect.new(1, 2, 4, 1)
 memory_pitch_loop = 1
 memory_mask = 2
-memory_config = 3
+memory_transposition = 3
 memory_mod_loop = 4
 
 pitch_register = ShiftRegister.new(32)
@@ -223,11 +223,49 @@ function quantization_off()
 	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
 end
 
-function recall_mask()
-	if saved_masks[mask_selector.selected] == nil then
-		return
+-- TODO: the way voice offsets are recalled seems to be inconsistent when restoring a loop along
+-- with config, if the new loop length is different from the current loop length; it's probably
+-- important to make sure loop length and offsets are saved/restored in a consistent order
+function recall_pitch_loop()
+	local loop = saved_pitch_loops[pitch_loop_selector.selected]
+	for v = 1, n_voices do
+		voices[v].pitch_tap:set_offset(loop.voices[v].offset)
+		params:set(string.format('voice_%d_pitch_scramble', v), loop.voices[v].scramble)
+		params:set(string.format('voice_%d_pitch_direction', v), loop.voices[v].direction)
 	end
-	scale:set_next_mask(scale:pitches_to_mask(saved_masks[mask_selector.selected]))
+	if quantization_off() then
+		pitch_register:set_loop(0, loop.values)
+		-- silently update the loop length
+		params:set('pitch_loop_length', pitch_register.length, true)
+		update_voices()
+	else
+		pitch_register:set_next_loop(1, loop.values)
+		-- TODO: make sure the voices only get updated AFTER the loop is applied, otherwise length +
+		-- offsets will get weird
+	end
+end
+
+function save_pitch_loop()
+	local offset = quantization_off() and 0 or 1 -- if quantizing, save the future loop state (on the next tick)
+	local loop = {
+		values = {},
+		voices = {}
+	}
+	loop.values = pitch_register:get_loop(offset)
+	for v = 1, n_voices do
+		loop.voices[v] = {
+			offset = voices[v].pitch_tap:get_offset(),
+			scramble = voices[v].pitch_tap.scramble,
+			direction = voices[v].pitch_tap.direction
+		}
+	end
+	saved_pitch_loops[pitch_loop_selector.selected] = loop
+	pitch_register.dirty = false
+end
+
+function recall_mask()
+	local mask = saved_masks[mask_selector.selected]
+	scale:set_next_mask(scale:pitches_to_mask(mask))
 	if quantization_off() then
 		update_voices()
 	end
@@ -239,83 +277,61 @@ function save_mask()
 	mask_dirty = false
 end
 
-function recall_pitch_loop()
-	loop = saved_pitch_loops[pitch_loop_selector.selected]
-	if loop == nil then
-		return
+function recall_transposition()
+	local t = transposition_selector.selected
+	for v = 1, n_voices do
+		params:set(string.format('voice_%d_transpose', v), saved_transpositions[t][v])
 	end
 	if quantization_off() then
-		pitch_register:set_loop(0, loop)
-		params:set('pitch_loop_length', pitch_register.length, true)
 		update_voices()
-	else
-		pitch_register:set_next_loop(1, loop)
 	end
+	transposition_dirty = false
 end
 
-function save_pitch_loop()
-	local offset = quantization_off() and 0 or 1 -- if quantizing, save the future loop state (on the next tick)
-	saved_pitch_loops[pitch_loop_selector.selected] = pitch_register:get_loop(offset)
-	pitch_register.dirty = false
+function save_transposition()
+	local transposition = {}
+	for v = 1, n_voices do
+		transposition[v] = voices[v].next_transpose
+	end
+	saved_transpositions[transposition_selector.selected] = transposition
+	transposition_dirty = false
 end
 
 function recall_mod_loop()
-	loop = saved_mod_loops[mod_loop_selector.selected]
-	if loop == nil then
-		return
+	local loop = saved_mod_loops[mod_loop_selector.selected]
+	for v = 1, n_voices do
+		voices[v].mod_tap:set_offset(loop.voices[v].offset)
+		params:set(string.format('voice_%d_mod_scramble', v), loop.voices[v].scramble)
+		params:set(string.format('voice_%d_mod_direction', v), loop.voices[v].direction)
 	end
 	if quantization_off() then
-		mod_register:set_loop(0, loop)
+		mod_register:set_loop(0, loop.values)
+		-- silently update the lopo length
 		params:set('mod_loop_length', mod_register.length, true)
 		update_voices()
 	else
-		mod_register:set_next_loop(1, loop)
+		mod_register:set_next_loop(1, loop.values)
+		-- TODO: make sure the voices only get updated AFTER the loop is applied, otherwise length +
+		-- offsets will get weird
 	end
 end
 
 function save_mod_loop()
 	local offset = quantization_off() and 0 or 1
-	saved_mod_loops[mod_loop_selector.selected] = mod_register:get_loop(offset)
-	mod_register.dirty = false
-end
-
--- TODO: save scramble, offset, and direction with loops instead
-function recall_config()
-	local c = config_selector.selected
-	if saved_configs[c] == nil then
-		return
-	end
+	local loop = {
+		values = {},
+		voices = {}
+	}
+	loop.values = mod_register:get_loop(offset)
 	for v = 1, n_voices do
-		local config = saved_configs[c][v]
-		params:set(string.format('voice_%d_transpose', v), config.transpose)
-		voices[v].pitch_tap:set_offset(config.pitch_offset or config.offset)
-		params:set(string.format('voice_%d_pitch_scramble', v), config.pitch_scramble or config.scramble)
-		params:set(string.format('voice_%d_pitch_direction', v), (config.pitch_direction or config.direction) == -1 and 2 or 1)
-		voices[v].mod_tap:set_offset(config.mod_offset or (config.offset + v))
-		params:set(string.format('voice_%d_mod_scramble', v), config.mod_scramble or 0)
-		params:set(string.format('voice_%d_mod_direction', v), config.mod_direction == -1 and 2 or 1)
-	end
-	if quantization_off() then
-		update_voices()
-	end
-	config_dirty = false
-end
-
-function save_config()
-	local config = {}
-	for v = 1, n_voices do
-		config[v] = {
-			transpose = voices[v].next_transpose,
-			pitch_offset = voices[v].pitch_tap:get_offset(0),
-			pitch_scramble = voices[v].pitch_tap.scramble,
-			pitch_direction = voices[v].pitch_tap.direction,
-			mod_offset = voices[v].mod_tap:get_offset(0),
-			mod_scramble = voices[v].mod_tap.scramble,
-			mod_direction = voices[v].mod_tap.direction
+		loop.voices[v] = {
+			offset = voices[v].mod_tap:get_offset(),
+			scramble = voices[v].mod_tap.scramble,
+			direction = voices[v].mod_tap.direction
 		}
 	end
-	saved_configs[config_selector.selected] = config
-	config_dirty = false
+	saved_mod_loops[mod_loop_selector.selected] = loop
+	mod_register.dirty = false
 end
 
 function update_voice(v)
@@ -379,6 +395,7 @@ function write(pitch)
 end
 
 function shift(d)
+	-- TODO: only shift registers if they're synced with the top voice
 	pitch_register:shift(d)
 	mod_register:shift(d)
 	x0x_roll:shift(-d)
@@ -446,8 +463,8 @@ function grid_redraw()
 			if memory_selector:is_selected(memory_mask) and mask_selector:is_selected(mask_selector:get_key_option(x, y)) then
 				level = math.max(level, mask_dirty and blink_slow and 8 or 7)
 			end
-			if memory_selector:is_selected(memory_config) and config_selector:is_selected(config_selector:get_key_option(x, y)) then
-				level = math.max(level, config_dirty and blink_slow and 8 or 7)
+			if memory_selector:is_selected(memory_transposition) and transposition_selector:is_selected(transposition_selector:get_key_option(x, y)) then
+				level = math.max(level, transposition_dirty and blink_slow and 8 or 7)
 			end
 			if memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:is_selected(mod_loop_selector:get_key_option(x, y)) then
 				level = math.max(level, mod_register.dirty and blink_slow and 8 or 7)
@@ -772,8 +789,8 @@ function grid_key(x, y, z)
 		if memory_selector:is_selected(memory_mask) then
 			mask_selector:key(x, y, z)
 		end
-		if memory_selector:is_selected(memory_config) then
-			config_selector:key(x, y, z)
+		if memory_selector:is_selected(memory_transposition) then
+			transposition_selector:key(x, y, z)
 		end
 		if memory_selector:is_selected(memory_pitch_loop) then
 			pitch_loop_selector:key(x, y, z)
@@ -979,7 +996,7 @@ function add_params()
 			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
 			action = function(value)
 				voice.next_transpose = value
-				config_dirty = true
+				transposition_dirty = true
 			end
 		}
 		params:add{
@@ -990,7 +1007,7 @@ function add_params()
 			action = function(value)
 				voice.pitch_tap.scramble = value
 				dirty = true
-				config_dirty = true
+				transposition_dirty = true
 			end
 		}
 		params:add{
@@ -1004,7 +1021,7 @@ function add_params()
 			action = function(value)
 				voice.pitch_tap.direction = value == 2 and -1 or 1
 				dirty = true
-				config_dirty = true
+				transposition_dirty = true
 			end
 		}
 		params:add{
@@ -1015,7 +1032,7 @@ function add_params()
 			action = function(value)
 				voice.mod_tap.scramble = value
 				dirty = true
-				config_dirty = true
+				transposition_dirty = true
 			end
 		}
 		params:add{
@@ -1029,7 +1046,7 @@ function add_params()
 			action = function(value)
 				voice.mod_tap.direction = value == 2 and -1 or 1
 				dirty = true
-				config_dirty = true
+				transposition_dirty = true
 			end
 		}
 		-- TODO: inversion too? value scaling?
@@ -1102,32 +1119,7 @@ function add_params()
 				if errorMessage ~= nil then
 					error(errorMessage)
 				else
-					if data.masks ~= nil then
-						saved_masks = data.masks
-						mask_dirty = true
-					end
-					if data.configs ~= nil then
-						saved_configs = {}
-						for i = 1, 16 do
-							local config = data.configs[i]
-							-- add SOMETHING in place of all the missing offsets
-							-- TODO: save offsets with loops instead
-							for v = 1, 4 do
-								config[v].pitch_offset = v * -3
-								config[v].mod_offset = v * -4
-							end
-							saved_configs[i] = config
-						end
-						config_dirty = true
-					end
-					if data.pitch_loops ~= nil then
-						saved_pitch_loops = data.pitch_loops
-						pitch_register.dirty = true
-					end
-					if data.mod_loops ~= nil then
-						saved_mod_loops = data.mod_loops
-						mod_register.dirty = true
-					end
+					set_memory(data)
 				end
 			end
 		end
@@ -1141,12 +1133,166 @@ function add_params()
 			local data_file = norns.state.data .. 'memory.lua'
 			local data = {}
 			data.masks = saved_masks
-			data.configs = saved_configs
+			data.transpositions = saved_transpositions
 			data.pitch_loops = saved_pitch_loops
 			data.mod_loops = saved_mod_loops
 			tab.save(data, data_file)
 		end
 	}
+end
+
+function set_memory(data)
+
+	if type(data) ~= 'table' then
+		data = {}
+	end
+
+	-- restore/initialize pitch loops
+	saved_pitch_loops = {}
+	for l = 1, 16 do
+		local loop = {
+			values = {},
+			voices = {}
+		}
+		if data.pitch_loops ~= nil and data.pitch_loops[l] ~= nil then
+			-- restore
+			local old_loop = data.pitch_loops[l]
+			if old_loop.values ~= nil then
+				-- newest format
+				for i, v in ipairs(old_loop.values) do
+					loop.values[i] = v
+				end
+				for v = 1, n_voices do
+					loop.voices[v] = {
+						offset = old_loop.voices[v].offset,
+						scramble = old_loop.voices[v].scramble or 0, -- TODO: remove these fallbacks once everything's converted
+						direction = old_loop.voices[v].direction or 1
+					}
+				end
+			else
+				-- old format
+				for i, v in ipairs(old_loop) do
+					loop.values[i] = v
+				end
+				for v = 1, n_voices do
+					loop.voices[v] = {
+						offset = v * -3,
+						scramble = data.configs[l][v].pitch_scramble or 0,
+						direction = data.configs[l][v].pitch_direction or 1
+					}
+				end
+			end
+		else
+			-- initialize
+			for i = 1, 16 do
+				saved_pitch_loops[l].values[i] = 0
+			end
+			for v = 1, 4 do
+				saved_mod_loops[l].voices[v] = {
+					offset = v * -3,
+					scramble = 0,
+					direction = 1
+				}
+			end
+		end
+		saved_pitch_loops[l] = loop
+	end
+	pitch_register.dirty = true
+
+	-- restore/initialize masks
+	saved_masks = {}
+	for m = 1, 16 do
+		local mask = {}
+		if data.masks ~= nil and data.masks[m] ~= nil then
+			-- restore
+			for i, v in ipairs(data.masks[m]) do
+				mask[i] = v
+			end
+		else
+			-- initialize
+			for i = 1, 12 do
+				mask[i] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 } -- C major
+			end
+		end
+		saved_masks[m] = mask
+	end
+	mask_dirty = true
+
+	-- restore/initialize transpositions
+	saved_transpositions = {}
+	for t = 1, 16 do
+		local transposition = {}
+		if data.transpositions ~= nil and data.transpositions[t] ~= nil then
+			-- restore
+			for v = 1, n_voices do
+				transposition[v] = data.transpositions[t][v]
+			end
+		elseif data.configs ~= nil and data.configs[t] ~= nil then
+			-- restore old format
+			for v = 1, n_voices do
+				transposition[v] = data.configs[t][v].transpose
+			end
+		else
+			-- initialize
+			for v = 1, n_voices do
+				transposition[v] = 0.75 - v / 4
+			end
+		end
+		saved_transpositions[t] = transposition
+	end
+	transposition_dirty = true
+
+	-- restore/initialize mod loops
+	saved_mod_loops = {}
+	for l = 1, 16 do
+		local loop = {
+			values = {},
+			voices = {}
+		}
+		if data.mod_loops ~= nil and data.mod_loops[l] ~= nil then
+			-- restore
+			local old_loop = data.mod_loops[l]
+			if old_loop.values ~= nil then
+				-- newest format
+				for i, v in ipairs(old_loop.values) do
+					loop.values[i] = v
+				end
+				for v = 1, n_voices do
+					loop.voices[v] = {
+						offset = old_loop.voices[v].offset,
+						scramble = old_loop.voices[v].scramble or 0,
+						direction = old_loop.voices[v].direction or 1
+					}
+				end
+			else
+				-- old format
+				for i, v in ipairs(old_loop) do
+					loop.values[i] = v
+				end
+				for v = 1, n_voices do
+					loop.voices[v] = {
+						offset = v * -4,
+						scramble = data.configs[l][v].mod_scramble or 0,
+						direction = data.configs[l][v].mod_direction or 1
+					}
+				end
+			end
+		else
+			-- initialize
+			for i = 1, 14 do
+				saved_pitch_loops[l].values[i] = 0
+			end
+			for v = 1, 4 do
+				saved_mod_loops[l].voices[v] = {
+					offset = v * -4,
+					scramble = 0,
+					direction = 1
+				}
+			end
+		end
+		saved_mod_loops[l] = loop
+	end
+	mod_register.dirty = true
 end
 
 function init()
@@ -1171,41 +1317,10 @@ function init()
 	pitch_poll = poll.set('pitch_in_l', update_freq)
 	pitch_poll.time = 1 / 10 -- was 8, is 10 OK?
 	
-	for m = 1, 16 do
-		saved_masks[m] = {}
-		for i = 1, 12 do
-			saved_masks[m][i] = false
-		end
-	end
-
-	for t = 1, 16 do
-		saved_configs[t] = {}
-		for v = 1, n_voices do
-			saved_configs[t][v] = {
-				transpose = 0,
-				pitch_offset = 0,
-				pitch_scramble = 0,
-				pitch_direction = 0,
-				mod_offset = 0,
-				mod_scramble = 0,
-				mod_direction = 0
-			}
-		end
-	end
-
-	for l = 1, 16 do
-		saved_pitch_loops[l] = {}
-		saved_mod_loops[l] = {}
-		for i = 1, 16 do
-			saved_pitch_loops[l][i] = 0
-			saved_mod_loops[l][i] = 0
-		end
-	end
-
 	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
 	params:set('restore_memory')
 	recall_mask()
-	recall_config()
+	recall_transposition()
 	recall_pitch_loop()
 	recall_mod_loop()
 
@@ -1304,7 +1419,7 @@ function enc(n, d)
 				update_voice(v)
 			end
 		end
-		config_dirty = true
+		transposition_dirty = true
 		dirty = true
 	elseif n == 3 then
 		if key_shift then

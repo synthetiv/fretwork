@@ -115,6 +115,7 @@ function ShiftRegister:get_loop(offset)
 end
 
 --- set the loop contents and length to match the provided table of values
+-- TODO: do you need the offset? you aren't currently using it
 function ShiftRegister:set_loop(offset, loop)
 	self:set_length(#loop)
 	for i = 1, self.length do
