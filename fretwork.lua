@@ -596,7 +596,7 @@ end
 function transpose_keyboard:get_key_level(x, y, n)
 	local level = 0
 	-- highlight octaves
-	if (n - self.scale.center_pitch_id) % self.scale.length == 1 then
+	if (n - self.scale.center_pitch_id) % self.scale.length == 0 then
 		level = 2
 	end
 	-- highlight transposition settings
