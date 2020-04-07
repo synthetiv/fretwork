@@ -8,6 +8,7 @@ local n_values = 128
 
 function Scale.new(pitch_class_values)
 	local instance = setmetatable({}, Scale)
+	instance.values = {}
 	instance:init(pitch_class_values)
 	-- enable all notes
 	local mask = {}
@@ -23,7 +24,6 @@ function Scale:init(pitch_class_values)
 	self.span = pitch_class_values[#pitch_class_values]
 	-- precalculate all pitch values across all octaves
 	self.center_pitch_id = n_values / 2
-	self.values = {}
 	local pitch_class = 1
 	local span = 0
 	for p = 0, self.center_pitch_id do

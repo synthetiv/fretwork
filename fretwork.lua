@@ -181,11 +181,32 @@ x0x_roll = X0XRoll.new(6, 1, 11, 8, n_voices, voices)
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
 screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
-screen_notes = { {}, {}, {}, {} }
+screen_notes = {}
+-- initialize these so every redraw doesn't create a zillion new tables, triggering GC
+for v = 1, n_voices do
+	voices[v]:initialize_path(n_screen_notes)
+	screen_notes[v] = {}
+	for n = 1, n_screen_notes do
+		screen_notes[v][n] = {
+			x = 0,
+			y = 0,
+			z = 0,
+			pitch_pos = 0,
+			level = 0
+		}
+	end
+end
 
-recent_writes = { nil, nil, nil, nil, nil, nil, nil, nil }
-n_recent_writes = 8
 last_write = 0
+n_recent_writes = 8
+recent_writes = {}
+for w = 1, n_recent_writes do
+	recent_writes[w] = {
+		level = 0,
+		pitch_pos = 0,
+		mod_pos = 0
+	}
+end
 
 key_shift = false
 key_pitch = false
@@ -242,19 +263,14 @@ end
 
 function save_pitch_loop()
 	local offset = quantization_off() and 0 or 1 -- if quantizing, save the future loop state (on the next tick)
-	local loop = {
-		values = {},
-		voices = {}
-	}
+	local loop = saved_pitch_loops[pitch_loop_selector.selected]
 	loop.values = pitch_register:get_loop(offset)
 	for v = 1, n_voices do
-		loop.voices[v] = {
-			offset = voices[v].pitch_tap:get_offset(),
-			scramble = voices[v].pitch_tap.scramble,
-			direction = voices[v].pitch_tap.direction
-		}
+		local loop_voice = loop.voices[v]
+		loop_voice.offset = voices[v].pitch_tap:get_offset()
+		loop_voice.scramble = voices[v].pitch_tap.scramble
+		loop_voice.direction = voices[v].pitch_tap.direction
 	end
-	saved_pitch_loops[pitch_loop_selector.selected] = loop
 	pitch_register.dirty = false
 end
 
@@ -284,11 +300,10 @@ function recall_transposition()
 end
 
 function save_transposition()
-	local transposition = {}
+	local transposition = saved_transpositions[transposition_selector.selected]
 	for v = 1, n_voices do
 		transposition[v] = voices[v].next_transpose
 	end
-	saved_transpositions[transposition_selector.selected] = transposition
 	transposition_dirty = false
 end
 
@@ -311,19 +326,14 @@ end
 
 function save_mod_loop()
 	local offset = quantization_off() and 0 or 1
-	local loop = {
-		values = {},
-		voices = {}
-	}
+	local loop = saved_mod_loops[mod_loop_selector.selected]
 	loop.values = mod_register:get_loop(offset)
 	for v = 1, n_voices do
-		loop.voices[v] = {
-			offset = voices[v].mod_tap:get_offset(),
-			scramble = voices[v].mod_tap.scramble,
-			direction = voices[v].mod_tap.direction
-		}
+		local loop_voice = loop.voices[v]
+		loop_voice.offset = voices[v].mod_tap:get_offset()
+		loop_voice.scramble = voices[v].mod_tap.scramble
+		loop_voice.direction = voices[v].mod_tap.direction
 	end
-	saved_mod_loops[mod_loop_selector.selected] = loop
 	mod_register.dirty = false
 end
 
@@ -376,11 +386,10 @@ function write(pitch)
 			local voice = voices[v]
 			voice:set_pitch(0, pitch)
 			last_write = last_write % n_recent_writes + 1
-			recent_writes[last_write] = {
-				level = 15,
-				pitch_pos = voice.pitch_tap:get_pos(0),
-				mod_pos = voice.mod_tap:get_pos(0)
-			}
+			local write = recent_writes[last_write]
+			write.level = 15
+			write.pitch_pos = voice.pitch_tap:get_pos(0)
+			write.mod_pos = voice.mod_tap:get_pos(0)
 			update_voice(v)
 		end
 	end
@@ -1413,10 +1422,9 @@ end
 -- calculate coordinates for each visible note
 function calculate_voice_path(v, level)
 	local voice = voices[v]
-	local path = voice:get_path(-screen_note_center, n_screen_notes - screen_note_center)
-	screen_notes[v] = {}
+	local path = voice:update_path(-screen_note_center, n_screen_notes - screen_note_center)
 	for n = 1, n_screen_notes do
-		local note = {}
+		local note = screen_notes[v][n]
 		note.x = (n - 1) * screen_note_width
 		note.y = get_screen_note_y(scale:snap(path[n].pitch))
 		note.z = path[n].mod
@@ -1431,7 +1439,6 @@ function calculate_voice_path(v, level)
 				end
 			end
 		end
-		screen_notes[v][n] = note
 	end
 end
 

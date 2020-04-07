@@ -85,17 +85,28 @@ function ShiftRegisterVoice:toggle_mod(t)
 	end
 end
 
-function ShiftRegisterVoice:get_path(start_offset, end_offset)
-	local path = {}
-	local length = end_offset - start_offset
+function ShiftRegisterVoice:initialize_path(length)
+	self.path = {}
 	for n = 1, length do
-		local pitch, mod = self:get(start_offset + n)
-		path[n] = {
-			pitch = pitch,
-			mod = mod,
-			pitch_pos = self.pitch_tap:get_pos(start_offset + n),
-			mod_pos = self.mod_tap:get_pos(start_offset + n)
+		self.path[n] = {
+			pitch = 0,
+			pitch_pos = 0,
+			mod = 0,
+			mod_pos = 0
 		}
+	end
+end
+
+function ShiftRegisterVoice:update_path(start_offset, end_offset)
+	local length = end_offset - start_offset
+	local path = self.path
+	for n = 1, length do
+		local note = path[n]
+		local pitch, mod = self:get(start_offset + n)
+		note.pitch = pitch
+		note.pitch_pos = self.pitch_tap:get_pos(start_offset + n)
+		note.mod = mod
+		note.mod_pos = self.mod_tap:get_pos(start_offset + n)
 	end
 	return path
 end
