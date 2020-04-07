@@ -11,8 +11,7 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.detune = 0
 	voice.transpose = 0
 	voice.next_transpose = 0
-	voice.pitch_raw = 0
-	voice.pitch_id = 1
+	voice.pitch_id = -1
 	voice.pitch = 0
 	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register)
 	voice.scale = scale
@@ -30,13 +29,17 @@ end
 
 function ShiftRegisterVoice:update_values()
 	self:apply_edits()
-	self.pitch_raw, self.mod = self:get(0) -- unquantized
-	self.pitch_id = self.scale:get_nearest_mask_pitch_id(self.pitch_raw)
-	if self.pitch_id == -1 then
-		self.pitch = self.pitch_raw + self.detune
-		return
+	local scale = self.scale
+	local pitch = self:get_pitch(0)
+	local pitch_id = scale:get_nearest_mask_pitch_id(pitch)
+	if pitch_id == -1 then
+		pitch_id = scale:get_nearest_pitch_id(pitch)
+	else
+		pitch = scale:get(pitch_id)
 	end
-	self.pitch = self.scale:get(self.pitch_id) + self.detune
+	self.pitch_id = pitch_id
+	self.pitch = pitch + self.detune
+	self.mod = self:get_mod(0)
 end
 
 function ShiftRegisterVoice:shift_pitch(d)
@@ -58,10 +61,6 @@ end
 
 function ShiftRegisterVoice:get_mod(t)
 	return self.mod_tap:get(t)
-end
-
-function ShiftRegisterVoice:get(t)
-	return self:get_pitch(t), self:get_mod(t)
 end
 
 function ShiftRegisterVoice:set_pitch(t, pitch)
@@ -86,27 +85,30 @@ function ShiftRegisterVoice:toggle_mod(t)
 end
 
 function ShiftRegisterVoice:initialize_path(length)
-	self.path = {}
+	local path = {}
 	for n = 1, length do
-		self.path[n] = {
+		path[n] = {
 			pitch = 0,
 			pitch_pos = 0,
 			mod = 0,
 			mod_pos = 0
 		}
 	end
+	self.path = path
 end
 
 function ShiftRegisterVoice:update_path(start_offset, end_offset)
 	local length = end_offset - start_offset
 	local path = self.path
+	local pitch_tap = self.pitch_tap
+	local mod_tap = self.mod_tap
 	for n = 1, length do
 		local note = path[n]
-		local pitch, mod = self:get(start_offset + n)
-		note.pitch = pitch
-		note.pitch_pos = self.pitch_tap:get_pos(start_offset + n)
-		note.mod = mod
-		note.mod_pos = self.mod_tap:get_pos(start_offset + n)
+		local offset = start_offset + n
+		note.pitch = self:get_pitch(offset)
+		note.pitch_pos = pitch_tap:get_pos(offset)
+		note.mod = self:get_mod(offset)
+		note.mod_pos = mod_tap:get_pos(offset)
 	end
 	return path
 end
