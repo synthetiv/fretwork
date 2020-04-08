@@ -96,59 +96,69 @@ function Scale:toggle_class(pitch_id)
 	self.next_mask[pitch_class] = not self.next_mask[pitch_class]
 end
 
-local function binary_search(first, last, v, predicate)
-	local i = 1
-	local j = 1
-	local step = 0
-	local count = last - first
-	while count > 0 do
-		step = math.floor(count / 2)
-		i = j + step
-		if predicate(i, v) then
-			count = step
-		else
-			j = i + 1
-			count = count - step - 1
-		end
-	end
-	return j
-end
-
-local function get_nearest(last, v, predicate)
-	local first = last - 2
-	local best_distance = 2 -- octaves; distances between pitch classes certainly ought to be smaller than this
-	local j = first
-	for i = first, last do
-		local distance = math.abs(v - predicate(i))
-		if distance < best_distance then
-			best_distance = distance
-			j = i
-		end
-	end
-	return j
-end
-
 function Scale:get_nearest_pitch_id(value)
-	local pitch_id = binary_search(1, n_values, value, function(i, v)
-		return self.values[i] > value
-	end)
-	pitch_id = get_nearest(pitch_id, value, function(i)
-		return self.values[i] or 2
-	end)
-	return pitch_id
+	-- binary search to find the first pitch ID whose value is higher than the one we want
+	local upper_id = 1
+	local next_id = 1 -- next ID to check
+	local jump_size = 0 -- size of binary search jump
+	local n_remaining = n_values - 1 -- number of IDs left to check
+	while n_remaining > 0 do
+		jump_size = math.floor(n_remaining / 2)
+		next_id = upper_id + jump_size
+		if self.values[next_id] > value then
+			n_remaining = jump_size
+		else
+			upper_id = next_id + 1
+			n_remaining = n_remaining - jump_size - 1
+		end
+	end
+	-- check two values below it to see if they're closer than upper_id is
+	-- TODO: why two, other than it's what Emilie does in Braids? wouldn't one be enough??
+	local best_id = upper_id - 2
+	local best_distance = 2 -- octaves; distances between pitch classes certainly ought to be smaller than this
+	for next_id = best_id, upper_id do
+		local next_value = self.values[next_id]
+		if next_value ~= nil then
+			local distance = math.abs(value - next_value)
+			if distance < best_distance then
+				best_distance = distance
+				best_id = next_id
+			end
+		end
+	end
+	return best_id
 end
 
 function Scale:get_nearest_mask_pitch_id(value)
-	if self.n_mask_pitches == 0 then
-		return -1
+	local upper_id = 1
+	local next_id = 1
+	local jump_size = 0
+	local n_remaining = self.n_mask_pitches - 1
+	while n_remaining > 0 do
+		jump_size = math.floor(n_remaining / 2)
+		next_id = upper_id + jump_size
+		if self.values[self.mask_pitch_ids[next_id]] > value then
+			n_remaining = jump_size
+		else
+			upper_id = next_id + 1
+			n_remaining = n_remaining - jump_size - 1
+		end
 	end
-	local mask_pitch_id = binary_search(1, self.n_mask_pitches, value, function(i, v)
-		return self.values[self.mask_pitch_ids[i]] > value
-	end)
-	mask_pitch_id = get_nearest(mask_pitch_id, value, function(i)
-		return self.mask_pitch_ids[i] ~= nil and self.values[self.mask_pitch_ids[i]] or 2
-	end)
-	return self.mask_pitch_ids[mask_pitch_id]
+	local best_id = 1
+	local best_distance = 2
+	for next_id = upper_id - 2, upper_id do
+		if self.mask_pitch_ids[next_id] ~= nil then
+			local next_value = self.values[self.mask_pitch_ids[next_id]]
+			if next_value ~= nil then
+				local distance = math.abs(value - next_value)
+				if distance < best_distance then
+					best_distance = distance
+					best_id = next_id
+				end
+			end
+		end
+	end
+	return self.mask_pitch_ids[best_id]
 end
 
 function Scale:get(pitch_id)
