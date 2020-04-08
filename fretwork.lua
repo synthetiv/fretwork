@@ -32,55 +32,6 @@ for p = 1, 12 do
 end
 scale = Scale.new(et12)
 
-saved_masks = {}
-mask_dirty = false
-mask_selector = Select.new(1, 3, 4, 4)
-mask_selector.on_select = function(m)
-	if held_keys.shift then
-		save_mask(m)
-	else
-		recall_mask(m)
-	end
-end
-
-saved_transpositions = {}
-transposition_dirty = false
-transposition_selector = Select.new(1, 3, 4, 4)
-transposition_selector.on_select = function(c)
-	if held_keys.shift then
-		save_transposition(c)
-	else
-		recall_transposition(c)
-	end
-end
-
-saved_pitch_loops = {}
--- TODO: multi selects for 'pattern chaining'... or maybe pattern_time
-pitch_loop_selector = Select.new(1, 3, 4, 4)
-pitch_loop_selector.on_select = function(l)
-	if held_keys.shift then
-		save_pitch_loop(l)
-	else
-		recall_pitch_loop(l)
-	end
-end
-
-saved_mod_loops = {}
-mod_loop_selector = Select.new(1, 3, 4, 4)
-mod_loop_selector.on_select = function(l)
-	if held_keys.shift then
-		save_mod_loop(l)
-	else
-		recall_mod_loop(l)
-	end
-end
-
-memory_selector = MultiSelect.new(1, 2, 4, 1)
-memory_pitch_loop = 1
-memory_mask = 2
-memory_transposition = 3
-memory_mod_loop = 4
-
 pitch_register = ShiftRegister.new(32)
 mod_register = ShiftRegister.new(11)
 
@@ -219,6 +170,100 @@ blinkers = {
 	record = Blinker.new(framerate)
 }
 dirty = false
+
+-- TODO: maybe you can break these memory things into classes
+saved_pitch_loops = {}
+for l = 1, 16 do
+	local loop = {
+		values = {},
+		voices = {}
+	}
+	for i = 1, 16 do
+		loop.values[i] = 0
+	end
+	for v = 1, 4 do
+		loop.voices[v] = {
+			offset = v * -3,
+			scramble = 0,
+			direction = 1
+		}
+	end
+	saved_pitch_loops[l] = loop
+end
+-- TODO: multi selects for 'pattern chaining'... or maybe pattern_time
+pitch_loop_selector = Select.new(1, 3, 4, 4)
+pitch_loop_selector.on_select = function(l)
+	if held_keys.shift then
+		save_pitch_loop(l)
+	else
+		recall_pitch_loop(l)
+	end
+end
+
+saved_masks = {}
+for m = 1, 16 do
+	saved_masks[m] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 } -- C major
+end
+mask_dirty = false
+mask_selector = Select.new(1, 3, 4, 4)
+mask_selector.on_select = function(m)
+	if held_keys.shift then
+		save_mask(m)
+	else
+		recall_mask(m)
+	end
+end
+
+saved_transpositions = {}
+for t = 1, 16 do
+	local transposition = {}
+	for v = 1, n_voices do
+		transposition[v] = 0.75 - v / 4
+	end
+	saved_transpositions[t] = transposition
+end
+transposition_dirty = false
+transposition_selector = Select.new(1, 3, 4, 4)
+transposition_selector.on_select = function(c)
+	if held_keys.shift then
+		save_transposition(c)
+	else
+		recall_transposition(c)
+	end
+end
+
+saved_mod_loops = {}
+for l = 1, 16 do
+	local loop = {
+		values = {},
+		voices = {}
+	}
+	for i = 1, 14 do
+		loop.values[i] = 0
+	end
+	for v = 1, 4 do
+		loop.voices[v] = {
+			offset = v * -4,
+			scramble = 0,
+			direction = 1
+		}
+	end
+	saved_mod_loops[l] = loop
+end
+mod_loop_selector = Select.new(1, 3, 4, 4)
+mod_loop_selector.on_select = function(l)
+	if held_keys.shift then
+		save_mod_loop(l)
+	else
+		recall_mod_loop(l)
+	end
+end
+
+memory_selector = MultiSelect.new(1, 2, 4, 1)
+memory_pitch_loop = 1
+memory_mask = 2
+memory_transposition = 3
+memory_mod_loop = 4
 
 redraw_metro = metro.init{
 	time = framerate,
@@ -1145,119 +1190,62 @@ end
 
 function set_memory(data)
 
-	if type(data) ~= 'table' then
-		data = {}
-	end
-
-	-- restore/initialize pitch loops
-	saved_pitch_loops = {}
 	for l = 1, 16 do
-		local loop = {
-			values = {},
-			voices = {}
-		}
 		if data.pitch_loops ~= nil and data.pitch_loops[l] ~= nil then
-			-- restore
-			local old_loop = data.pitch_loops[l]
-			for i, v in ipairs(old_loop.values) do
+			local loop = saved_pitch_loops[l]
+			local new_loop = data.pitch_loops[l]
+			loop.values = {}
+			for i, v in ipairs(new_loop.values) do
 				loop.values[i] = v
 			end
 			for v = 1, n_voices do
-				loop.voices[v] = {
-					offset = old_loop.voices[v].offset,
-					scramble = old_loop.voices[v].scramble,
-					direction = old_loop.voices[v].direction
-				}
-			end
-		else
-			-- initialize
-			for i = 1, 16 do
-				saved_pitch_loops[l].values[i] = 0
-			end
-			for v = 1, 4 do
-				saved_mod_loops[l].voices[v] = {
-					offset = v * -3,
-					scramble = 0,
-					direction = 1
-				}
+				local voice = loop.voices[v]
+				local new_voice = new_loop.voices[v]
+				voice.offset = new_voice.offset
+				voice.scramble = new_voice.scramble
+				voice.direction = new_voice.direction
 			end
 		end
-		saved_pitch_loops[l] = loop
 	end
 	pitch_register.dirty = true
 
-	-- restore/initialize masks
-	saved_masks = {}
 	for m = 1, 16 do
-		local mask = {}
 		if data.masks ~= nil and data.masks[m] ~= nil then
-			-- restore
+			mask = {}
 			for i, v in ipairs(data.masks[m]) do
 				mask[i] = v
 			end
-		else
-			-- initialize
-			for i = 1, 12 do
-				mask[i] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 } -- C major
-			end
+			saved_masks[m] = mask
 		end
-		saved_masks[m] = mask
 	end
 	mask_dirty = true
 
-	-- restore/initialize transpositions
-	saved_transpositions = {}
 	for t = 1, 16 do
-		local transposition = {}
 		if data.transpositions ~= nil and data.transpositions[t] ~= nil then
-			-- restore
+			local transposition = saved_transpositions[t]
 			for v = 1, n_voices do
 				transposition[v] = data.transpositions[t][v]
 			end
-		else
-			-- initialize
-			for v = 1, n_voices do
-				transposition[v] = 0.75 - v / 4
-			end
 		end
-		saved_transpositions[t] = transposition
 	end
 	transposition_dirty = true
 
-	-- restore/initialize mod loops
-	saved_mod_loops = {}
 	for l = 1, 16 do
-		local loop = {
-			values = {},
-			voices = {}
-		}
 		if data.mod_loops ~= nil and data.mod_loops[l] ~= nil then
-			-- restore
-			local old_loop = data.mod_loops[l]
-			for i, v in ipairs(old_loop.values) do
+			local loop = saved_mod_loops[l]
+			local new_loop = data.mod_loops[l]
+			loop.values = {}
+			for i, v in ipairs(new_loop.values) do
 				loop.values[i] = v
 			end
 			for v = 1, n_voices do
-				loop.voices[v] = {
-					offset = old_loop.voices[v].offset,
-					scramble = old_loop.voices[v].scramble,
-					direction = old_loop.voices[v].direction
-				}
-			end
-		else
-			-- initialize
-			for i = 1, 14 do
-				saved_pitch_loops[l].values[i] = 0
-			end
-			for v = 1, 4 do
-				saved_mod_loops[l].voices[v] = {
-					offset = v * -4,
-					scramble = 0,
-					direction = 1
-				}
+				local voice = loop.voices[v]
+				local new_voice = new_loop.voices[v]
+				voice.offset = new_voice.offset
+				voice.scramble = new_voice.scramble
+				voice.direction = new_voice.direction
 			end
 		end
-		saved_mod_loops[l] = loop
 	end
 	mod_register.dirty = true
 end
