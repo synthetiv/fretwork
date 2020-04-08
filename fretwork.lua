@@ -18,6 +18,9 @@ ShiftRegister = include 'lib/shift_register'
 ShiftRegisterVoice = include 'lib/shift_register_voice'
 Scale = include 'lib/scale'
 Blinker = include 'lib/blinker'
+LoopMemory = include 'lib/memory_loop'
+MaskMemory = include 'lib/memory_mask'
+TranspositionMemory = include 'lib/memory_transposition'
 
 pitch_poll = nil
 pitch_in_value = 0
@@ -171,100 +174,6 @@ blinkers = {
 }
 dirty = false
 
--- TODO: maybe you can break these memory things into classes
-saved_pitch_loops = {}
-for l = 1, 16 do
-	local loop = {
-		values = {},
-		voices = {}
-	}
-	for i = 1, 16 do
-		loop.values[i] = 0
-	end
-	for v = 1, 4 do
-		loop.voices[v] = {
-			offset = v * -3,
-			scramble = 0,
-			direction = 1
-		}
-	end
-	saved_pitch_loops[l] = loop
-end
--- TODO: multi selects for 'pattern chaining'... or maybe pattern_time
-pitch_loop_selector = Select.new(1, 3, 4, 4)
-pitch_loop_selector.on_select = function(l)
-	if held_keys.shift then
-		save_pitch_loop(l)
-	else
-		recall_pitch_loop(l)
-	end
-end
-
-saved_masks = {}
-for m = 1, 16 do
-	saved_masks[m] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 } -- C major
-end
-mask_dirty = false
-mask_selector = Select.new(1, 3, 4, 4)
-mask_selector.on_select = function(m)
-	if held_keys.shift then
-		save_mask(m)
-	else
-		recall_mask(m)
-	end
-end
-
-saved_transpositions = {}
-for t = 1, 16 do
-	local transposition = {}
-	for v = 1, n_voices do
-		transposition[v] = 0.75 - v / 4
-	end
-	saved_transpositions[t] = transposition
-end
-transposition_dirty = false
-transposition_selector = Select.new(1, 3, 4, 4)
-transposition_selector.on_select = function(c)
-	if held_keys.shift then
-		save_transposition(c)
-	else
-		recall_transposition(c)
-	end
-end
-
-saved_mod_loops = {}
-for l = 1, 16 do
-	local loop = {
-		values = {},
-		voices = {}
-	}
-	for i = 1, 14 do
-		loop.values[i] = 0
-	end
-	for v = 1, 4 do
-		loop.voices[v] = {
-			offset = v * -4,
-			scramble = 0,
-			direction = 1
-		}
-	end
-	saved_mod_loops[l] = loop
-end
-mod_loop_selector = Select.new(1, 3, 4, 4)
-mod_loop_selector.on_select = function(l)
-	if held_keys.shift then
-		save_mod_loop(l)
-	else
-		recall_mod_loop(l)
-	end
-end
-
-memory_selector = MultiSelect.new(1, 2, 4, 1)
-memory_pitch_loop = 1
-memory_mask = 2
-memory_transposition = 3
-memory_mod_loop = 4
-
 redraw_metro = metro.init{
 	time = framerate,
 	event = function(tick)
@@ -284,102 +193,21 @@ redraw_metro = metro.init{
 	end
 }
 
+memory_selector = MultiSelect.new(1, 2, 4, 1)
+memory_pitch_loop = 1
+memory_mask = 2
+memory_transposition = 3
+memory_mod_loop = 4
+memory = {
+	pitch = LoopMemory.new('pitch', pitch_register, -3),
+	mask = MaskMemory.new(),
+	transposition = TranspositionMemory.new(),
+	mod = LoopMemory.new('mod', mod_register, -4)
+}
+
 function quantization_off()
 	-- disable quantization if ctrl is held/locked or clock is paused
 	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
-end
-
-function recall_pitch_loop()
-	local loop = saved_pitch_loops[pitch_loop_selector.selected]
-	for v = 1, n_voices do
-		voices[v].pitch_tap:set_offset(loop.voices[v].offset)
-		params:set(string.format('voice_%d_pitch_scramble', v), loop.voices[v].scramble)
-		params:set(string.format('voice_%d_pitch_direction', v), loop.voices[v].direction)
-	end
-	if quantization_off() then
-		pitch_register:set_loop(0, loop.values)
-		-- silently update the loop length
-		params:set('pitch_loop_length', pitch_register.length, true)
-		update_voices()
-	else
-		pitch_register:set_next_loop(1, loop.values)
-	end
-end
-
-function save_pitch_loop()
-	local offset = quantization_off() and 0 or 1 -- if quantizing, save the future loop state (on the next tick)
-	local loop = saved_pitch_loops[pitch_loop_selector.selected]
-	loop.values = pitch_register:get_loop(offset)
-	for v = 1, n_voices do
-		local loop_voice = loop.voices[v]
-		loop_voice.offset = voices[v].pitch_tap:get_offset()
-		loop_voice.scramble = voices[v].pitch_tap.scramble
-		loop_voice.direction = voices[v].pitch_tap.direction
-	end
-	pitch_register.dirty = false
-end
-
-function recall_mask()
-	local mask = saved_masks[mask_selector.selected]
-	scale:set_next_mask(scale:pitches_to_mask(mask))
-	if quantization_off() then
-		update_voices()
-	end
-	mask_dirty = false
-end
-
-function save_mask()
-	saved_masks[mask_selector.selected] = scale:mask_to_pitches(scale:get_next_mask())
-	mask_dirty = false
-end
-
-function recall_transposition()
-	local t = transposition_selector.selected
-	for v = 1, n_voices do
-		params:set(string.format('voice_%d_transpose', v), saved_transpositions[t][v])
-	end
-	if quantization_off() then
-		update_voices()
-	end
-	transposition_dirty = false
-end
-
-function save_transposition()
-	local transposition = saved_transpositions[transposition_selector.selected]
-	for v = 1, n_voices do
-		transposition[v] = voices[v].next_transpose
-	end
-	transposition_dirty = false
-end
-
-function recall_mod_loop()
-	local loop = saved_mod_loops[mod_loop_selector.selected]
-	for v = 1, n_voices do
-		voices[v].mod_tap:set_offset(loop.voices[v].offset)
-		params:set(string.format('voice_%d_mod_scramble', v), loop.voices[v].scramble)
-		params:set(string.format('voice_%d_mod_direction', v), loop.voices[v].direction)
-	end
-	if quantization_off() then
-		mod_register:set_loop(0, loop.values)
-		-- silently update the loop length
-		params:set('mod_loop_length', mod_register.length, true)
-		update_voices()
-	else
-		mod_register:set_next_loop(1, loop.values)
-	end
-end
-
-function save_mod_loop()
-	local offset = quantization_off() and 0 or 1
-	local loop = saved_mod_loops[mod_loop_selector.selected]
-	loop.values = mod_register:get_loop(offset)
-	for v = 1, n_voices do
-		local loop_voice = loop.voices[v]
-		loop_voice.offset = voices[v].mod_tap:get_offset()
-		loop_voice.scramble = voices[v].mod_tap.scramble
-		loop_voice.direction = voices[v].mod_tap.direction
-	end
-	mod_register.dirty = false
 end
 
 function update_voice(v)
@@ -501,20 +329,24 @@ function grid_redraw()
 	memory_selector:draw(g, 7, 2)
 
 	-- recall buttons, for all selected memory types
+	local pitch_loop_selector = memory.pitch.selector
+	local mask_selector = memory.mask.selector
+	local transposition_selector = memory.transposition.selector
+	local mod_loop_selector = memory.mod.selector
 	for x = 1, 4 do
 		for y = 3, 6 do
 			local level = 2
 			if memory_selector:is_selected(memory_pitch_loop) and pitch_loop_selector:is_selected(pitch_loop_selector:get_key_option(x, y)) then
-				level = math.max(level, pitch_register.dirty and blink_slow and 8 or 7)
+				level = math.max(level, (memory.pitch.dirty or pitch_register.dirty) and blink_slow and 8 or 7)
 			end
 			if memory_selector:is_selected(memory_mask) and mask_selector:is_selected(mask_selector:get_key_option(x, y)) then
-				level = math.max(level, mask_dirty and blink_slow and 8 or 7)
+				level = math.max(level, memory.mask.dirty and blink_slow and 8 or 7)
 			end
 			if memory_selector:is_selected(memory_transposition) and transposition_selector:is_selected(transposition_selector:get_key_option(x, y)) then
-				level = math.max(level, transposition_dirty and blink_slow and 8 or 7)
+				level = math.max(level, memory.transposition.dirty and blink_slow and 8 or 7)
 			end
 			if memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:is_selected(mod_loop_selector:get_key_option(x, y)) then
-				level = math.max(level, mod_register.dirty and blink_slow and 8 or 7)
+				level = math.max(level, (memory.mod.dirty or mod_register.dirty) and blink_slow and 8 or 7)
 			end
 			g:led(x, y, level)
 		end
@@ -725,7 +557,7 @@ end
 
 function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
-	mask_dirty = true
+	memory.mask.dirty = true
 	if quantization_off() then
 		scale:apply_edits()
 		update_voices()
@@ -834,16 +666,16 @@ function grid_key(x, y, z)
 		memory_selector:key(x, y, z)
 	elseif x <= 4 and y >= 3 and y <= 6 then
 		if memory_selector:is_selected(memory_mask) then
-			mask_selector:key(x, y, z)
+			memory.mask.selector:key(x, y, z)
 		end
 		if memory_selector:is_selected(memory_transposition) then
-			transposition_selector:key(x, y, z)
+			memory.transposition.selector:key(x, y, z)
 		end
 		if memory_selector:is_selected(memory_pitch_loop) then
-			pitch_loop_selector:key(x, y, z)
+			memory.pitch.selector:key(x, y, z)
 		end
 		if memory_selector:is_selected(memory_mod_loop) then
-			mod_loop_selector:key(x, y, z)
+			memory.mod.selector:key(x, y, z)
 		end
 	elseif x == 1 and y == 7 then
 		-- shift key
@@ -1043,7 +875,7 @@ function add_params()
 			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
 			action = function(value)
 				voice.next_transpose = value
-				transposition_dirty = true
+				memory.transposition.dirty = true
 			end
 		}
 		params:add{
@@ -1054,7 +886,7 @@ function add_params()
 			action = function(value)
 				voice.pitch_tap.scramble = value
 				dirty = true
-				transposition_dirty = true
+				memory.transposition.dirty = true
 			end
 		}
 		params:add{
@@ -1068,7 +900,7 @@ function add_params()
 			action = function(value)
 				voice.pitch_tap.direction = value == 2 and -1 or 1
 				dirty = true
-				transposition_dirty = true
+				memory.transposition.dirty = true
 			end
 		}
 		params:add{
@@ -1079,7 +911,7 @@ function add_params()
 			action = function(value)
 				voice.mod_tap.scramble = value
 				dirty = true
-				transposition_dirty = true
+				memory.transposition.dirty = true
 			end
 		}
 		params:add{
@@ -1093,7 +925,7 @@ function add_params()
 			action = function(value)
 				voice.mod_tap.direction = value == 2 and -1 or 1
 				dirty = true
-				transposition_dirty = true
+				memory.transposition.dirty = true
 			end
 		}
 		-- TODO: inversion too? value scaling?
@@ -1166,7 +998,7 @@ function add_params()
 				if errorMessage ~= nil then
 					error(errorMessage)
 				else
-					set_memory(data)
+					load_memory(data)
 				end
 			end
 		end
@@ -1188,66 +1020,17 @@ function add_params()
 	}
 end
 
-function set_memory(data)
-
-	for l = 1, 16 do
-		if data.pitch_loops ~= nil and data.pitch_loops[l] ~= nil then
-			local loop = saved_pitch_loops[l]
-			local new_loop = data.pitch_loops[l]
-			loop.values = {}
-			for i, v in ipairs(new_loop.values) do
-				loop.values[i] = v
-			end
-			for v = 1, n_voices do
-				local voice = loop.voices[v]
-				local new_voice = new_loop.voices[v]
-				voice.offset = new_voice.offset
-				voice.scramble = new_voice.scramble
-				voice.direction = new_voice.direction
-			end
-		end
+function load_memory(data)
+	for s = 1, 16 do
+		memory.pitch:set(memory.pitch.slots[s], data.pitch_loops[s])
+		memory.mask:set(memory.mask.slots[s], data.masks[s])
+		memory.transposition:set(memory.transposition.slots[s], data.transpositions[s])
+		memory.mod:set(memory.mod.slots[s], data.mod_loops[s])
 	end
-	pitch_register.dirty = true
-
-	for m = 1, 16 do
-		if data.masks ~= nil and data.masks[m] ~= nil then
-			mask = {}
-			for i, v in ipairs(data.masks[m]) do
-				mask[i] = v
-			end
-			saved_masks[m] = mask
-		end
-	end
-	mask_dirty = true
-
-	for t = 1, 16 do
-		if data.transpositions ~= nil and data.transpositions[t] ~= nil then
-			local transposition = saved_transpositions[t]
-			for v = 1, n_voices do
-				transposition[v] = data.transpositions[t][v]
-			end
-		end
-	end
-	transposition_dirty = true
-
-	for l = 1, 16 do
-		if data.mod_loops ~= nil and data.mod_loops[l] ~= nil then
-			local loop = saved_mod_loops[l]
-			local new_loop = data.mod_loops[l]
-			loop.values = {}
-			for i, v in ipairs(new_loop.values) do
-				loop.values[i] = v
-			end
-			for v = 1, n_voices do
-				local voice = loop.voices[v]
-				local new_voice = new_loop.voices[v]
-				voice.offset = new_voice.offset
-				voice.scramble = new_voice.scramble
-				voice.direction = new_voice.direction
-			end
-		end
-	end
-	mod_register.dirty = true
+	memory.pitch.dirty = true
+	memory.mask.dirty = true
+	memory.transposition.dirty = true
+	memory.mod.dirty = true
 end
 
 function init()
@@ -1274,10 +1057,10 @@ function init()
 	
 	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
 	params:set('restore_memory')
-	recall_mask()
-	recall_transposition()
-	recall_pitch_loop()
-	recall_mod_loop()
+	memory.pitch:recall_slot(1)
+	memory.mask:recall_slot(1)
+	memory.transposition:recall_slot(1)
+	memory.mod:recall_slot(1)
 
 	pitch_poll:start()
 	g.key = grid_key
