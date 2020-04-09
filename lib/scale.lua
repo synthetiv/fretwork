@@ -92,71 +92,58 @@ function Scale:toggle_class(pitch_id)
 end
 
 function Scale:get_nearest_pitch_id(value)
+	local values = self.values
 	-- binary search to find the first pitch ID whose value is higher than the one we want
-	local upper_id = 1
-	local next_id = 1 -- next ID to check
+	local upper_id = 2
+	local next_id = 2 -- next ID to check (start at 2 because we'll also check one lower value)
 	local jump_size = 0 -- size of binary search jump
-	local n_remaining = n_values - 1 -- number of IDs left to check
+	local n_remaining = n_values - 2 -- number of IDs left to check
 	while n_remaining > 0 do
 		jump_size = math.floor(n_remaining / 2)
 		next_id = upper_id + jump_size
-		if self.values[next_id] > value then
+		if values[next_id] > value then
 			n_remaining = jump_size
 		else
 			upper_id = next_id + 1
 			n_remaining = n_remaining - jump_size - 1
 		end
 	end
-	-- check two values below it to see if they're closer than upper_id is
-	-- TODO: why two, other than it's what Emilie does in Braids? wouldn't one be enough??
-	local best_id = upper_id - 2
-	local best_distance = 2 -- octaves; distances between pitch classes certainly ought to be smaller than this
-	for next_id = best_id, upper_id do
-		local next_value = self.values[next_id]
-		if next_value ~= nil then
-			local distance = math.abs(value - next_value)
-			if distance < best_distance then
-				best_distance = distance
-				best_id = next_id
-			end
-		end
+	-- check the value below it to see if it's closer than upper_id is
+	local lower_id = upper_id - 1
+	if math.abs(value - values[lower_id]) < math.abs(value - values[upper_id]) then
+		return lower_id
+	else
+		return upper_id
 	end
-	return best_id
 end
 
 function Scale:get_nearest_mask_pitch_id(value)
 	if self.n_mask_pitches == 0 then
 		return -1
 	end
-	local upper_id = 1
-	local next_id = 1
+	local values = self.values
+	local mask_pitch_ids = self.mask_pitch_ids
+	local upper_id = 2
+	local next_id = 2
 	local jump_size = 0
-	local n_remaining = self.n_mask_pitches - 1
+	local n_remaining = self.n_mask_pitches - 2
 	while n_remaining > 0 do
 		jump_size = math.floor(n_remaining / 2)
 		next_id = upper_id + jump_size
-		if self.values[self.mask_pitch_ids[next_id]] > value then
+		if values[mask_pitch_ids[next_id]] > value then
 			n_remaining = jump_size
 		else
 			upper_id = next_id + 1
 			n_remaining = n_remaining - jump_size - 1
 		end
 	end
-	local best_id = 1
-	local best_distance = 2
-	for next_id = upper_id - 2, upper_id do
-		if self.mask_pitch_ids[next_id] ~= nil then
-			local next_value = self.values[self.mask_pitch_ids[next_id]]
-			if next_value ~= nil then
-				local distance = math.abs(value - next_value)
-				if distance < best_distance then
-					best_distance = distance
-					best_id = next_id
-				end
-			end
-		end
+	local lower_id = mask_pitch_ids[upper_id - 1]
+	upper_id = mask_pitch_ids[upper_id]
+	if math.abs(value - values[lower_id]) < math.abs(value - values[upper_id]) then
+		return lower_id
+	else
+		return upper_id
 	end
-	return self.mask_pitch_ids[best_id]
 end
 
 function Scale:snap(value)
