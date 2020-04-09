@@ -5,58 +5,51 @@ local Scale = {}
 Scale.__index = Scale
 
 local n_values = 128
+local center_pitch_id = n_values / 2
 
 function Scale.new(pitch_class_values)
 	local instance = setmetatable({}, Scale)
 	instance.values = {}
 	instance:init(pitch_class_values)
-	-- enable all notes
-	local mask = {}
-	for p = 1, instance.length do
-		mask[p] = true
-	end
-	instance:set_mask(mask)
+	instance:update_mask_pitch_ids()
 	return instance
 end
 
 function Scale:init(pitch_class_values)
-	self.length = #pitch_class_values
-	self.span = pitch_class_values[#pitch_class_values]
 	-- precalculate all pitch values across all octaves
-	self.center_pitch_id = n_values / 2
+	local values = self.values
+	local length = #pitch_class_values
+	local span = pitch_class_values[#pitch_class_values]
 	local pitch_class = 1
-	local span = 0
-	for p = 0, self.center_pitch_id do
-		self.values[self.center_pitch_id + p + 1] = pitch_class_values[pitch_class] + span * self.span
-		self.values[self.center_pitch_id - p] = pitch_class_values[self.length - pitch_class + 1] - (span + 1) * self.span
+	local current_span = 0
+	for p = 0, center_pitch_id do
+		values[center_pitch_id + p + 1] = pitch_class_values[pitch_class] + current_span * span
+		values[center_pitch_id - p] = pitch_class_values[length - pitch_class + 1] - (current_span + 1) * span
 		pitch_class = pitch_class + 1
-		if pitch_class > self.length then
+		if pitch_class > length then
 			pitch_class = 1
-			span = span + 1
+			current_span = current_span + 1
 		end
 	end
-end
-
-function Scale:copy_mask(mask)
-	local copy = {}
-	for p = 1, self.length do
-		copy[p] = mask[p] or false
+	-- reinitialize masks, since scale length may have changed
+	local mask = {}
+	local next_mask = {}
+	local p = 1, length do
+		mask[p] = false
+		next_mask[p] = false
 	end
-	return copy
+	self.length = length
+	self.span = span
+	self.mask = mask
+	self.next_mask = next_mask
 end
 
-function Scale:set_mask(mask)
-	self.next_mask = self:copy_mask(mask)
-	self.mask = self:copy_mask(mask)
+function Scale:set_mask(new_mask)
+	local mask = self.mask
+	for i = 1, self.length do
+		mask[i] = new_mask[i]
+	end
 	self:update_mask_pitch_ids()
-end
-
-function Scale:get_next_mask()
-	return self:copy_mask(self.next_mask)
-end
-
-function Scale:set_next_mask(mask)
-	self.next_mask = self:copy_mask(mask)
 end
 
 function Scale:apply_edits()
@@ -65,13 +58,14 @@ end
 
 function Scale:update_mask_pitch_ids()
 	local i = 1
-	self.mask_pitch_ids = {}
+	local mask_pitch_ids = {}
 	for p = 1, n_values do
 		if self:mask_contains(p) then
-			self.mask_pitch_ids[i] = p
+			mask_pitch_ids[i] = p
 			i = i + 1
 		end
 	end
+	self.mask_pitch_ids = mask_pitch_ids
 	self.n_mask_pitches = i - 1
 end
 
@@ -130,6 +124,9 @@ function Scale:get_nearest_pitch_id(value)
 end
 
 function Scale:get_nearest_mask_pitch_id(value)
+	if self.n_mask_pitches == 0 then
+		return -1
+	end
 	local upper_id = 1
 	local next_id = 1
 	local jump_size = 0
@@ -161,30 +158,27 @@ function Scale:get_nearest_mask_pitch_id(value)
 	return self.mask_pitch_ids[best_id]
 end
 
-function Scale:get(pitch_id)
-	return self.values[pitch_id]
-end
-
 function Scale:snap(value)
 	local nearest_mask_pitch_id = self:get_nearest_mask_pitch_id(value)
 	if nearest_mask_pitch_id == -1 then
 		return value
 	end
-	return self:get(nearest_mask_pitch_id)
+	return self.values[nearest_mask_pitch_id]
 end
 
-function Scale:mask_to_pitches(mask)
+function Scale:mask_to_pitches()
 	local pitches = {}
+	local mask = self.next_mask
 	for class = 1, self.length do
 		if mask[class] then
-			table.insert(pitches, self:get(self.center_pitch_id + class - 1))
+			table.insert(pitches, self.values[self.center_pitch_id + class - 1])
 		end
 	end
 	return pitches
 end
 
-function Scale:pitches_to_mask(pitches)
-	local mask = {}
+function Scale:mask_from_pitches(pitches)
+	local mask = self.next_mask
 	for class = 1, self.length do
 		mask[class] = false
 	end
@@ -193,7 +187,6 @@ function Scale:pitches_to_mask(pitches)
 		local class = self:get_pitch_class(pitch_id)
 		mask[class] = true
 	end
-	return mask
 end
 
 function Scale.parse_cents(value)
@@ -228,7 +221,7 @@ end
 function Scale:reinit(pitches)
 	local mask_pitches = self:mask_to_pitches(self.mask)
 	self:init(pitches)
-	self:set_mask(self:pitches_to_mask(mask_pitches))
+	self:mask_from_pitches(mask_pitches)
 end
 
 function Scale:read_scala_file(path)
@@ -286,4 +279,6 @@ function Scale:read_scala_file(path)
 	self:reinit(pitches)
 end
 
+Scale.n_values = n_values
+Scale.center_pitch_id = center_pitch_id
 return Scale

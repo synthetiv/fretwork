@@ -44,7 +44,7 @@ function Keyboard:get_last_pitch_id()
 end
 
 function Keyboard:get_last_value()
-	return self.scale:get(self:get_last_pitch_id())
+	return self.scale.values[self:get_last_pitch_id()]
 end
 
 function Keyboard:set_gate()

@@ -14,7 +14,7 @@ Memory.new = function()
 	mem.selector = Select.new(1, 3, 4, 4)
 	mem.selector.on_select = function(s)
 		if held_keys.shift then -- TODO: any way around this use of global state?
-			mem:save(mem.slots[s])
+			mem:save(mem.slots[s], s)
 		else
 			mem:recall(mem.slots[s])
 		end

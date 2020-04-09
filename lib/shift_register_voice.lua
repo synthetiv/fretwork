@@ -35,7 +35,7 @@ function ShiftRegisterVoice:update_values()
 	if pitch_id == -1 then
 		pitch_id = scale:get_nearest_pitch_id(pitch)
 	else
-		pitch = scale:get(pitch_id)
+		pitch = scale.values[pitch_id]
 	end
 	self.pitch_id = pitch_id
 	self.pitch = pitch + self.detune

@@ -23,23 +23,14 @@ function MaskMemory:set(mask, new_mask)
 end
 
 function MaskMemory:recall(mask)
-	scale:set_next_mask(scale:pitches_to_mask(mask))
+	scale:mask_from_pitches(mask)
 	if quantization_off() then
 		update_voices()
 	end
 end
 
--- TODO: this is weird as hell
--- maybe copy_mask should take a source and a destination!!
--- ...but even then it would do something pretty similar to this
-function MaskMemory:save(mask)
-	local new_mask = scale:mask_to_pitches(scale:get_next_mask())
-	for i = 1, #mask do
-		mask[i] = nil
-	end
-	for i, v in ipairs(new_mask) do
-		mask[i] = v
-	end
+function MaskMemory:save(mask, s)
+	self.slots[s] = scale:mask_to_pitches(scale.next_mask)
 end
 
 return MaskMemory
