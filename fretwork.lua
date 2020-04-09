@@ -1088,47 +1088,6 @@ function key(n, z)
 	end
 end
 
-function params_multi_delta(param_format, selected, d)
-	-- TODO: do I always want to retain the current relationship between the voices? in the case of
-	-- scramble, I often want to zero it out for all voices at once, even if they currently have
-	-- different values
-	-- note: this assumes number params with identical range!
-	local min = 0
-	local max = 0
-	local min_value = math.huge
-	local max_value = -math.huge
-	local selected_params = {}
-	for n, is_selected in ipairs(selected) do
-		if is_selected then
-			local param_name = string.format(param_format, n)
-			local param = params:lookup_param(param_name)
-			local value = 0
-			if param.value ~= nil then
-				-- number param
-				value = param.value
-				min = param.min
-				max = param.max
-			else
-				-- control param
-				value = param:get()
-				min = param.controlspec.minval
-				max = param.controlspec.maxval
-			end
-			table.insert(selected_params, param)
-			min_value = math.min(min_value, value)
-			max_value = math.max(max_value, value)
-		end
-	end
-	if d > 0 then
-		d = math.min(d,	max - max_value)
-	elseif d < 0 then
-		d = math.max(d, min - min_value)
-	end
-	for i, param in ipairs(selected_params) do
-		param:delta(d)
-	end
-end
-
 function enc(n, d)
 	if n == 1 then
 		if key_shift then
@@ -1165,16 +1124,40 @@ function enc(n, d)
 	elseif n == 3 then
 		if key_shift then
 			-- transpose voice(s)
-			params_multi_delta('voice_%d_transpose', voice_selector.selected, d);
+			-- find highest value (or lowest, if lowering)
+			local sign = d < 0 and -1 or 1
+			local abs_d = d * sign
+			local max_transpose = -4 -- lowest possible transpose setting
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					max_transpose = math.max(voices[v].transpose * sign, max_transpose)
+				end
+			end
+			-- if increasing/decreasing by d would exceed [-4, 4], reduce d
+			if max_transpose + abs_d > 4 then
+				d = (4 - max_transpose) * sign
+			end
+			-- transpose 'em
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					params:delta(string.format('voice_%d_transpose', v), d)
+				end
+			end
 		else
 			-- change voice randomness
-			if key_pitch and not key_mod then
-				params_multi_delta('voice_%d_pitch_scramble', voice_selector.selected, d)
-			elseif key_mod and not key_pitch then
-				params_multi_delta('voice_%d_mod_scramble', voice_selector.selected, d)
-			else
-				params_multi_delta('voice_%d_pitch_scramble', voice_selector.selected, d)
-				params_multi_delta('voice_%d_mod_scramble', voice_selector.selected, d)
+			-- TODO: this is time randomness; add value randomness too
+			-- TODO: that + offsets (i.e. transpose) for mod = probabilistic gate sequencing
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					if key_pitch and not key_mod then
+						params:delta(string.format('voice_%d_pitch_scramble', v), d)
+					elseif key_mod and not key_pitch then
+						params:delta(string.format('voice_%d_mod_scramble', v), d)
+					else
+						params:delta(string.format('voice_%d_pitch_scramble', v), d)
+						params:delta(string.format('voice_%d_mod_scramble', v), d)
+					end
+				end
 			end
 		end
 		update_voices()
