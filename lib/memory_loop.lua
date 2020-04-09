@@ -46,7 +46,7 @@ end
 
 function LoopMemory:recall(loop)
 	for v = 1, n_voices do
-		voices[v][self.tap_key]:set_offset(loop.voices[v].offset)
+		voices[v][self.tap_key].next_offset = loop.voices[v].offset
 		params:set(string.format(self.scramble_param, v), loop.voices[v].scramble)
 		params:set(string.format(self.direction_param, v), loop.voices[v].direction)
 	end

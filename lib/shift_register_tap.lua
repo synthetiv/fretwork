@@ -13,19 +13,15 @@ ShiftRegisterTap.new = function(offset, shift_register)
 	return tap
 end
 	
-function ShiftRegisterTap:get_scramble_offset(t)
-	t = t * self.direction
-	return util.round(self.random_queue:get(t) * self.scramble)
-end
-
 function ShiftRegisterTap:get_pos(t)
-	return t * self.direction + self.pos + self:get_scramble_offset(t)
+	t = t * self.direction
+	local scramble_offset = util.round(self.random_queue:get(t) * self.scramble)
+	return t + self.pos + scramble_offset
 end
 
 function ShiftRegisterTap:get(t)
 	local pos = self:get_pos(t)
-	local value = self.shift_register:read(pos)
-	return value
+	return self.shift_register:read(pos)
 end
 
 function ShiftRegisterTap:apply_edits()
@@ -49,10 +45,6 @@ end
 
 function ShiftRegisterTap:get_offset()
 	return self.shift_register:clamp_loop_offset_bipolar(self.pos - self.shift_register.start)
-end
-
-function ShiftRegisterTap:set_offset(offset)
-	self.next_offset = offset
 end
 
 return ShiftRegisterTap
