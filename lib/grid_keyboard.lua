@@ -8,8 +8,8 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.scale = scale
 	instance.octave = 0
 	instance.held_keys = {}
+	instance.n_held_keys = 0
 	instance.last_key = 0
-	instance.gate = false
 	-- set offset interval per row, rather than calculating it dynamically, so that "open tunings" are possible
 	instance.row_offsets = {}
 	for row = instance.y, instance.y2 do
@@ -47,39 +47,51 @@ function Keyboard:get_last_value()
 	return self.scale.values[self:get_last_pitch_id()]
 end
 
-function Keyboard:set_gate()
-	self.gate = #self.held_keys > 0
-end
-
 function Keyboard:note(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return
 	end
 	local key_id = self:get_key_id(x, y)
+	local held_keys = self.held_keys
+	local n_held_keys = self.n_held_keys
+	local last_key = self.last_key
 	if z == 1 then
-		local n = self:get_key_pitch_id(x, y)
-		table.insert(self.held_keys, key_id)
-		self.last_key = key_id
+		-- key pressed: add this key to held_keys
+		n_held_keys = n_held_keys + 1
+		held_keys[n_held_keys] = key_id
+		last_key = key_id
 	else
-		if self.held_keys[#self.held_keys] == key_id then
-			table.remove(self.held_keys)
-			if #self.held_keys > 0 then
-				self.last_key = self.held_keys[#self.held_keys]
+		if held_keys[n_held_keys] == key_id then
+			-- most recently held key released: remove it from held_keys
+			held_keys[n_held_keys] = nil
+			n_held_keys = n_held_keys - 1
+			if n_held_keys > 0 then
+				last_key = held_keys[n_held_keys]
 			end
 		else
-			for i = 1, #self.held_keys do
-				if self.held_keys[i] == key_id then
-					table.remove(self.held_keys, i)
+			-- other key released: find it in held_keys, remove it, and shift other values down
+			local found = false
+			for i = 1, n_held_keys do
+				if held_keys[i] == key_id then
+					found = true
 				end
+				if found then
+					held_keys[i] = held_keys[i + 1]
+				end
+			end
+			-- decrement n_held_keys only after we've looped over all held_keys table values
+			if found then
+				n_held_keys = n_held_keys - 1
 			end
 		end
 	end
-	self:set_gate()
+	self.n_held_keys = n_held_keys
+	self.last_key = last_key
 end
 
 function Keyboard:reset()
 	self.held_keys = {}
-	self:set_gate()
+	self.n_held_keys = 0
 end
 
 function Keyboard:is_key_held(x, y)

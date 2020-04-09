@@ -229,7 +229,7 @@ end
 
 function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
-	if (pitch_keyboard_played or pitch_keyboard.gate) then
+	if (pitch_keyboard_played or pitch_keyboard.n_held_keys > 0) then
 		pitch_keyboard_played = false
 		print(string.format('writing grid pitch (source = %d)', source))
 		return pitch_keyboard:get_last_value()
@@ -463,7 +463,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 		end
 	end
 	-- highlight current note
-	if self.gate and self:is_key_last(x, y) then
+	if self.n_held_keys > 0 and self:is_key_last(x, y) then
 		level = 15
 	end
 	return level
@@ -596,7 +596,7 @@ function pitch_keyboard:key(x, y, z)
 	end
 	local previous_note = self:get_last_pitch_id()
 	self:note(x, y, z)
-	if self.gate and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
+	if self.n_held_keys > 0 and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
 		if write_enable then
 			if quantization_off() then
 				write(self:get_last_value())
@@ -616,7 +616,7 @@ end
 
 function transpose_keyboard:key(x, y, z)
 	self:note(x, y, z)
-	if not self.gate then
+	if not self.n_held_keys > 0 then
 		return
 	end
 	local transpose = self:get_last_value() - top_voice.next_transpose
