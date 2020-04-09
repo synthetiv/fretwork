@@ -1,25 +1,26 @@
 -- quantization code owes a lot to Emilie Gillet's code for Braids:
 -- https://github.com/pichenettes/eurorack/blob/master/braids/quantizer.cc
 
+local read_scala_file = include 'lib/scala'
+
 local Scale = {}
 Scale.__index = Scale
 
 local n_values = 128
 local center_pitch_id = n_values / 2
 
-function Scale.new(pitch_class_values)
+function Scale.new(pitch_class_values, length)
 	local instance = setmetatable({}, Scale)
 	instance.values = {}
-	instance:init(pitch_class_values)
+	instance:init(pitch_class_values, length)
 	instance:update_mask_pitch_ids()
 	return instance
 end
 
-function Scale:init(pitch_class_values)
+function Scale:init(pitch_class_values, length)
 	-- precalculate all pitch values across all octaves
 	local values = self.values
-	local length = #pitch_class_values
-	local span = pitch_class_values[#pitch_class_values]
+	local span = pitch_class_values[length]
 	local pitch_class = 1
 	local current_span = 0
 	for p = 0, center_pitch_id do
@@ -189,94 +190,17 @@ function Scale:mask_from_pitches(pitches)
 	end
 end
 
-function Scale.parse_cents(value)
-	value = tonumber(value)
-	if not value then
-		return nil
-	end
-	return value / 1200
-end
-
-function Scale.parse_ratio(value)
-	-- get numerator
-	local num, den = string.match(value, '^(.+)/(.+)$')
-	if num == nil then
-		-- no /? read whole value as a number
-		num = tonumber(value)
-		if value == nil then
-			return nil
-		end
-		den = 1
-	else
-		num = tonumber(num)
-		den = tonumber(den)
-		if den == nil or num == nil then
-			return nil
-		end
-	end
-	return math.log(num / den) / math.log(2)
-end
-
--- switch to new scale values, preserving the current mask as much as possible
-function Scale:reinit(pitches)
-	local mask_pitches = self:mask_to_pitches(self.mask)
-	self:init(pitches)
-	self:mask_from_pitches(mask_pitches)
-end
-
 function Scale:read_scala_file(path)
-	print('reading scala file', path)
-	local file = io.open(path, 'r')
-	if file == nil then
-		print('missing file')
-		return
-	end
-	local desc = nil
-	local length = 0
-	local pitches = {}
-	for line in io.lines(path) do
-		line = string.gsub(line, '\r', '') -- trim pesky CR characters that make debugging a pain
-		if string.sub(line, 1, 1) == '!' then
-			print('comment', string.sub(line, 1, -1))
-		else
-			if desc == nil then
-				desc = line
-				print('set desc', desc)
-			else
-				local value = string.match(line, '(%S+)')
-				if length == 0 then
-					length = tonumber(value)
-					print('set length', length)
-					if length == nil then
-						print('bad length', value)
-						return
-					end
-				else
-					if string.find(value, '%.') ~= nil then
-						value = self.parse_cents(value)
-					else
-						value = self.parse_ratio(value)
-					end
-					if value == nil then
-						print('bad value', value)
-						return
-					end
-					if #pitches > 0 and value <= pitches[#pitches] then
-						print('non-ascending value')
-						return
-					end
-					table.insert(pitches, value)
-				end
-			end
-		end
-	end
-	if #pitches ~= length then
-		print('length mismatch')
-		return
-	end
-	print('ok')
-	tab.print(pitches)
-	self:reinit(pitches)
+	-- read the file
+	local pitch_class_values, length, desc = read_scala_file(path)
+	-- save current mask pitches
+	local mask_pitches = self:mask_to_pitches(self.mask)
+	-- set scale values
+	self:init(pitch_class_values, length)
+	-- reset mask to match old pitches as closely as possible
+	self:mask_from_pitches(mask_pitches)
+	-- announce ourselves
+	print(desc)
 end
 
 Scale.n_values = n_values

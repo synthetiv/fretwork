@@ -33,7 +33,7 @@ et12 = {} -- 12TET
 for p = 1, 12 do 
 	et12[p] = p / 12
 end
-scale = Scale.new(et12)
+scale = Scale.new(et12, 12)
 
 pitch_register = ShiftRegister.new(32)
 mod_register = ShiftRegister.new(11)
