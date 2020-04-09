@@ -104,7 +104,10 @@ function X0XRoll:key(x, y, z)
 	elseif z == 1 then
 		local v = self.y_voices[y]
 		if v ~= nil then
-			self.voices[v]:toggle_mod(self:get_offset(x))
+			local voice = self.voices[v]
+			local offset = self:get_offset(x)
+			voice:toggle_mod(offset)
+			flash_write(write_type_mod, voice.mod_tap:get_pos(offset))
 		end
 	end
 end

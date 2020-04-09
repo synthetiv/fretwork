@@ -153,12 +153,14 @@ end
 
 last_write = 0
 n_recent_writes = 8
+write_type_pitch = 1
+write_type_mod = 2
 recent_writes = {}
 for w = 1, n_recent_writes do
 	recent_writes[w] = {
+		type = 0,
 		level = 0,
-		pitch_pos = 0,
-		mod_pos = 0
+		pos = 0,
 	}
 end
 
@@ -253,16 +255,20 @@ function maybe_write()
 	end
 end
 
+function flash_write(write_type, pos)
+	last_write = last_write % n_recent_writes + 1
+	local write = recent_writes[last_write]
+	write.type = write_type
+	write.pos = pos
+	write.level = 15
+end
+
 function write(pitch)
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
 			local voice = voices[v]
 			voice:set_pitch(0, pitch)
-			last_write = last_write % n_recent_writes + 1
-			local write = recent_writes[last_write]
-			write.level = 15
-			write.pitch_pos = voice.pitch_tap:get_pos(0)
-			write.mod_pos = voice.mod_tap:get_pos(0)
+			flash_write(write_type_pitch, voice.pitch_tap:get_pos(0))
 			update_voice(v)
 		end
 	end
@@ -1206,12 +1212,14 @@ function calculate_voice_path(v, level)
 		note.y = get_screen_note_y(scale:snap(path[n].pitch))
 		note.z = path[n].mod
 		note.pitch_pos = path[n].pitch_pos
+		note.mod_pos = path[n].mod_pos
 		note.level = level
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
-			if write ~= nil and write.level > 0 then
-				-- TODO: what about mod writes?
-				if pitch_register:clamp_loop_pos(note.pitch_pos) == pitch_register:clamp_loop_pos(write.pitch_pos) then
+			if write.level > 0 then
+				if write.type == write_type_pitch and pitch_register:clamp_loop_pos(note.pitch_pos) == pitch_register:clamp_loop_pos(write.pos) then
+					note.level = math.max(note.level, write.level)
+				elseif write.type == write_type_mod and mod_register:clamp_loop_pos(note.mod_pos) == mod_register:clamp_loop_pos(write.pos) then
 					note.level = math.max(note.level, write.level)
 				end
 			end
