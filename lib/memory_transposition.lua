@@ -34,7 +34,6 @@ function TranspositionMemory:save(transposition)
 	for v = 1, n_voices do
 		transposition[v] = voices[v].next_transpose
 	end
-	transposition_dirty = false
 end
 
 return TranspositionMemory

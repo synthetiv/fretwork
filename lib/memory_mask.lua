@@ -5,10 +5,9 @@ MaskMemory.__index = MaskMemory
 
 MaskMemory.new = function()
 	local mem = setmetatable(Memory.new(), MaskMemory)
-	tab.print(mem)
+	-- initialize all slots to C major
 	for s = 1, mem.n_slots do
-		-- TODO: this is throwing out the existing tables...! evil? ok?
-		mem.slots[s] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 } -- C major
+		mem.slots[s] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 }
 	end
 	return mem
 end

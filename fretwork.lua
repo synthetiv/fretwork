@@ -231,13 +231,13 @@ function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
 	if (pitch_keyboard_played or pitch_keyboard.n_held_keys > 0) then
 		pitch_keyboard_played = false
-		print(string.format('writing grid pitch (source = %d)', source))
+		-- print(string.format('writing grid pitch (source = %d)', source))
 		return pitch_keyboard:get_last_value()
 	elseif source == source_pitch then
-		print(string.format('writing audio pitch (source = %d)', source))
+		-- print(string.format('writing audio pitch (source = %d)', source))
 		return pitch_in_value
 	elseif source == source_crow then
-		print(string.format('writing crow pitch (source = %d)', source))
+		-- print(string.format('writing crow pitch (source = %d)', source))
 		return crow_in_values[2]
 	end
 	-- print(string.format('nothing to write (source = %d)', source))
@@ -325,6 +325,7 @@ function tick()
 end
 
 function update_voice_order()
+	-- TODO: it would be nice to avoid creating new tables here, but none have > 4 values, so... eh
 	local selected = {}
 	local new_draw_order = {}
 	for i, v in ipairs(voice_draw_order) do
