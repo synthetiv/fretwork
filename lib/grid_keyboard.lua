@@ -79,7 +79,9 @@ function Keyboard:note(x, y, z)
 					held_keys[i] = held_keys[i + 1]
 				end
 			end
-			-- decrement n_held_keys only after we've looped over all held_keys table values
+			-- decrement n_held_keys only after we've looped over all held_keys table values, and only if
+			-- we found the key in held_keys (which won't be the case if a key was held while switching
+			-- the active keyboard, or a key on the pitch keyboard was held before holding shift)
 			if found then
 				n_held_keys = n_held_keys - 1
 			end
@@ -96,8 +98,9 @@ end
 
 function Keyboard:is_key_held(x, y)
 	local key_id = self:get_key_id(x, y)
-	for i = 1, #self.held_keys do
-		if self.held_keys[i] == key_id then
+	local held_keys = self.held_keys
+	for i = 1, self.n_held_keys do
+		if held_keys[i] == key_id then
 			return true
 		end
 	end

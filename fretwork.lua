@@ -588,11 +588,8 @@ function toggle_mask_class(pitch_id)
 end
 
 function pitch_keyboard:key(x, y, z)
-	if held_keys.shift then
-		-- TODO: fix stuck notes when holding a key, holding shift, then letting go of key
-		if z == 1 then
-			toggle_mask_class(self:get_key_pitch_id(x, y))
-		end
+	if held_keys.shift and z == 1 then
+		toggle_mask_class(self:get_key_pitch_id(x, y))
 		return
 	end
 	local previous_note = self:get_last_pitch_id()
