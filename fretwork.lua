@@ -614,7 +614,7 @@ end
 
 function transpose_keyboard:key(x, y, z)
 	self:note(x, y, z)
-	if not self.n_held_keys > 0 then
+	if self.n_held_keys < 1 then
 		return
 	end
 	local transpose = self:get_last_value() - top_voice.next_transpose
