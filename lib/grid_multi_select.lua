@@ -36,9 +36,6 @@ function MultiSelect:is_held(option)
 		end
 		return false
 	end
-	if not self:has_option(option) then
-		return false
-	end
 	return self.held[option]
 end
 
@@ -49,9 +46,6 @@ function MultiSelect:is_selected(option)
 				return true
 			end
 		end
-		return false
-	end
-	if not self:has_option(option) then
 		return false
 	end
 	return self.selected[option]

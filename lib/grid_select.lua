@@ -19,10 +19,6 @@ function Select:get_option_coords(option)
 	return self:get_key_id_coords(option - 1)
 end
 
-function Select:has_option(option)
-	return option >= 1 and option <= self.count
-end
-
 function Select:is_selected(option)
 	return self.selected == option
 end

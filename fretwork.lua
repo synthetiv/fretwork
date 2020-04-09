@@ -1050,7 +1050,6 @@ function init()
 	grid_mode = grid_mode_pitch
 	voice_selector:reset(true)
 	memory_selector:reset(true)
-	update_voice_order()
 
 	pitch_poll = poll.set('pitch_in_l', update_freq)
 	pitch_poll.time = 1 / 10 -- was 8, is 10 OK?
