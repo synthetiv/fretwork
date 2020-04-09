@@ -983,6 +983,10 @@ function add_params()
 		action = function(value)
 			scale:read_scala_file(value)
 			mask_keyboard:set_white_keys()
+			if quantization_off() then
+				scale:apply_edits()
+				update_voices()
+			end
 		end
 	}
 
