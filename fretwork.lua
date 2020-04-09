@@ -294,12 +294,34 @@ function rewind()
 	shift(-1)
 end
 
+-- DEBUG
+--[[
+mem = 0
+ticks_since_gc = 0
+--]]
 function tick()
 	if not clock_enable then
 		return
 	end
 	advance()
 	blinkers.play:start()
+
+	-- DEBUG: print roughly when garbage collection starts and how much memory has been used
+	--[[
+	local new_mem = collectgarbage('count') * 1024
+	if new_mem < mem then
+		if ticks_since_gc > 1 then
+			local mem_since_gc = mem - new_mem
+			print('-- gc --', ticks_since_gc)
+			print('memory since gc', mem_since_gc)
+			print('average memory per tick', mem_since_gc / ticks_since_gc)
+		end
+		ticks_since_gc = 0
+	else
+		ticks_since_gc = ticks_since_gc + 1
+	end
+	mem = new_mem
+	--]]
 end
 
 function update_voice_order()
