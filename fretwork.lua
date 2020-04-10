@@ -164,13 +164,20 @@ for w = 1, n_recent_writes do
 	}
 end
 
+n_enc_pages = 6
+enc_page_pitch_offset = 1
+enc_page_pitch_bias = 2
+enc_page_pitch_length = 3
+enc_page_mod_offset = 4
+enc_page_mod_bias = 5
+enc_page_mod_length = 6
+enc_page = enc_page_pitch_offset
 key_shift = false
-key_pitch = false
-key_mod = false
+
 blink_slow = false
 framerate = 1 / 15
 blinkers = {
-	info = Blinker.new(0.75),
+	info = Blinker.new(6),
 	play = Blinker.new(framerate),
 	record = Blinker.new(framerate)
 }
@@ -1144,44 +1151,68 @@ function key(n, z)
 		if not key_shift then
 			blinkers.info:start()
 		end
-	elseif n == 2 then
-		key_pitch = z == 1
-	elseif n == 3 then
-		key_mod = z == 1
+	elseif n == 2 and z == 1 then
+		enc_page = (enc_page - 2) % n_enc_pages + 1
+		blinkers.info:start()
+	elseif n == 3 and z == 1 then
+		enc_page = enc_page % n_enc_pages + 1
+		blinkers.info:start()
 	end
 end
 
 function enc(n, d)
 	if n == 1 then
-		if key_shift then
-			params:delta('write_probability', d)
-		else
-			if key_pitch or (key_pitch == key_mod) then
-				params:delta('pitch_loop_length', d)
+		-- TODO: do something with this; it's not very useful for switching encoder pages
+	elseif n == 2 then
+		if enc_page == enc_page_pitch_offset then
+			-- set pitch scramble
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					params:delta(string.format('voice_%d_pitch_scramble', v), d)
+				end
 			end
-			if key_mod or (key_pitch == key_mod) then
-				params:delta('mod_loop_length', d)
+		elseif enc_page == enc_page_mod_offset then
+			-- set mod scramble
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					params:delta(string.format('voice_%d_mod_scramble', v), d)
+				end
+			end
+		elseif enc_page == enc_page_pitch_bias then
+			-- set pitch noise
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					params:delta(string.format('voice_%d_pitch_noise', v), d)
+				end
+			end
+		elseif enc_page == enc_page_mod_bias then
+			-- set mod noise
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					params:delta(string.format('voice_%d_mod_noise', v), d)
+				end
 			end
 		end
-	elseif n == 2 then
-		-- shift voices
-		for v = 1, n_voices do
-			if voice_selector:is_selected(v) then
-				local voice = voices[v]
-				local mod_roll = voices[v].mod_roll
-				if key_pitch or (key_pitch == key_mod) then
+	elseif n == 3 then
+		if enc_page == enc_page_pitch_offset then
+			-- shift pitch tap(s)
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					local voice = voices[v]
 					voice.pitch_tap:shift(-d)
 				end
-				if key_mod or (key_pitch == key_mod) then
+			end
+			memory.pitch.dirty = true
+		elseif enc_page == enc_page_mod_offset then
+			-- shift mod tap(s)
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					local voice = voices[v]
 					voice.mod_tap:shift(-d)
 				end
-				update_voice(v)
 			end
-		end
-		transposition_dirty = true
-		dirty = true
-	elseif n == 3 then
-		if key_shift then
+			memory.mod.dirty = true
+		elseif enc_page == enc_page_pitch_bias then
 			-- transpose voice(s)
 			-- find highest value (or lowest, if lowering)
 			local sign = d < 0 and -1 or 1
@@ -1202,23 +1233,25 @@ function enc(n, d)
 					params:delta(string.format('voice_%d_transpose', v), d)
 				end
 			end
-		else
-			-- change voice randomness
-			-- TODO: this is time randomness; add value randomness too
-			-- TODO: that + offsets (i.e. transpose) for mod = probabilistic gate sequencing
+		elseif enc_page == enc_page_mod_bias then
+			-- set mod bias
 			for v = 1, n_voices do
 				if voice_selector:is_selected(v) then
-					if key_pitch or (key_pitch == key_mod) then
-						params:delta(string.format('voice_%d_pitch_scramble', v), d)
-					end
-					if key_mod or (key_pitch == key_mod) then
-						params:delta(string.format('voice_%d_mod_scramble', v), d)
-					end
+					params:delta(string.format('voice_%d_mod_bias', v), d)
 				end
 			end
+		elseif enc_page == enc_page_pitch_length then
+			-- set pitch length
+			params:delta('pitch_loop_length', d)
+		elseif enc_page == enc_page_mod_length then
+			-- set mod length
+			params:delta('mod_loop_length', d)
 		end
+	end
+	if quantization_off() then
 		update_voices()
 	end
+	blinkers.info:start()
 	dirty = true
 end
 
@@ -1338,6 +1371,55 @@ function draw_voice_path(v, level)
 	screen.stroke()
 end
 
+function draw_tap_equation(y, label, tap, multiplier, page_offset, page_bias, page_length)
+	screen.move(8, y)
+
+	screen.level(3)
+	screen.text(label .. '[')
+	if tap.direction < 0 then
+		screen.text('-t')
+	else
+		screen.text('t')
+	end
+
+	if enc_page == page_offset then
+		screen.level(15)
+	end
+	local scramble = tap.scramble * tap.direction
+	if enc_page == page_offset or scramble ~= 0 then
+		screen.text(string.format('+%.1fk', scramble))
+	end
+	-- TODO: this looks wack in retrograde (constantly counting by twos)
+	screen.text(string.format('%+d', tap:get_offset()))
+
+	screen.level(3)
+	screen.text(']')
+
+	if enc_page == page_bias then
+		screen.level(15)
+	end
+	local noise = tap.noise * tap.direction * multiplier
+	if enc_page == page_bias or noise ~= 0 then
+		screen.text(string.format('+%.1fz', noise))
+	end
+	local bias = tap.bias * multiplier
+	if enc_page == page_bias or bias ~= 0 then
+		screen.text(string.format('%+.1f', bias))
+	end
+
+	screen.move(110, y)
+	screen.level(3)
+	screen.text('[')
+
+	if enc_page == page_length then
+		screen.level(15)
+	end
+	screen.text(string.format('%d', tap.shift_register.length))
+
+	screen.level(3)
+	screen.text(']')
+end
+
 function redraw()
 	screen.clear()
 	screen.stroke()
@@ -1390,101 +1472,24 @@ function redraw()
 		end
 	end
 
-	--[[
-	function draw_tap_equation(label1, label2, line, index, tap)
-		local y = line * 8 + 6
-		screen.move(0, y)
-		screen.level(10)
-		screen.text(label1)
-		screen.text(string.format('%d', index))
-		screen.move(25, y)
-		screen.text('(t)=' .. label2 .. '(t')
-		screen.text(string.format('%+d', tap:get_offset()))
-		local scramble = tap.scramble
-		if scramble > 0 then
-			screen.text(string.format('+%.1fk', scramble))
-		end
-		local noise = tap.noise
-		if noise > 0 then
-			screen.text(string.format('+%.1fz', noise))
-		end
-		screen.text(')')
-		local add = tap.bias
-		if add ~= 0 then
-			screen.text(string.format('%+.1f', add))
-		end
-	end
-
-	-- fonts: 11@10, 17@10, 32@13, 34@16, 37@11, 39@11, 60@16, 63@8, 65@8, 67@8, 1@8 (lol)
-	-- screen.font_face(37)
-	-- screen.font_size(11)
-	for v = n_voices, 1, -1 do
-		local voice = voices[v]
-		local line = (v - 1) * 2
-		draw_tap_equation('pitch', 'f', line, v, voice.pitch_tap)
-		draw_tap_equation('gate', 'g', line + 1, v, voice.mod_tap)
-	end
-	--]]
-
-	function draw_tap_equation(label, tap, multiplier)
-		screen.text(label .. '(')
-		if tap.direction < 0 then
-			screen.text('-t')
-		else
-			screen.text('t')
-		end
-		-- TODO: this looks wack in retrograde (constantly counting by twos)
-		screen.text(string.format('%+d', tap:get_offset()))
-		local scramble = tap.scramble * tap.direction
-		if scramble ~= 0 then
-			screen.text(string.format('+%.1fk', scramble))
-		end
-		screen.text(')')
-		local noise = tap.noise * tap.direction * multiplier
-		if noise ~= 0 then
-			screen.text(string.format('+%.1fz', noise))
-		end
-		local add = tap.bias * multiplier
-		if add ~= 0 then
-			screen.text(string.format('%+.1f', add))
-		end
-	end
-
-	-- fonts: 11@10, 17@10, 32@13, 34@16, 37@11, 39@11, 60@16, 63@8, 65@8, 67@8, 1@8 (lol)
-	-- screen.font_face(37)
-	-- screen.font_size(11)
-		screen.level(10)
-		screen.move(0, 54)
-		screen.text(string.format('%d.', top_voice_index))
-		screen.move(8, 54)
-		draw_tap_equation('p', top_voice.pitch_tap, 12)
-		screen.move(8, 62)
-		draw_tap_equation('g', top_voice.mod_tap, 1)
-
-	--[[
 	if key_shift or blinkers.info.on then
-		screen.rect(0, 0, 26, 64)
+
+		screen.rect(0, 47, 128, 17)
 		screen.level(0)
 		screen.fill()
-		screen.move(24.5, 0)
-		screen.line(24.5, 64)
-		screen.level(4)
-		screen.stroke()
 
-		screen.level(15)
+		-- TODO: move this
+		-- screen.move(0, 7)
+		-- screen.text(string.format('P: %d%%', util.round(write_probability)))
 
-		screen.move(0, 7)
-		screen.text(string.format('P: %d%%', util.round(write_probability)))
+		screen.move(0, 54)
+		screen.level(3)
+		screen.text(string.format('%d.', top_voice_index))
 
-		screen.move(0, 16)
-		screen.text(string.format('Lp: %d', pitch_register.length))
+		draw_tap_equation(54, 'p', top_voice.pitch_tap, 12, enc_page_pitch_offset, enc_page_pitch_bias, enc_page_pitch_length)
 
-		screen.move(0, 25)
-		screen.text(string.format('Lm: %d', mod_register.length))
+		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, enc_page_mod_offset, enc_page_mod_bias, enc_page_mod_length)
 
-		screen.level(top_voice.pitch_tap.direction == -1 and 15 or 2)
-		screen.move(0, 61)
-		screen.text('Ret.')
 	end
 	--]]
 
