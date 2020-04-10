@@ -518,8 +518,8 @@ function transpose_keyboard:get_key_level(x, y, n)
 	for v = 1, n_voices do
 		local voice = voices[v]
 		if voice.active then
-			local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].transpose)
-			local is_next_transpose = n == self.scale:get_nearest_pitch_id(voices[v].next_transpose)
+			local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].pitch_tap.bias)
+			local is_next_transpose = n == self.scale:get_nearest_pitch_id(voices[v].pitch_tap.next_bias)
 			if is_transpose and is_next_transpose then
 				if v == top_voice_index then
 					level = 14
@@ -623,10 +623,10 @@ function transpose_keyboard:key(x, y, z)
 	if self.n_held_keys < 1 then
 		return
 	end
-	local transpose = self:get_last_value() - top_voice.next_transpose
+	local transpose = self:get_last_value() - top_voice.pitch_tap.next_bias
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
-			params:set(string.format('voice_%d_transpose', v), voices[v].next_transpose + transpose)
+			params:set(string.format('voice_%d_transpose', v), voices[v].pitch_tap.next_bias + transpose)
 		end
 	end
 	if quantization_off() then
@@ -883,7 +883,7 @@ function add_params()
 	
 	for v = 1, n_voices do
 		local voice = voices[v]
-		params:add_group(string.format('voice %d', v), 8)
+		params:add_group(string.format('voice %d', v), 11)
 		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
@@ -898,9 +898,9 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_transpose', v),
 			name = string.format('voice %d transpose', v),
-			controlspec = controlspec.new(-4, 4, 'lin', 1 / scale.length, 0, 'st'),
+			controlspec = controlspec.new(-4, 4, 'lin', 1 / 24, 0), -- TODO: display in st
 			action = function(value)
-				voice.next_transpose = value
+				voice.pitch_tap.next_bias = value
 				memory.transposition.dirty = true
 			end
 		}
@@ -908,11 +908,22 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_pitch_scramble', v),
 			name = string.format('voice %d pitch scramble', v),
-			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
+			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
 				voice.pitch_tap.scramble = value
 				dirty = true
-				memory.transposition.dirty = true
+				memory.pitch.dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_pitch_noise', v),
+			name = string.format('voice %d pitch noise', v),
+			controlspec = controlspec.new(0, 16, 'lin', 1 / 24, 0),
+			action = function(value)
+				voice.pitch_tap.noise = value
+				dirty = true
+				memory.pitch.dirty = true
 			end
 		}
 		params:add{
@@ -931,13 +942,35 @@ function add_params()
 		}
 		params:add{
 			type = 'control',
+			id = string.format('voice_%d_mod_bias', v),
+			name = string.format('voice %d mod bias', v),
+			controlspec = controlspec.new(0, 2, 'lin', 0.2, 0),
+			action = function(value)
+				voice.mod_tap.next_bias = value
+				dirty = true
+				memory.mod.dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
 			id = string.format('voice_%d_mod_scramble', v),
 			name = string.format('voice %d mod scramble', v),
-			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
+			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
 				voice.mod_tap.scramble = value
 				dirty = true
-				memory.transposition.dirty = true
+				memory.mod.dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_mod_noise', v),
+			name = string.format('voice %d mod noise', v),
+			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
+			action = function(value)
+				voice.mod_tap.noise = value
+				dirty = true
+				memory.mod.dirty = true
 			end
 		}
 		params:add{
@@ -1138,9 +1171,9 @@ function enc(n, d)
 				if key_pitch == key_mod then -- neither or both held
 					voice:shift(-d)
 				elseif key_mod then
-					voice:shift_mod(-d)
+					voice.mod_tap:shift(-d)
 				elseif key_pitch then
-					voice:shift_pitch(-d)
+					voice.pitch_tap:shift(-d)
 				end
 				update_voice(v)
 			end
@@ -1156,7 +1189,7 @@ function enc(n, d)
 			local max_transpose = -4 -- lowest possible transpose setting
 			for v = 1, n_voices do
 				if voice_selector:is_selected(v) then
-					max_transpose = math.max(voices[v].transpose * sign, max_transpose)
+					max_transpose = math.max(voices[v].pitch_tap.bias * sign, max_transpose)
 				end
 			end
 			-- if increasing/decreasing by d would exceed [-4, 4], reduce d
@@ -1311,7 +1344,7 @@ function redraw()
 	screen.clear()
 	screen.stroke()
 	screen.line_width(1)
-	screen.font_face(2)
+	screen.font_face(1)
 	screen.font_size(8)
 	screen.line_cap('butt')
 
@@ -1359,6 +1392,78 @@ function redraw()
 		end
 	end
 
+	--[[
+	function draw_tap_equation(label1, label2, line, index, tap)
+		local y = line * 8 + 6
+		screen.move(0, y)
+		screen.level(10)
+		screen.text(label1)
+		screen.text(string.format('%d', index))
+		screen.move(25, y)
+		screen.text('(t)=' .. label2 .. '(t')
+		screen.text(string.format('%+d', tap:get_offset()))
+		local scramble = tap.scramble
+		if scramble > 0 then
+			screen.text(string.format('+%.1fk', scramble))
+		end
+		local noise = tap.noise
+		if noise > 0 then
+			screen.text(string.format('+%.1fz', noise))
+		end
+		screen.text(')')
+		local add = tap.bias
+		if add ~= 0 then
+			screen.text(string.format('%+.1f', add))
+		end
+	end
+
+	-- fonts: 11@10, 17@10, 32@13, 34@16, 37@11, 39@11, 60@16, 63@8, 65@8, 67@8, 1@8 (lol)
+	-- screen.font_face(37)
+	-- screen.font_size(11)
+	for v = n_voices, 1, -1 do
+		local voice = voices[v]
+		local line = (v - 1) * 2
+		draw_tap_equation('pitch', 'f', line, v, voice.pitch_tap)
+		draw_tap_equation('gate', 'g', line + 1, v, voice.mod_tap)
+	end
+	--]]
+
+	function draw_tap_equation(label, tap, multiplier)
+		screen.text(label .. '(')
+		if tap.direction < 0 then
+			screen.text('-t')
+		else
+			screen.text('t')
+		end
+		-- TODO: this looks wack in retrograde (constantly counting by twos)
+		screen.text(string.format('%+d', tap:get_offset()))
+		local scramble = tap.scramble * tap.direction
+		if scramble ~= 0 then
+			screen.text(string.format('+%.1fk', scramble))
+		end
+		screen.text(')')
+		local noise = tap.noise * tap.direction * multiplier
+		if noise ~= 0 then
+			screen.text(string.format('+%.1fz', noise))
+		end
+		local add = tap.bias * multiplier
+		if add ~= 0 then
+			screen.text(string.format('%+.1f', add))
+		end
+	end
+
+	-- fonts: 11@10, 17@10, 32@13, 34@16, 37@11, 39@11, 60@16, 63@8, 65@8, 67@8, 1@8 (lol)
+	-- screen.font_face(37)
+	-- screen.font_size(11)
+		screen.level(10)
+		screen.move(0, 54)
+		screen.text(string.format('%d.', top_voice_index))
+		screen.move(8, 54)
+		draw_tap_equation('p', top_voice.pitch_tap, 12)
+		screen.move(8, 62)
+		draw_tap_equation('g', top_voice.mod_tap, 1)
+
+	--[[
 	if key_shift or blinkers.info.on then
 		screen.rect(0, 0, 26, 64)
 		screen.level(0)
@@ -1379,19 +1484,11 @@ function redraw()
 		screen.move(0, 25)
 		screen.text(string.format('Lm: %d', mod_register.length))
 
-		screen.move(0, 34)
-		screen.text(string.format('O: %d', top_voice.pitch_tap:get_offset()))
-
-		screen.move(0, 43)
-		screen.text(string.format('T: %.2f', top_voice.next_transpose))
-
-		screen.move(0, 52)
-		screen.text(string.format('S: %.1f', top_voice.pitch_tap.scramble))
-
 		screen.level(top_voice.pitch_tap.direction == -1 and 15 or 2)
 		screen.move(0, 61)
 		screen.text('Ret.')
 	end
+	--]]
 
 	-- DEBUG: draw minibuffer, loop region, head
 	--[[

@@ -31,23 +31,16 @@ function X0XRoll:get_offset(x)
 	return x - self.x_center + self.hold_distance
 end
 
-function X0XRoll:set_hold(state)
-	self.hold = state
-end
-
-function X0XRoll:toggle_hold()
-	self:set_hold(not self.hold)
-end
-
 function X0XRoll:shift(d)
 	self.hold_distance = self.hold_distance + d
 end
 
 function X0XRoll:draw_voice(g, v)
 	local y = self.voice_ys[v]
+	local tap = self.voices[v].mod_tap
 	for x = self.x, self.x2 do
 		local offset = self:get_offset(x)
-		local value = self.voices[v]:get_mod(offset)
+		local value = tap:get(offset)
 		local level = self:get_key_level(x, y, v, offset, value)
 		g:led(x, y, level)
 	end
@@ -88,17 +81,17 @@ function X0XRoll:key(x, y, z)
 		return
 	end
 	if y == self.y2 and x == self.x_hold and z == 1 then
-		self:toggle_hold()
+		self.hold = not self.hold
 	elseif y == self.y2 and x == self.x_left then
 		self.held_keys.left = z == 1
 		if z == 1 then
-			self:set_hold(true)
+			self.hold = true
 			self:shift(-1)
 		end
 	elseif y == self.y2 and x == self.x_right then
 		self.held_keys.right = z == 1
 		if z == 1 then
-			self:set_hold(true)
+			self.hold = true
 			self:shift(1)
 		end
 	elseif z == 1 then
