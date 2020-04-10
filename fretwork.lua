@@ -1156,12 +1156,10 @@ function enc(n, d)
 		if key_shift then
 			params:delta('write_probability', d)
 		else
-			if key_pitch and not key_mod then
+			if key_pitch or (key_pitch == key_mod) then
 				params:delta('pitch_loop_length', d)
-			elseif key_mod and not key_pitch then
-				params:delta('mod_loop_length', d)
-			else
-				params:delta('pitch_loop_length', d)
+			end
+			if key_mod or (key_pitch == key_mod) then
 				params:delta('mod_loop_length', d)
 			end
 		end
@@ -1171,12 +1169,11 @@ function enc(n, d)
 			if voice_selector:is_selected(v) then
 				local voice = voices[v]
 				local mod_roll = voices[v].mod_roll
-				if key_pitch == key_mod then -- neither or both held
-					voice:shift(-d)
-				elseif key_mod then
-					voice.mod_tap:shift(-d)
-				elseif key_pitch then
+				if key_pitch or (key_pitch == key_mod) then
 					voice.pitch_tap:shift(-d)
+				end
+				if key_mod or (key_pitch == key_mod) then
+					voice.mod_tap:shift(-d)
 				end
 				update_voice(v)
 			end
@@ -1211,12 +1208,10 @@ function enc(n, d)
 			-- TODO: that + offsets (i.e. transpose) for mod = probabilistic gate sequencing
 			for v = 1, n_voices do
 				if voice_selector:is_selected(v) then
-					if key_pitch and not key_mod then
+					if key_pitch or (key_pitch == key_mod) then
 						params:delta(string.format('voice_%d_pitch_scramble', v), d)
-					elseif key_mod and not key_pitch then
-						params:delta(string.format('voice_%d_mod_scramble', v), d)
-					else
-						params:delta(string.format('voice_%d_pitch_scramble', v), d)
+					end
+					if key_mod or (key_pitch == key_mod) then
 						params:delta(string.format('voice_%d_mod_scramble', v), d)
 					end
 				end
