@@ -1130,6 +1130,10 @@ function init()
 	
 	update_voices()
 
+	-- slow down encoder 2, which is used to shift voices
+	norns.enc.accel(2, false)
+	norns.enc.sens(2, 2)
+
 	dirty = true
 	redraw_metro:start()
 end
@@ -1163,7 +1167,6 @@ function enc(n, d)
 		end
 	elseif n == 2 then
 		-- shift voices
-		-- TODO: somehow do this more slowly / make it less sensitive?
 		for v = 1, n_voices do
 			if voice_selector:is_selected(v) then
 				local voice = voices[v]
