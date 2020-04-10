@@ -59,7 +59,7 @@ function ShiftRegisterVoice:set_mod(t, mod)
 end
 
 function ShiftRegisterVoice:toggle_mod(t)
-	self:set_mod(t, self.mod_tap:get(0) > 0 and 0 or 1)
+	self:set_mod(t, self.mod_tap:get(t) > 0 and 0 or 1)
 	if t == 0 then
 		self:update_values()
 	end
