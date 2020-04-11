@@ -32,7 +32,7 @@ end
 
 function TranspositionMemory:save(transposition)
 	for v = 1, n_voices do
-		transposition[v] = voices[v].next_transpose
+		transposition[v] = voices[v].pitch_tap.next_bias
 	end
 end
 
