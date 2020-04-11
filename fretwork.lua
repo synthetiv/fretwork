@@ -1090,10 +1090,10 @@ function add_params()
 		action = function()
 			local data_file = norns.state.data .. 'memory.lua'
 			local data = {}
-			data.masks = saved_masks
-			data.transpositions = saved_transpositions
-			data.pitch_loops = saved_pitch_loops
-			data.mod_loops = saved_mod_loops
+			data.pitch_loops = memory.pitch.slots
+			data.masks = memory.mask.slots
+			data.transpositions = memory.transposition.slots
+			data.mod_loops = memory.mod.slots
 			tab.save(data, data_file)
 		end
 	}
@@ -1101,10 +1101,18 @@ end
 
 function load_memory(data)
 	for s = 1, 16 do
-		memory.pitch:set(memory.pitch.slots[s], data.pitch_loops[s])
-		memory.mask:set(memory.mask.slots[s], data.masks[s])
-		memory.transposition:set(memory.transposition.slots[s], data.transpositions[s])
-		memory.mod:set(memory.mod.slots[s], data.mod_loops[s])
+		if data.pitch_loops ~= nil then
+			memory.pitch:set(memory.pitch.slots[s], data.pitch_loops[s])
+		end
+		if data.masks ~= nil then
+			memory.mask:set(memory.mask.slots[s], data.masks[s])
+		end
+		if data.transpositions ~= nil then
+			memory.transposition:set(memory.transposition.slots[s], data.transpositions[s])
+		end
+		if data.mod_loops ~= nil then
+			memory.mod:set(memory.mod.slots[s], data.mod_loops[s])
+		end
 	end
 	memory.pitch.dirty = true
 	memory.mask.dirty = true
