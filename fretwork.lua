@@ -310,6 +310,7 @@ end
 -- DEBUG
 --[[
 mem = 0
+mem_after_gc = 0
 ticks_since_gc = 0
 --]]
 function tick()
@@ -324,12 +325,13 @@ function tick()
 	local new_mem = collectgarbage('count') * 1024
 	if new_mem < mem then
 		if ticks_since_gc > 1 then
-			local mem_since_gc = mem - new_mem
+			local mem_since_gc = mem - mem_after_gc
 			print('-- gc --', ticks_since_gc)
 			print('memory since gc', mem_since_gc)
 			print('average memory per tick', mem_since_gc / ticks_since_gc)
 		end
 		ticks_since_gc = 0
+		mem_after_gc = new_mem
 	else
 		ticks_since_gc = ticks_since_gc + 1
 	end
