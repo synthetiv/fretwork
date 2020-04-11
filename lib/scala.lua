@@ -38,7 +38,6 @@ function read_scala_file(path)
 	local length = 0
 	local expected_length = 0
 	local pitches = {}
-	local last_pitch = 0
 	for line in io.lines(path) do
 		line = string.gsub(line, '\r', '') -- trim pesky CR characters that make debugging a pain
 		if string.sub(line, 1, 1) ~= '!' then -- ignore comments
@@ -61,11 +60,6 @@ function read_scala_file(path)
 					else
 						value = parse_ratio(value)
 					end
-					-- scale.lua doesn't support scales whose pitches aren't ordered low to high
-					if length > 1 and value <= last_pitch then
-						error('non-ascending pitch value in scale: ' .. length)
-					end
-					last_pitch = value
 					pitches[length] = value
 				end
 			end
@@ -75,6 +69,8 @@ function read_scala_file(path)
 	if length ~= expected_length then
 		error('length mismatch', length, expected_length)
 	end
+	-- enforce low -> high pitch order, or scale.lua's quantization won't work
+	table.sort(pitches)
 	return pitches, length, desc
 end
 
