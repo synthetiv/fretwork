@@ -642,7 +642,7 @@ function transpose_keyboard:key(x, y, z)
 	local transpose = self:get_last_value() - top_voice.pitch_tap.next_bias
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
-			params:set(string.format('voice_%d_transpose', v), voices[v].pitch_tap.next_bias + transpose)
+			params:set(string.format('voice_%d_transpose', v), (voices[v].pitch_tap.next_bias + transpose) * 12)
 		end
 	end
 	if quantization_off() then
@@ -914,9 +914,9 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_transpose', v),
 			name = string.format('voice %d transpose', v),
-			controlspec = controlspec.new(-4, 4, 'lin', 1 / 120, 0), -- TODO: display in st
+			controlspec = controlspec.new(-48, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
-				voice.pitch_tap.next_bias = value
+				voice.pitch_tap.next_bias = value / 12
 				memory.transposition.dirty = true
 			end
 		}

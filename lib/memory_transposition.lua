@@ -23,7 +23,7 @@ end
 
 function TranspositionMemory:recall(transposition)
 	for v = 1, n_voices do
-		params:set(string.format('voice_%d_transpose', v), transposition[v])
+		params:set(string.format('voice_%d_transpose', v), transposition[v] * 12)
 	end
 	if quantization_off() then
 		update_voices()
