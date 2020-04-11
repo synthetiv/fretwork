@@ -144,8 +144,9 @@ for v = 1, n_voices do
 		screen_notes[v][n] = {
 			x = 0,
 			y = 0,
-			z = 0,
+			gate = 0,
 			pitch_pos = 0,
+			mod_pos = 0,
 			level = 0
 		}
 	end
@@ -222,7 +223,7 @@ end
 function update_voice(v)
 	local voice = voices[v]
 	voice:update_values()
-	if voice.active and voice.mod > 0 then
+	if voice.active and voice.gate then
 		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
 		-- crow.output[v].volts = voice.value
 	else
@@ -403,22 +404,22 @@ function grid_redraw()
 		local level = 0
 		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
 		local voice = voices[voice_index]
-		local mod_level = (voice.active and voice.mod > 0) and 1 or 0
+		local gate_level = (voice.active and voice.gate) and 1 or 0
 		if voice.next_active then
 			if voice_index == top_voice_index then
-				level = 14 + mod_level
+				level = 14 + gate_level
 			elseif voice_selector:is_selected(voice_index) then
-				level = 9 + mod_level
+				level = 9 + gate_level
 			else
-				level = 3 + mod_level
+				level = 3 + gate_level
 			end
 		else
 			if voice_index == top_voice_index then
-				level = 12 + mod_level
+				level = 12 + gate_level
 			elseif voice_selector:is_selected(voice_index) then
-				level = 7 + mod_level
+				level = 7 + gate_level
 			else
-				level = 1 + mod_level
+				level = 1 + gate_level
 			end
 		end
 		g:led(voice_selector.x, y, level)
@@ -468,7 +469,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if voice.active and voice.mod > 0 and n == voice.pitch_id then
+		if voice.active and voice.gate and n == voice.pitch_id then
 			if v == top_voice_index then
 				level = 14
 			elseif voice_selector:is_selected(v) then
@@ -504,7 +505,7 @@ function mask_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
 	for v = 1, n_voices do
 		local voice = voices[v]
-		if voice.active and voice.mod > 0 and n == voice.pitch_id then
+		if voice.active and voice.gate and n == voice.pitch_id then
 			if v == top_voice_index then
 				level = 14
 			elseif voice_selector:is_selected(v) then
@@ -553,9 +554,8 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return level
 end
 
-function x0x_roll:get_key_level(x, y, v, offset, value)
+function x0x_roll:get_key_level(x, y, v, offset, gate)
 	local head = offset == 0
-	local gate = value > 0
 	local active = voices[v].active
 	if not active then
 		if gate then
@@ -953,7 +953,7 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_mod_bias', v),
 			name = string.format('voice %d mod bias', v),
-			controlspec = controlspec.new(0, 2, 'lin', 0.2, 0),
+			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
 				voice.mod_tap.next_bias = value
 				dirty = true
@@ -1137,14 +1137,24 @@ function init()
 	g.key = grid_key
 	m.event = midi_event
 	
+	change_enc_page(0)
 	update_voices()
-
-	-- slow down encoder 2, which is used to shift voices
-	norns.enc.accel(2, false)
-	norns.enc.sens(2, 2)
 
 	dirty = true
 	redraw_metro:start()
+end
+
+function change_enc_page(d)
+	enc_page = (enc_page + d - 1) % n_enc_pages + 1
+	if enc_page == enc_page_mod_offset or enc_page == enc_page_pitch_offset then
+		-- slow down encoder 3, which is used to shift voices
+		norns.enc.accel(3, false)
+		norns.enc.sens(3, 2)
+	else
+		norns.enc.accel(3, true)
+		norns.enc.sens(3, 1)
+	end
+	blinkers.info:start()
 end
 
 function key(n, z)
@@ -1154,11 +1164,9 @@ function key(n, z)
 			blinkers.info:start()
 		end
 	elseif n == 2 and z == 1 then
-		enc_page = (enc_page - 2) % n_enc_pages + 1
-		blinkers.info:start()
+		change_enc_page(-1)
 	elseif n == 3 and z == 1 then
-		enc_page = enc_page % n_enc_pages + 1
-		blinkers.info:start()
+		change_enc_page(1)
 	end
 end
 
@@ -1276,7 +1284,7 @@ function calculate_voice_path(v, level)
 		local note = screen_notes[v][n]
 		note.x = (n - 1) * screen_note_width
 		note.y = get_screen_note_y(scale:snap(path[n].pitch))
-		note.z = path[n].mod
+		note.gate = path[n].gate
 		note.pitch_pos = path[n].pitch_pos
 		note.mod_pos = path[n].mod_pos
 		note.level = level
@@ -1306,17 +1314,17 @@ function draw_voice_path(v, level)
 		local note = screen_notes[v][n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
-		local z = voice.active and note.z or 0
+		local gate = voice.active and note.gate
 		local prev_note = screen_notes[v][n - 1] or note
-		local prev_z = voice.active and prev_note.z or 0
+		local prev_gate = voice.active and prev_note.gate
 		-- draw connector, if this note and the previous note are active
-		if prev_z > 0 and z > 0 then
+		if prev_gate and gate then
 			screen.line(x, y)
 		else
 			screen.move(x, y)
 		end
 		-- draw this note, if active; draw all notes for selected voices
-		if z > 0 or voice_selector:is_selected(v) then
+		if gate or voice_selector:is_selected(v) then
 			screen.line(x + screen_note_width, y)
 			screen.stroke()
 			screen.move(x + screen_note_width, y)
@@ -1331,15 +1339,15 @@ function draw_voice_path(v, level)
 		local note = screen_notes[v][n]
 		local x = note.x
 		local y = note.y + 0.5
-		local z = voice.active and note.z or 0
+		local gate = voice.active and note.gate
 		local level = note.level
 		local prev_note = screen_notes[v][n - 1] or note
 		local prev_x = prev_note.x
 		local prev_y = prev_note.y + 0.5
-		local prev_z = voice.active and prev_note.z or 0
+		local prev_gate = voice.active and prev_note.gate
 		local prev_level = prev_note.level
 		-- draw connector
-		if prev_z > 0 and z > 0 then
+		if prev_gate and gate then
 			local connector_level = math.min(level, prev_level) + math.floor(math.abs(level - prev_level) / 4)
 			local min_y = math.min(prev_y, y)
 			local max_y = math.max(prev_y, y)
@@ -1351,7 +1359,7 @@ function draw_voice_path(v, level)
 			screen.move(x + 0.5, y)
 		end
 		-- draw this note, including dotted lines for inactive notes in selected voices
-		if z > 0 then
+		if gate then
 			-- solid line for active notes
 			screen.move(x, y)
 			screen.line(x + screen_note_width + 1, y)
@@ -1404,7 +1412,7 @@ function draw_tap_equation(y, label, tap, multiplier, page_offset, page_bias, pa
 	if enc_page == page_bias or noise ~= 0 then
 		screen.text(string.format('+%.1fz', noise))
 	end
-	local bias = tap.bias * multiplier
+	local bias = tap.next_bias * multiplier
 	if enc_page == page_bias or bias ~= 0 then
 		screen.text(string.format('%+.1f', bias))
 	end
@@ -1454,7 +1462,7 @@ function redraw()
 	for i, v in ipairs(voice_draw_order) do
 		if voices[v].active then
 			local note = screen_notes[v][screen_note_center]
-			if note.z > 0 then
+			if note.gate then
 				screen.move(note.x + 2.5, note.y - 1)
 				screen.line(note.x + 2.5, note.y + 2)
 				screen.level(0)

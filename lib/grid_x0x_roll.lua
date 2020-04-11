@@ -37,10 +37,10 @@ end
 
 function X0XRoll:draw_voice(g, v)
 	local y = self.voice_ys[v]
-	local tap = self.voices[v].mod_tap
+	local voice = self.voices[v]
 	for x = self.x, self.x2 do
 		local offset = self:get_offset(x)
-		local value = tap:get(offset)
+		local value = voice:get_gate(offset)
 		local level = self:get_key_level(x, y, v, offset, value)
 		g:led(x, y, level)
 	end
@@ -99,7 +99,7 @@ function X0XRoll:key(x, y, z)
 		if v ~= nil then
 			local voice = self.voices[v]
 			local offset = self:get_offset(x)
-			voice:toggle_mod(offset)
+			voice:toggle_gate(offset)
 			flash_write(write_type_mod, voice.mod_tap:get_pos(offset))
 		end
 	end

@@ -47,7 +47,8 @@ end
 
 function ShiftRegisterTap:set(t, value)
 	local pos = self:get_pos(t)
-	self.shift_register:write(pos, value - self.bias)
+	local noise_value = self.noise_values:get(t * self.direction) * self.noise
+	self.shift_register:write(pos, value - self.bias - noise_value)
 end
 
 function ShiftRegisterTap:get_offset()
