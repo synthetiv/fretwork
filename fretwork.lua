@@ -165,14 +165,15 @@ for w = 1, n_recent_writes do
 	}
 end
 
-n_enc_pages = 6
-enc_page_pitch_offset = 1
-enc_page_pitch_bias = 2
-enc_page_pitch_length = 3
-enc_page_mod_offset = 4
-enc_page_mod_bias = 5
-enc_page_mod_length = 6
-enc_page = enc_page_pitch_offset
+n_enc_pages = 2
+n_enc_fields = 3
+enc_page_pitch = 1
+enc_page_mod = 2
+enc_field_offset = 1
+enc_field_bias = 2
+enc_field_length = 3
+enc_page = enc_page_pitch
+enc_field = enc_field_offset
 key_shift = false
 
 blink_slow = false
@@ -1137,20 +1138,25 @@ function init()
 	g.key = grid_key
 	m.event = midi_event
 	
-	change_enc_page(0)
+	change_enc_field(0) -- set encoder sensitivity
 	update_voices()
 
 	dirty = true
 	redraw_metro:start()
 end
 
-function change_enc_page(d)
-	enc_page = (enc_page + d - 1) % n_enc_pages + 1
-	if enc_page == enc_page_mod_offset or enc_page == enc_page_pitch_offset then
+function change_enc_field(d)
+	local next_enc_field = (enc_field + d - 1) % n_enc_fields + 1
+	if next_enc_field ~= enc_field + d then
+		enc_page = (enc_page + d - 1) % n_enc_pages + 1
+	end
+	enc_field = next_enc_field
+	if enc_field == enc_page_offset then
 		-- slow down encoder 3, which is used to shift voices
 		norns.enc.accel(3, false)
 		norns.enc.sens(3, 2)
 	else
+		-- set it back to normal
 		norns.enc.accel(3, true)
 		norns.enc.sens(3, 1)
 	end
@@ -1164,98 +1170,114 @@ function key(n, z)
 			blinkers.info:start()
 		end
 	elseif n == 2 and z == 1 then
-		change_enc_page(-1)
+		change_enc_field(-1)
 	elseif n == 3 and z == 1 then
-		change_enc_page(1)
+		change_enc_field(1)
 	end
+	dirty = true
 end
 
 function enc(n, d)
 	if n == 1 then
 		-- TODO: do something with this; it's not very useful for switching encoder pages
 	elseif n == 2 then
-		if enc_page == enc_page_pitch_offset then
-			-- set pitch scramble
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					params:delta(string.format('voice_%d_pitch_scramble', v), d)
+		if enc_field == enc_field_offset then
+			if key_shift or enc_page == enc_page_pitch then
+				-- set pitch scramble
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_pitch_scramble', v), d)
+					end
 				end
 			end
-		elseif enc_page == enc_page_mod_offset then
-			-- set mod scramble
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					params:delta(string.format('voice_%d_mod_scramble', v), d)
+			if key_shift or enc_page == enc_page_mod then
+				-- set mod scramble
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_mod_scramble', v), d)
+					end
 				end
 			end
-		elseif enc_page == enc_page_pitch_bias then
-			-- set pitch noise
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					params:delta(string.format('voice_%d_pitch_noise', v), d)
+		elseif enc_field == enc_field_bias then
+			if key_shift or enc_page == enc_page_pitch then
+				-- set pitch noise
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_pitch_noise', v), d)
+					end
 				end
 			end
-		elseif enc_page == enc_page_mod_bias then
-			-- set mod noise
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					params:delta(string.format('voice_%d_mod_noise', v), d)
+			if key_shift or enc_page == enc_page_mod then
+				-- set mod noise
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_mod_noise', v), d)
+					end
 				end
 			end
 		end
 	elseif n == 3 then
-		if enc_page == enc_page_pitch_offset then
-			-- shift pitch tap(s)
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					local voice = voices[v]
-					voice.pitch_tap:shift(-d)
+		if enc_field == enc_field_offset then
+			if key_shift or enc_page == enc_page_pitch then
+				-- shift pitch tap(s)
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						local voice = voices[v]
+						voice.pitch_tap:shift(-d)
+					end
+				end
+				memory.pitch.dirty = true
+			end
+			if key_shift or enc_page == enc_page_mod then
+				-- shift mod tap(s)
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						local voice = voices[v]
+						voice.mod_tap:shift(-d)
+					end
+				end
+				memory.mod.dirty = true
+			end
+		elseif enc_field == enc_field_bias then
+			if key_shift or enc_page == enc_page_pitch then
+				-- transpose voice(s)
+				-- find highest value (or lowest, if lowering)
+				local sign = d < 0 and -1 or 1
+				local abs_d = d * sign
+				local max_transpose = -4 -- lowest possible transpose setting
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						max_transpose = math.max(voices[v].pitch_tap.bias * sign, max_transpose)
+					end
+				end
+				-- if increasing/decreasing by d would exceed [-4, 4], reduce d
+				if max_transpose + abs_d > 4 then
+					d = (4 - max_transpose) * sign
+				end
+				-- transpose 'em
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_transpose', v), d)
+					end
 				end
 			end
-			memory.pitch.dirty = true
-		elseif enc_page == enc_page_mod_offset then
-			-- shift mod tap(s)
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					local voice = voices[v]
-					voice.mod_tap:shift(-d)
+			if key_shift or enc_page == enc_page_mod then
+				-- set mod bias
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_mod_bias', v), d)
+					end
 				end
 			end
-			memory.mod.dirty = true
-		elseif enc_page == enc_page_pitch_bias then
-			-- transpose voice(s)
-			-- find highest value (or lowest, if lowering)
-			local sign = d < 0 and -1 or 1
-			local abs_d = d * sign
-			local max_transpose = -4 -- lowest possible transpose setting
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					max_transpose = math.max(voices[v].pitch_tap.bias * sign, max_transpose)
-				end
+		elseif enc_field == enc_field_length then
+			if key_shift or enc_page == enc_page_pitch then
+				-- set pitch length
+				params:delta('pitch_loop_length', d)
 			end
-			-- if increasing/decreasing by d would exceed [-4, 4], reduce d
-			if max_transpose + abs_d > 4 then
-				d = (4 - max_transpose) * sign
+			if key_shift or enc_page == enc_page_mod then
+				-- set mod length
+				params:delta('mod_loop_length', d)
 			end
-			-- transpose 'em
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					params:delta(string.format('voice_%d_transpose', v), d)
-				end
-			end
-		elseif enc_page == enc_page_mod_bias then
-			-- set mod bias
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					params:delta(string.format('voice_%d_mod_bias', v), d)
-				end
-			end
-		elseif enc_page == enc_page_pitch_length then
-			-- set pitch length
-			params:delta('pitch_loop_length', d)
-		elseif enc_page == enc_page_mod_length then
-			-- set mod length
-			params:delta('mod_loop_length', d)
 		end
 	end
 	if quantization_off() then
@@ -1381,7 +1403,7 @@ function draw_voice_path(v, level)
 	screen.stroke()
 end
 
-function draw_tap_equation(y, label, tap, multiplier, page_offset, page_bias, page_length)
+function draw_tap_equation(y, label, tap, multiplier, on_page)
 	screen.move(8, y)
 
 	screen.level(3)
@@ -1392,11 +1414,12 @@ function draw_tap_equation(y, label, tap, multiplier, page_offset, page_bias, pa
 		screen.text('t')
 	end
 
-	if enc_page == page_offset then
+	local highlight_offset = on_page and enc_field == enc_field_offset
+	if highlight_offset then
 		screen.level(15)
 	end
 	local scramble = tap.scramble * tap.direction
-	if enc_page == page_offset or scramble ~= 0 then
+	if highlight_offset or scramble ~= 0 then
 		screen.text(string.format('+%.1fk', scramble))
 	end
 	-- TODO: this looks wack in retrograde (constantly counting by twos)
@@ -1405,15 +1428,16 @@ function draw_tap_equation(y, label, tap, multiplier, page_offset, page_bias, pa
 	screen.level(3)
 	screen.text(']')
 
-	if enc_page == page_bias then
+	local highlight_bias = on_page and enc_field == enc_field_bias
+	if highlight_bias then
 		screen.level(15)
 	end
 	local noise = tap.noise * tap.direction * multiplier
-	if enc_page == page_bias or noise ~= 0 then
+	if highlight_bias or noise ~= 0 then
 		screen.text(string.format('+%.1fz', noise))
 	end
 	local bias = tap.next_bias * multiplier
-	if enc_page == page_bias or bias ~= 0 then
+	if highlight_bias or bias ~= 0 then
 		screen.text(string.format('%+.1f', bias))
 	end
 
@@ -1421,7 +1445,7 @@ function draw_tap_equation(y, label, tap, multiplier, page_offset, page_bias, pa
 	screen.level(3)
 	screen.text('[')
 
-	if enc_page == page_length then
+	if on_page and enc_field == enc_field_length then
 		screen.level(15)
 	end
 	screen.text(string.format('%d', tap.shift_register.length))
@@ -1496,9 +1520,9 @@ function redraw()
 		screen.level(3)
 		screen.text(string.format('%d.', top_voice_index))
 
-		draw_tap_equation(54, 'p', top_voice.pitch_tap, 12, enc_page_pitch_offset, enc_page_pitch_bias, enc_page_pitch_length)
+		draw_tap_equation(54, 'p', top_voice.pitch_tap, 12, key_shift or enc_page == enc_page_pitch)
 
-		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, enc_page_mod_offset, enc_page_mod_bias, enc_page_mod_length)
+		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, key_shift or enc_page == enc_page_mod)
 
 	end
 	--]]
