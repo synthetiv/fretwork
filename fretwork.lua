@@ -1202,7 +1202,8 @@ function enc(n, d)
 			norns.enc.accel(3, true)
 		end
 	elseif n == 3 then
-		if held_keys.edit_fine then
+		-- offset can only be changed by integer values, but for other fields, allow fine adjustment
+		if edit_field ~= edit_field_offset and held_keys.edit_fine then
 			d = d / 20
 		end
 		if edit_field == edit_field_direction then
