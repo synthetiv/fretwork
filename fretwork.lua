@@ -546,10 +546,12 @@ function transpose_keyboard:get_key_level(x, y, n)
 		local voice = voices[v]
 		if voice.active then
 			local tap = voice.pitch_tap
-			local is_noise = n >= scale:get_nearest_pitch_id(tap.bias - tap.noise) and n <= scale:get_nearest_pitch_id(tap.bias + tap.noise)
-			local is_transpose = n == scale:get_nearest_pitch_id(tap.bias)
-			local is_next_transpose = n == scale:get_nearest_pitch_id(tap.next_bias)
-			if is_transpose and is_next_transpose then
+			local noise = tap.noise
+			local bias = tap.bias
+			local is_bias = n == scale:get_nearest_pitch_id(bias)
+			local is_next_bias = n == scale:get_nearest_pitch_id(tap.next_bias)
+			local is_noisy_bias = n == scale:get_nearest_pitch_id(bias + tap.noise_values:get(0) * noise)
+			if is_bias and is_next_bias then
 				if v == top_voice_index then
 					level = 14
 				elseif voice_selector:is_selected(v) then
@@ -557,7 +559,7 @@ function transpose_keyboard:get_key_level(x, y, n)
 				else
 					level = math.max(level, 5)
 				end
-			elseif is_next_transpose then
+			elseif is_next_bias then
 				if v == top_voice_index then
 					level = math.max(level, 8)
 				elseif voice_selector:is_selected(v) then
@@ -565,8 +567,21 @@ function transpose_keyboard:get_key_level(x, y, n)
 				else
 					level = math.max(level, 4)
 				end
-			elseif is_noise then
-				level = math.max(level, 3)
+			elseif is_noisy_bias then
+				if v == top_voice_index then
+					level = math.max(level, 6)
+				elseif voice_selector:is_selected(v) then
+					level = math.max(level, 4)
+				else
+					level = math.max(level, 3)
+				end
+			end
+			local halo_level = (voice_selector:is_selected(v) and 3 or 2)
+			for d = 1, halo_level do
+				local range = noise * d / 2
+				if n >= scale:get_nearest_pitch_id(bias - range) and n <= scale:get_nearest_pitch_id(bias + range) then
+					level = math.min(15, level + math.floor(halo_level / d))
+				end
 			end
 		end
 	end
