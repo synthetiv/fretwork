@@ -2,7 +2,7 @@ local ShiftRegisterTap = include 'lib/shift_register_tap'
 local X0XRoll = include 'lib/grid_control'
 
 local function mod_to_gate(mod)
-	return (mod % 2) >= 1
+	return mod > 0.5
 end
 
 local ShiftRegisterVoice = {}
