@@ -535,17 +535,20 @@ function mask_keyboard:get_key_level(x, y, n)
 end
 
 function transpose_keyboard:get_key_level(x, y, n)
+	local scale = self.scale
 	local level = 0
 	-- highlight octaves
-	if (n - self.scale.center_pitch_id) % self.scale.length == 0 then
+	if (n - scale.center_pitch_id) % scale.length == 0 then
 		level = 2
 	end
 	-- highlight transposition settings
 	for v = 1, n_voices do
 		local voice = voices[v]
 		if voice.active then
-			local is_transpose = n == self.scale:get_nearest_pitch_id(voices[v].pitch_tap.bias)
-			local is_next_transpose = n == self.scale:get_nearest_pitch_id(voices[v].pitch_tap.next_bias)
+			local tap = voice.pitch_tap
+			local is_noise = n >= scale:get_nearest_pitch_id(tap.bias - tap.noise) and n <= scale:get_nearest_pitch_id(tap.bias + tap.noise)
+			local is_transpose = n == scale:get_nearest_pitch_id(tap.bias)
+			local is_next_transpose = n == scale:get_nearest_pitch_id(tap.next_bias)
 			if is_transpose and is_next_transpose then
 				if v == top_voice_index then
 					level = 14
@@ -562,7 +565,7 @@ function transpose_keyboard:get_key_level(x, y, n)
 				else
 					level = math.max(level, 4)
 				end
-			elseif is_transpose then
+			elseif is_noise then
 				level = math.max(level, 3)
 			end
 		end
@@ -648,10 +651,20 @@ function transpose_keyboard:key(x, y, z)
 	if self.n_held_keys < 1 then
 		return
 	end
-	local transpose = self:get_last_value() - top_voice.pitch_tap.next_bias
-	for v = 1, n_voices do
-		if voice_selector:is_selected(v) then
-			params:set(string.format('voice_%d_transpose', v), (voices[v].pitch_tap.next_bias + transpose) * 12)
+	local delta = self:get_last_value() - top_voice.pitch_tap.next_bias
+	if held_keys.shift then
+		-- adjust noise (random transposition)
+		for v = 1, n_voices do
+			if voice_selector:is_selected(v) then
+				params:set(string.format('voice_%d_pitch_noise', v), math.abs(delta))
+			end
+		end
+	else
+		-- adjust bias (fixed transposition)
+		for v = 1, n_voices do
+			if voice_selector:is_selected(v) then
+				params:set(string.format('voice_%d_transpose', v), (voices[v].pitch_tap.next_bias + delta) * 12)
+			end
 		end
 	end
 	if quantization_off() then
