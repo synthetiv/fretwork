@@ -9,6 +9,11 @@ ShiftRegisterTap.new = function(offset, shift_register)
 	tap.shift_register = shift_register
 	tap.direction = 1
 	tap.scramble = 0
+	-- TODO: is there another way to handle noise/scramble that would:
+	-- 1. handle loop length changes better? i.e. if you change the SR length and a note moves from
+	-- point A on the screen to point B, the corresponding scramble/noise values move with it so that
+	-- the voice path doesn't twitch & jump around?
+	-- 2. really never repeat?
 	tap.scramble_values = RandomQueue.new(131) -- prime length, so SR loop and random queues are rarely in phase
 	tap.noise = 0
 	tap.noise_values = RandomQueue.new(137)
@@ -52,7 +57,8 @@ function ShiftRegisterTap:set(t, value)
 end
 
 function ShiftRegisterTap:get_offset()
-	return self.shift_register:clamp_loop_offset_bipolar(self.pos - self.shift_register.start)
+	local shift_register = self.shift_register
+	return (self.pos - shift_register.start) % shift_register.length
 end
 
 return ShiftRegisterTap

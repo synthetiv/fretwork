@@ -10,6 +10,8 @@ ShiftRegister.new = function(length)
 	for i = 1, instance.buffer_size do
 		instance.buffer[i] = 0
 	end
+	instance.direction = 1
+	instance.length = length
 	instance:set_length(length)
 	instance.dirty = false
 	return instance
@@ -17,10 +19,12 @@ end
 
 --- change the length of the loop 
 function ShiftRegister:set_length(length)
-	-- set loop length
+	-- when the top voice is not retrograde, it will always be at the end of the loop -- so move the
+	-- start point and leave the end where it is
+	if self.direction > 0 then
+		self.start = self.start + self.length - length
+	end
 	self.length = length
-	-- set half length, used for clamp_loop_offset_bipolar (for human-friendly readouts)
-	self.half_length = math.floor(length / 2)
 	-- set 'virtual buffer' size. because the virtual buffer is evenly divisible by both buffer size
 	-- and loop length, for any two points A and B in the virtual buffer, the distance from A to B,
 	-- and the distance from B to A wrapping across the end of the virtual buffer, are equal modulo
@@ -44,21 +48,40 @@ function ShiftRegister:clamp_loop_pos(pos)
 	return self:clamp_virtual_pos((pos - self.start) % self.length + self.start)
 end
 
---- constrain a relative offset to the range [-floor(length/2), ceil(length/2)]
--- TODO: do you really need this...?
-function ShiftRegister:clamp_loop_offset_bipolar(offset)
-	return (offset + self.half_length) % self.length - self.half_length
-end
-
 --- convert a relative offset from the start point to an absolute position [start, end]
 function ShiftRegister:get_loop_offset_pos(offset)
 	-- return self.start + self:clamp_loop_offset(offset)
 	return self:clamp_loop_pos(self.start + offset)
 end
 
+function ShiftRegister:sync_to(tap)
+	local direction = tap.direction
+	self.direction = direction
+	local pos = tap.pos
+	local diff = pos - self.start
+	if direction > 0 then
+		-- when direction is forward, we want the synced tap to be at the end of the loop -- so we'll
+		-- shift one more step than is needed to line it up with the start
+		diff = diff + 1
+	end
+	diff = diff % (self.length * direction)
+	diff = diff * direction
+	if diff ~= 0 then
+		self:jump(diff)
+	end
+end
+
+function ShiftRegister:jump(delta)
+	local d = delta > 0 and 1 or -1
+	for s = delta, 1, -d do
+		self:shift(d)
+	end
+end
+
 --- move loop start + end points within the virtual buffer by `delta`
 -- and replace loop contents with `next_loop`, if appropriate
 function ShiftRegister:shift(delta)
+	delta = delta * self.direction
 	if delta > 0 then
 		-- if shifting forward, copy the value from the start of the old loop to the end of the new
 		local carry = self:read_offset(0)
@@ -82,13 +105,11 @@ end
 
 --- read from the loop at an absolute position
 function ShiftRegister:read(pos)
-	-- return self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos) % self.length)]
 	return self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos))]
 end
 
 --- write to the loop at an absolute position
 function ShiftRegister:write(pos, value)
-	-- self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos) % self.length)] = value
 	self.buffer[self:clamp_buffer_pos(self:clamp_loop_pos(pos))] = value
 	self.dirty = true
 end

@@ -291,13 +291,15 @@ function write(pitch)
 end
 
 function shift(d)
-	-- TODO: only shift registers if they're synced with the top voice
 	pitch_register:shift(d)
 	mod_register:shift(d)
 	x0x_roll:shift(-d)
 	for v = 1, n_voices do
-		voices[v]:shift(d)
+		voices[v].pitch_tap:shift(d)
+		voices[v].mod_tap:shift(d)
 	end
+	pitch_register:sync_to(top_voice.pitch_tap)
+	mod_register:sync_to(top_voice.mod_tap)
 	maybe_write()
 	scale:apply_edits()
 	update_voices()
@@ -315,36 +317,40 @@ function rewind()
 	shift(-1)
 end
 
--- DEBUG
---[[
+-- DEBUG: print roughly when garbage collection starts and how much memory has been used
 mem = 0
 mem_after_gc = 0
 ticks_since_gc = 0
+function print_memory()
+	local mem_since_gc = mem - mem_after_gc
+	print('memory since gc', mem_since_gc)
+	print('average memory per second', mem_since_gc / ticks_since_gc)
+end
+memory_metro = metro.init{
+	time = 1,
+	event = function()
+		local new_mem = collectgarbage('count') * 1024
+		if new_mem < mem then
+			if ticks_since_gc > 1 then
+				print('-- gc --', ticks_since_gc)
+				print_memory()
+			end
+			ticks_since_gc = 0
+			mem_after_gc = new_mem
+		else
+			ticks_since_gc = ticks_since_gc + 1
+		end
+		mem = new_mem
+	end
+}
 --]]
+
 function tick()
 	if not clock_enable then
 		return
 	end
 	advance()
 	blinkers.play:start()
-
-	-- DEBUG: print roughly when garbage collection starts and how much memory has been used
-	--[[
-	local new_mem = collectgarbage('count') * 1024
-	if new_mem < mem then
-		if ticks_since_gc > 1 then
-			local mem_since_gc = mem - mem_after_gc
-			print('-- gc --', ticks_since_gc)
-			print('memory since gc', mem_since_gc)
-			print('average memory per tick', mem_since_gc / ticks_since_gc)
-		end
-		ticks_since_gc = 0
-		mem_after_gc = new_mem
-	else
-		ticks_since_gc = ticks_since_gc + 1
-	end
-	mem = new_mem
-	--]]
 end
 
 function update_voice_order()
@@ -363,6 +369,8 @@ function update_voice_order()
 	end
 	top_voice_index = new_draw_order[n_voices]
 	top_voice = voices[top_voice_index]
+	pitch_register:sync_to(top_voice.pitch_tap)
+	mod_register:sync_to(top_voice.mod_tap)
 	voice_draw_order = new_draw_order
 end
 
@@ -753,7 +761,8 @@ function midi_event(data)
 		for v = 1, n_voices do
 			local voice = voices[v]
 			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
-				voice:shift(1)
+				voice.pitch_tap:shift(1) -- TODO: shift SR if appropriate
+				voice.mod_tap:shift(1)
 				update_voice(v)
 				dirty = true
 			end
@@ -831,8 +840,6 @@ function add_params()
 		min = 2,
 		max = 128,
 		default = 16,
-		-- TODO: make this adjust loop length with the top voice's current note as the loop end point,
-		-- so one could easily lock in the last few notes heard; I don't really get what it's doing now
 		action = function(value)
 			pitch_register:set_length(value)
 			update_voices()
@@ -952,6 +959,9 @@ function add_params()
 			},
 			action = function(value)
 				voice.pitch_tap.direction = value == 2 and -1 or 1
+				if top_voice_index == v then
+					pitch_register:sync_to(voice.pitch_tap)
+				end
 				dirty = true
 				memory.transposition.dirty = true
 			end
@@ -999,6 +1009,9 @@ function add_params()
 			},
 			action = function(value)
 				voice.mod_tap.direction = value == 2 and -1 or 1
+				if top_voice_index == v then
+					mod_register:sync_to(voice.mod_tap)
+				end
 				dirty = true
 				memory.transposition.dirty = true
 			end
@@ -1122,6 +1135,9 @@ end
 
 function init()
 
+	-- DEBUG
+	memory_metro:start()
+
 	add_params()
 	params:set('hzlag', 0.02)
 	params:set('cut', 8.32)
@@ -1194,10 +1210,9 @@ end
 function enc(n, d)
 	if n == 1 then
 		-- select voice
-		top_voice_index = util.clamp(top_voice_index + d, 1, n_voices)
-		top_voice = voices[top_voice_index]
+		local voice_index = util.clamp(top_voice_index + d, 1, n_voices)
 		for v = 1, n_voices do
-			voice_selector.selected[v] = v == top_voice_index
+			voice_selector.selected[v] = v == voice_index
 		end
 		update_voice_order()
 	elseif n == 2 then
@@ -1257,6 +1272,7 @@ function enc(n, d)
 						voice.pitch_tap:shift(-d)
 					end
 				end
+				pitch_register:shift(-d)
 				memory.pitch.dirty = true
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
@@ -1267,6 +1283,7 @@ function enc(n, d)
 						voice.mod_tap:shift(-d)
 					end
 				end
+				mod_register:shift(-d)
 				memory.mod.dirty = true
 			end
 		elseif edit_field == edit_field_noise then
@@ -1483,8 +1500,9 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 		screen.text(string.format('+%.1fk', scramble))
 	end
 
+	-- TODO: this way of notating offset no longer makes much sense -- it will always be 0 or length-1
+	-- for the top voice. what should we do instead?
 	screen.level(highlight_offset and 15 or 3)
-	-- TODO: this looks wack in retrograde (constantly counting by twos)
 	screen.text(string.format('%+d', offset))
 
 	screen.level(3)
@@ -1614,5 +1632,8 @@ function cleanup()
 	end
 	for i, blinker in ipairs(blinkers) do
 		blinker:stop()
+	end
+	if memory_metro ~= nil then
+		memory_metro:stop()
 	end
 end
