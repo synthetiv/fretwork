@@ -3,31 +3,30 @@ local Memory = include 'lib/memory'
 local LoopMemory = setmetatable({}, Memory)
 LoopMemory.__index = LoopMemory
 
-LoopMemory.new = function(prefix, shift_register, default_offset)
+LoopMemory.new = function(type, shift_register, default_offset)
 	local mem = setmetatable(Memory.new(), LoopMemory)
-	mem.tap_key = prefix .. '_tap'
-	mem.length_param = prefix .. '_loop_length'
-	mem.scramble_param = 'voice_%d_' .. prefix .. '_scramble'
-	mem.direction_param = 'voice_%d_' .. prefix .. '_direction'
+	mem.tap_key = type .. '_tap'
+	mem.length_param = type .. '_loop_length'
+	mem.scramble_param = 'voice_%d_' .. type .. '_scramble'
+	mem.direction_param = 'voice_%d_' .. type .. '_direction'
 	mem.shift_register = shift_register
-	for s = 1, mem.n_slots do
-		local loop = {
-			values = {},
-			voices = {}
-		}
-		for i = 1, 16 do
-			loop.values[i] = 0
-		end
-		for v = 1, 4 do
-			loop.voices[v] = {
-				offset = v * default_offset,
-				scramble = 0,
-				direction = 1
-			}
-		end
-		mem.slots[s] = loop
-	end
+	mem.default_offset = default_offset
 	return mem
+end
+
+function LoopMemory:get_slot_default(s)
+	local loop = {
+		values = self:get_slot_default_values(s),
+		voices = {}
+	}
+	for v = 1, n_voices do
+		loop.voices[v] = {
+			offset = (v - 1) * self.default_offset,
+			scramble = 0,
+			direction = 1
+		}
+	end
+	return loop
 end
 
 function LoopMemory:set(loop, new_loop)

@@ -7,9 +7,6 @@ Memory.new = function()
 	local mem = {}
 	mem.n_slots = n_memory_slots
 	mem.slots = {}
-	for i = 1, n_memory_slots do
-		mem.slots[i] = {}
-	end
 	-- TODO: multi selects for 'pattern chaining'... or maybe pattern_time
 	mem.selector = Select.new(1, 3, 4, 4)
 	mem.selector.on_select = function(s)
@@ -21,6 +18,12 @@ Memory.new = function()
 		mem.dirty = false
 	end
 	return mem
+end
+
+function Memory:initialize()
+	for s = 1, self.n_slots do
+		self.slots[s] = self:get_slot_default(s)
+	end
 end
 
 function Memory:recall_slot(s)

@@ -5,11 +5,18 @@ MaskMemory.__index = MaskMemory
 
 MaskMemory.new = function()
 	local mem = setmetatable(Memory.new(), MaskMemory)
-	-- initialize all slots to C major
-	for s = 1, mem.n_slots do
-		mem.slots[s] = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 }
-	end
+	mem:initialize()
 	return mem
+end
+
+local pentatonic = { 0, 2, 4, 7, 9 }
+
+function MaskMemory:get_slot_default(s)
+	local pitches = {}
+	for n = 1, 5 do
+		pitches[n] = ((pentatonic[n] + s - 1) % 12) / 12
+	end
+	return pitches
 end
 
 function MaskMemory:set(mask, new_mask)

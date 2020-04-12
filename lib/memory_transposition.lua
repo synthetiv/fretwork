@@ -5,14 +5,18 @@ TranspositionMemory.__index = TranspositionMemory
 
 TranspositionMemory.new = function()
 	local mem = setmetatable(Memory.new(), TranspositionMemory)
-	for s = 1, mem.n_slots do
-		local transposition = {}
-		for v = 1, n_voices do
-			transposition[v] = 0.75 - v / 4
-		end
-		mem.slots[s] = transposition
-	end
+	mem:initialize()
 	return mem
+end
+
+function TranspositionMemory:get_slot_default(s)
+	local transposition = {}
+	local interval = (self.n_slots - s + 1) / 12
+	local middle_voice = math.floor(n_voices / 2) + 1
+	for v = 1, n_voices do
+		transposition[v] = (middle_voice - v) * interval
+	end
+	return transposition
 end
 
 function TranspositionMemory:set(transposition, new_transposition)

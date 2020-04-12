@@ -18,9 +18,10 @@ ShiftRegister = include 'lib/shift_register'
 ShiftRegisterVoice = include 'lib/shift_register_voice'
 Scale = include 'lib/scale'
 Blinker = include 'lib/blinker'
-LoopMemory = include 'lib/memory_loop'
+PitchMemory = include 'lib/memory_pitch'
 MaskMemory = include 'lib/memory_mask'
 TranspositionMemory = include 'lib/memory_transposition'
+ModMemory = include 'lib/memory_mod'
 
 pitch_poll = nil
 pitch_in_value = 0
@@ -216,10 +217,10 @@ memory_mask = 2
 memory_transposition = 3
 memory_mod_loop = 4
 memory = {
-	pitch = LoopMemory.new('pitch', pitch_register, -3),
+	pitch = PitchMemory.new(),
 	mask = MaskMemory.new(),
 	transposition = TranspositionMemory.new(),
-	mod = LoopMemory.new('mod', mod_register, -4)
+	mod = ModMemory.new()
 }
 
 function quantization_off()
