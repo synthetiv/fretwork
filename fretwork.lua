@@ -109,7 +109,8 @@ for v = 1, n_voices do
 		recent_voice_notes[v][n] = {
 			pitch_id = 0,
 			active = false,
-			level = 0
+			onset_level = 0,
+			release_level = 0
 		}
 	end
 end
@@ -239,17 +240,16 @@ redraw_metro = metro.init{
 		for v = 1, n_voices do
 			for n = 1, n_recent_voice_notes do
 				local note = recent_voice_notes[v][n]
-				if note.active then
-					if note.level > 1 then
-						note.level = math.max(1, note.level * 0.9)
-						dirty = true
-					end
-				else
-					if note.level > 0.06 then -- < 1/15
-						note.level = note.level * 0.6
+				if note.onset_level > 0 then
+					note.onset_level = note.onset_level - 1
+					dirty = true
+				end
+				if not note.active then
+					if note.release_level > 0.06 then -- < 1/15
+						note.release_level = note.release_level * 0.4
 						dirty = true
 					else
-						note.level = 0
+						note.release_level = 0
 					end
 				end
 			end
@@ -302,11 +302,13 @@ function flash_note(v, active)
 	if active then
 		-- real, active note
 		recent_note.active = true
-		recent_note.level = 1.2
+		recent_note.onset_level = 2
+		recent_note.release_level = 1
 	else
 		-- "ghost" note that just flashes once
 		recent_note.active = false
-		recent_note.level = 0.5
+		recent_note.onset_level = 2
+		recent_note.release_level = 0
 	end
 	dirty = true
 end
@@ -478,6 +480,12 @@ function update_voice_order()
 	voice_draw_order = new_draw_order
 end
 
+function led_blend(a, b)
+	a = 1 - a / 15
+	b = 1 - b / 15
+	return (1 - (a * b)) * 15
+end
+
 function grid_redraw()
 
 	-- mode buttons
@@ -570,10 +578,12 @@ function grid_redraw()
 				local pitch_id = note.pitch_id
 				local bias_pitch_id = note.bias_pitch_id
 				local noisy_bias_pitch_id = note.noisy_bias_pitch_id
-				if note.level > 0 then
-					absolute_pitch_levels[pitch_id] = math.max(absolute_pitch_levels[pitch_id], note.level * voice_level)
-					relative_pitch_levels[bias_pitch_id] = math.max(relative_pitch_levels[bias_pitch_id], note.level * voice_level)
-					relative_pitch_levels[noisy_bias_pitch_id] = math.max(relative_pitch_levels[noisy_bias_pitch_id], note.level * voice_level / 2)
+				local release_level = note.release_level * voice_level
+				local level = release_level + note.onset_level
+				if release_level > 0 or note.onset_level > 0 then
+					absolute_pitch_levels[pitch_id] = led_blend(absolute_pitch_levels[pitch_id], level)
+					relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], level)
+					relative_pitch_levels[noisy_bias_pitch_id] = led_blend(relative_pitch_levels[noisy_bias_pitch_id], release_level / 2 + note.onset_level)
 				end
 			end
 		end
@@ -616,7 +626,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 	local level = absolute_pitch_levels[n]
 	-- highlight mask
 	if self.scale:mask_contains(n) then
-		level = math.max(level, 4)
+		level = led_blend(level, 4)
 	end
 	return math.min(15, math.floor(level))
 end
@@ -628,15 +638,15 @@ function mask_keyboard:get_key_level(x, y, n)
 	local in_mask = self.scale:mask_contains(n)
 	local in_next_mask = self.scale:next_mask_contains(n)
 	if in_mask and in_next_mask then
-		level = math.max(level, 5)
+		level = led_blend(level, 5)
 	elseif in_next_mask then
-		level = math.max(level, 4)
+		level = led_blend(level, 4)
 	elseif in_mask then
-		level = math.max(level, 3)
+		level = led_blend(level, 3)
 	end
 	-- highlight white keys
 	if self:is_white_key(n) then
-		level = math.max(level, 2)
+		level = led_blend(level, 2)
 	end
 	return math.min(15, math.floor(level))
 end
