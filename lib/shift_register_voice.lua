@@ -95,9 +95,9 @@ function ShiftRegisterVoice:update_path(start_offset, end_offset)
 		local note = path[n]
 		local offset = start_offset + n
 		note.pitch = pitch_tap:get(offset)
-		note.pitch_pos = pitch_tap:get_pos(offset)
+		note.pitch_pos = pitch_tap.shift_register:clamp_loop_pos(pitch_tap:get_pos(offset))
 		note.mod = mod_tap:get(offset)
-		note.mod_pos = mod_tap:get_pos(offset)
+		note.mod_pos = mod_tap.shift_register:clamp_loop_pos(mod_tap:get(offset))
 		note.gate = mod_to_gate(note.mod)
 	end
 	return path

@@ -342,6 +342,8 @@ function update_voice(v)
 			dim_note(v)
 		end
 	end
+	voice:update_path(-screen_note_center, n_screen_notes - screen_note_center)
+	calculate_voice_path(v)
 end
 
 function update_voices()
@@ -1467,46 +1469,53 @@ function get_screen_note_y(value)
 	return util.round(32 + (view_octave - value) * 12)
 end
 
--- calculate coordinates for each visible note
-function calculate_voice_path(v, level)
+-- calculate coordinates and levels for each visible note
+function calculate_voice_path(v)
 	local voice = voices[v]
-	local path = voice:update_path(-screen_note_center, n_screen_notes - screen_note_center)
+	local notes = screen_notes[v]
+	local path = voice.path
 	for n = 1, n_screen_notes do
-		local note = screen_notes[v][n]
+		local note = notes[n]
+		local point = path[n]
 		note.x = (n - 1) * screen_note_width
-		note.y = get_screen_note_y(scale:snap(path[n].pitch))
-		note.gate = path[n].gate
-		note.pitch_pos = path[n].pitch_pos
-		note.mod_pos = path[n].mod_pos
-		note.level = level
-		for w = 1, n_recent_writes do
-			local write = recent_writes[w]
-			if write.level > 0 then
-				if write.type == write_type_pitch and pitch_register:clamp_loop_pos(note.pitch_pos) == pitch_register:clamp_loop_pos(write.pos) then
-					note.level = math.max(note.level, write.level)
-				elseif write.type == write_type_mod and mod_register:clamp_loop_pos(note.mod_pos) == mod_register:clamp_loop_pos(write.pos) then
-					note.level = math.max(note.level, write.level)
-				end
-			end
-		end
+		note.y = get_screen_note_y(scale:snap(point.pitch))
+		note.gate = point.gate
+		note.pitch_pos = point.pitch_pos
+		note.mod_pos = point.mod_pos
 	end
 end
 
 function draw_voice_path(v, level)
 	local voice = voices[v]
+	local notes = screen_notes[v]
 
-	calculate_voice_path(v, level)
+	for n = 1, n_screen_notes do
+		local note = notes[n]
+		local level = 0
+		for w = 1, n_recent_writes do
+			local write = recent_writes[w]
+			if write.level > 0 then
+				if write.type == write_type_pitch and note.pitch_pos == pitch_register:clamp_loop_pos(write.pos) then
+					level = write.level
+				end
+				if write.type == write_type_mod and note.mod_pos == mod_register:clamp_loop_pos(write.pos) then
+					level = math.max(level, write.level)
+				end
+			end
+		end
+		note.level = level
+	end
 
 	-- draw background/outline
 	screen.line_cap('square')
 	screen.line_width(3)
 	screen.level(0)
 	for n = 1, n_screen_notes do
-		local note = screen_notes[v][n]
+		local note = notes[n]
 		local x = note.x + 0.5
 		local y = note.y + 0.5
 		local gate = voice.active and note.gate
-		local prev_note = screen_notes[v][n - 1] or note
+		local prev_note = notes[n - 1] or note
 		local prev_gate = voice.active and prev_note.gate
 		-- draw connector, if this note and the previous note are active
 		if prev_gate and gate then
@@ -1521,30 +1530,30 @@ function draw_voice_path(v, level)
 			screen.move(x + screen_note_width, y)
 		end
 	end
-	screen.stroke()
 	screen.line_cap('butt')
 
 	-- draw foreground/path
 	screen.line_width(1)
 	for n = 1, n_screen_notes do
-		local note = screen_notes[v][n]
+		local note = notes[n]
 		local x = note.x
 		local y = note.y + 0.5
 		local gate = voice.active and note.gate
-		local level = note.level
-		local prev_note = screen_notes[v][n - 1] or note
+		local note_level = note.level
+		local prev_note = notes[n - 1] or note
 		local prev_x = prev_note.x
 		local prev_y = prev_note.y + 0.5
 		local prev_gate = voice.active and prev_note.gate
 		local prev_level = prev_note.level
 		-- draw connector
 		if prev_gate and gate then
-			local connector_level = math.min(level, prev_level) + math.floor(math.abs(level - prev_level) / 4)
+			-- TODO: this is a slow point, apparently
+			local connector_level = math.max(note_level, prev_level) / 4
 			local min_y = math.min(prev_y, y)
 			local max_y = math.max(prev_y, y)
 			screen.move(x + 0.5, math.min(max_y, min_y + 0.5))
 			screen.line(x + 0.5, math.max(min_y, max_y - 0.5))
-			screen.level(connector_level)
+			screen.level(math.ceil(led_blend(level, connector_level)))
 			screen.stroke()
 		else
 			screen.move(x + 0.5, y)
@@ -1554,7 +1563,7 @@ function draw_voice_path(v, level)
 			-- solid line for active notes
 			screen.move(x, y)
 			screen.line(x + screen_note_width + 1, y)
-			screen.level(level)
+			screen.level(math.ceil(led_blend(level, note_level)))
 			screen.stroke()
 		elseif voice_selector:is_selected(v) then
 			-- dotted line for inactive notes
@@ -1565,11 +1574,10 @@ function draw_voice_path(v, level)
 			end
 			screen.pixel(x + 2, y)
 			screen.pixel(x + 4, y)
-			screen.level(math.ceil(level / 3))
+			screen.level(math.ceil(led_blend(level, note_level) / 3))
 			screen.fill(0)
 		end
 	end
-	screen.stroke()
 end
 
 function draw_tap_equation(y, label, tap, multiplier, editing)
