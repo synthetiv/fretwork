@@ -248,8 +248,9 @@ redraw_metro = metro.init{
 					if note.release_level > 0.06 then -- < 1/15
 						note.release_level = note.release_level * 0.4
 						dirty = true
-					else
+					elseif note.release_level > 0 then
 						note.release_level = 0
+						dirty = true
 					end
 				end
 			end
@@ -567,11 +568,11 @@ function grid_redraw()
 		for v = 1, n_voices do
 			local voice = voices[v]
 			local recent_notes = recent_voice_notes[v]
-			local voice_level = 7
+			local voice_level = 3
 			if v == top_voice_index then
-				voice_level = 14
+				voice_level = 13
 			elseif voice_selector:is_selected(v) then
-				voice_level = 10
+				voice_level = 5
 			end
 			for n = 1, n_recent_voice_notes do
 				local note = recent_notes[n]
@@ -626,7 +627,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 	local level = absolute_pitch_levels[n]
 	-- highlight mask
 	if self.scale:mask_contains(n) then
-		level = led_blend(level, 4)
+		level = led_blend(level, 3.5)
 	end
 	return math.min(15, math.floor(level))
 end
@@ -638,11 +639,11 @@ function mask_keyboard:get_key_level(x, y, n)
 	local in_mask = self.scale:mask_contains(n)
 	local in_next_mask = self.scale:next_mask_contains(n)
 	if in_mask and in_next_mask then
-		level = led_blend(level, 5)
-	elseif in_next_mask then
 		level = led_blend(level, 4)
+	elseif in_next_mask then
+		level = led_blend(level, 2)
 	elseif in_mask then
-		level = led_blend(level, 3)
+		level = led_blend(level, 1)
 	end
 	-- highlight white keys
 	if self:is_white_key(n) then
