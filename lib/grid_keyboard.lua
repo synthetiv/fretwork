@@ -16,10 +16,6 @@ function Keyboard.new(x, y, width, height, scale)
 		instance.row_offsets[row] = instance.scale.center_pitch_id + (instance.y_center - row) * 5
 	end
 	instance:set_white_keys()
-	-- this method can be redefined on the fly
-	instance.get_key_level = function(self, x, y, n)
-		return instance:is_white_key(n) and 2 or 0
-	end
 	return instance
 end
 
@@ -111,7 +107,11 @@ function Keyboard:is_key_last(x, y)
 	return self:get_key_id(x, y) == self.last_key
 end
 
+function Keyboard:predraw()
+end
+
 function Keyboard:draw(g)
+	self:predraw()
 	for x = self.x, self.x2 do
 		for y = self.y, self.y2 do
 			local n = self:get_key_pitch_id(x, y)
@@ -141,6 +141,11 @@ end
 
 function Keyboard:is_white_key(n)
 	return self.white_keys[self.scale:get_pitch_class(n)]
+end
+
+-- this method can be redefined on the fly
+function Keyboard:get_key_level(x, y, n)
+	return self:is_white_key(n) and 2 or 0
 end
 
 return Keyboard
