@@ -136,6 +136,13 @@ held_keys = {
 	edit_fine = false
 }
 
+absolute_pitch_levels = {} -- used by pitch + mask keyboards
+relative_pitch_levels = {} -- used by transpose keyboard
+for n = 1, scale.n_values do
+	absolute_pitch_levels[n] = 0
+	relative_pitch_levels[n] = 0
+end
+
 view_octave = 0
 
 pitch_keyboard_played = false -- i.e. played since last tick
@@ -471,13 +478,6 @@ function update_voice_order()
 	voice_draw_order = new_draw_order
 end
 
-absolute_pitch_levels = {} -- used by pitch + mask keyboards
-relative_pitch_levels = {} -- used by transpose keyboard
-for n = 1, scale.n_values do
-	absolute_pitch_levels[n] = 0
-	relative_pitch_levels[n] = 0
-end
-
 function grid_redraw()
 
 	-- mode buttons
@@ -549,7 +549,6 @@ function grid_redraw()
 	g:led(4, 8, 2 + math.max(view_octave, 0))
 
 	if active_keyboard ~= nil then
-
 		-- calculate levels for keyboards
 		local low_pitch_id = active_keyboard:get_key_pitch_id(pitch_keyboard.x, pitch_keyboard.y2)
 		local high_pitch_id = active_keyboard:get_key_pitch_id(pitch_keyboard.x2, pitch_keyboard.y)
