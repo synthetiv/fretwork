@@ -57,9 +57,6 @@ end
 
 function ShiftRegisterVoice:set_pitch(t, pitch)
 	self.pitch_tap:set(t, pitch)
-	if t == 0 then
-		self:update_values()
-	end
 end
 
 function ShiftRegisterVoice:get_gate(t)
@@ -68,17 +65,11 @@ end
 
 function ShiftRegisterVoice:set_gate(t, gate)
 	self.mod_tap:set(t, gate and 1 or 0)
-	if t == 0 then
-		self:update_values()
-	end
 end
 
 -- TODO: occasionally, thanks to a special coincidence of noise + bias values, this doesn't work...
 function ShiftRegisterVoice:toggle_gate(t)
 	self:set_gate(t, not self:get_gate(t))
-	if t == 0 then
-		self:update_values()
-	end
 end
 
 function ShiftRegisterVoice:initialize_path(length)

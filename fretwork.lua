@@ -89,8 +89,8 @@ clock_mode_grid = 2
 clock_mode_trig_grid = 3
 clock_mode_beatclock = 4
 
-voices = {}
 n_voices = 4
+voices = {}
 voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
 for v = 1, n_voices do
@@ -98,6 +98,21 @@ for v = 1, n_voices do
 	voices[v] = voice
 end
 top_voice = voices[top_voice_index]
+
+n_recent_voice_notes = 4
+recent_voice_notes = {}
+for v = 1, n_voices do
+	recent_voice_notes[v] = {
+		last = n_recent_voice_notes
+	}
+	for n = 1, n_recent_voice_notes do
+		recent_voice_notes[v][n] = {
+			pitch_id = 0,
+			active = false,
+			level = 0
+		}
+	end
+end
 
 grid_mode_selector = Select.new(1, 1, 4, 1)
 grid_mode_pitch = 1
@@ -156,11 +171,12 @@ for v = 1, n_voices do
 	end
 end
 
-last_write = 0
 n_recent_writes = 8
 write_type_pitch = 1
 write_type_mod = 2
-recent_writes = {}
+recent_writes = {
+	last = n_recent_writes
+}
 for w = 1, n_recent_writes do
 	recent_writes[w] = {
 		type = 0,
@@ -195,7 +211,9 @@ dirty = false
 redraw_metro = metro.init{
 	time = framerate,
 	event = function(tick)
+
 		x0x_roll:smooth_hold_distance()
+
 		if not blink_slow and tick % 8 > 3 then
 			blink_slow = true
 			dirty = true
@@ -203,10 +221,40 @@ redraw_metro = metro.init{
 			blink_slow = false
 			dirty = true
 		end
+
 		if dirty then
 			grid_redraw()
 			redraw()
 			dirty = false
+		end
+
+		-- fade recent voice notes
+		for v = 1, n_voices do
+			for n = 1, n_recent_voice_notes do
+				local note = recent_voice_notes[v][n]
+				if note.active then
+					if note.level > 1 then
+						note.level = math.max(1, note.level * 0.9)
+						dirty = true
+					end
+				else
+					if note.level > 0.06 then -- < 1/15
+						note.level = note.level * 0.6
+						dirty = true
+					else
+						note.level = 0
+					end
+				end
+			end
+		end
+
+		-- fade write indicators
+		for w = 1, n_recent_writes do
+			local write = recent_writes[w]
+			if write.level > 0 then
+				write.level = math.floor(write.level * 0.7)
+				dirty = true
+			end
 		end
 	end
 }
@@ -228,14 +276,61 @@ function quantization_off()
 	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
 end
 
+function flash_note(v, active)
+	local voice = voices[v]
+	local pitch_tap = voices[v].pitch_tap
+	local recent_notes = recent_voice_notes[v]
+	local recent_note = recent_notes[recent_notes.last]
+	-- stop the previous note
+	recent_note.active = false
+	-- update the new one
+	recent_notes.last = recent_notes.last % n_recent_voice_notes + 1
+	recent_note = recent_notes[recent_notes.last]
+	-- set absolute pitch data
+	recent_note.pitch_id = voice.pitch_id
+	-- set relative pitch data
+	recent_note.bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.bias)
+	recent_note.noisy_bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.bias + pitch_tap.noise_values:get(0) * pitch_tap.noise)
+	-- set level
+	if active then
+		-- real, active note
+		recent_note.active = true
+		recent_note.level = 1.2
+	else
+		-- "ghost" note that just flashes once
+		recent_note.active = false
+		recent_note.level = 0.5
+	end
+	dirty = true
+end
+
+function dim_note(v)
+	local recent_notes = recent_voice_notes[v]
+	local recent_note = recent_notes[recent_notes.last]
+	recent_note.active = false
+	dirty = true
+end
+
 function update_voice(v)
 	local voice = voices[v]
+	local prev_gate = voice.gate
+	local prev_active = voice.active
+	local prev_pitch_id = voice.pitch_id
 	voice:update_values()
 	if voice.active and voice.gate then
 		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
 		-- crow.output[v].volts = voice.value
+		if not prev_gate or not prev_active or prev_pitch_id ~= voice.pitch_id then
+			flash_note(v, true)
+		end
 	else
 		engine.stop(v - 1)
+		if voice.gate and voice_selector:is_selected(v) then
+			-- if gate is active but voice is muted, flash a ghost note
+			flash_note(v, false)
+		else
+			dim_note(v)
+		end
 	end
 end
 
@@ -272,11 +367,12 @@ function maybe_write()
 end
 
 function flash_write(write_type, pos)
-	last_write = last_write % n_recent_writes + 1
-	local write = recent_writes[last_write]
+	recent_writes.last = recent_writes.last % n_recent_writes + 1
+	local write = recent_writes[recent_writes.last]
 	write.type = write_type
 	write.pos = pos
 	write.level = 15
+	dirty = true
 end
 
 function write(pitch)
@@ -375,6 +471,13 @@ function update_voice_order()
 	voice_draw_order = new_draw_order
 end
 
+absolute_pitch_levels = {} -- used by pitch + mask keyboards
+relative_pitch_levels = {} -- used by transpose keyboard
+for n = 1, scale.n_values do
+	absolute_pitch_levels[n] = 0
+	relative_pitch_levels[n] = 0
+end
+
 function grid_redraw()
 
 	-- mode buttons
@@ -446,6 +549,35 @@ function grid_redraw()
 	g:led(4, 8, 2 + math.max(view_octave, 0))
 
 	if active_keyboard ~= nil then
+
+		-- calculate levels for keyboards
+		local low_pitch_id = active_keyboard:get_key_pitch_id(pitch_keyboard.x, pitch_keyboard.y2)
+		local high_pitch_id = active_keyboard:get_key_pitch_id(pitch_keyboard.x2, pitch_keyboard.y)
+		for n = low_pitch_id, high_pitch_id do
+			absolute_pitch_levels[n] = 0
+			relative_pitch_levels[n] = 0
+		end
+		for v = 1, n_voices do
+			local voice = voices[v]
+			local recent_notes = recent_voice_notes[v]
+			local voice_level = 7
+			if v == top_voice_index then
+				voice_level = 14
+			elseif voice_selector:is_selected(v) then
+				voice_level = 10
+			end
+			for n = 1, n_recent_voice_notes do
+				local note = recent_notes[n]
+				local pitch_id = note.pitch_id
+				local bias_pitch_id = note.bias_pitch_id
+				local noisy_bias_pitch_id = note.noisy_bias_pitch_id
+				if note.level > 0 then
+					absolute_pitch_levels[pitch_id] = math.max(absolute_pitch_levels[pitch_id], note.level * voice_level)
+					relative_pitch_levels[bias_pitch_id] = math.max(relative_pitch_levels[bias_pitch_id], note.level * voice_level)
+					relative_pitch_levels[noisy_bias_pitch_id] = math.max(relative_pitch_levels[noisy_bias_pitch_id], note.level * voice_level / 2)
+				end
+			end
+		end
 		-- keyboard, for keyboard-based modes
 		active_keyboard:draw(g)
 	else
@@ -477,149 +609,48 @@ function grid_redraw()
 end
 
 function pitch_keyboard:get_key_level(x, y, n)
-	local level = 0
-	-- highlight mask
-	if self.scale:mask_contains(n) then
-		level = 4
+	-- highlight current note (and return, because nothing can be brighter)
+	if self.n_held_keys > 0 and self:is_key_last(x, y) then
+		return 15
 	end
 	-- highlight voice notes
-	for v = 1, n_voices do
-		local voice = voices[v]
-		if voice.active and voice.gate and n == voice.pitch_id then
-			if v == top_voice_index then
-				level = 14
-			elseif voice_selector:is_selected(v) then
-				level = math.max(level, 10)
-			else
-				level = math.max(level, 7)
-			end
-		end
+	local level = absolute_pitch_levels[n]
+	-- highlight mask
+	if self.scale:mask_contains(n) then
+		level = math.max(level, 4)
 	end
-	-- highlight current note
-	if self.n_held_keys > 0 and self:is_key_last(x, y) then
-		level = 15
-	end
-	return level
+	return math.min(15, math.floor(level))
 end
 
 function mask_keyboard:get_key_level(x, y, n)
-	local level = 0
-	-- highlight white keys
-	if self:is_white_key(n) then
-		level = 2
-	end
+	-- highlight voice notes
+	local level = absolute_pitch_levels[n]
 	-- highlight mask
 	local in_mask = self.scale:mask_contains(n)
 	local in_next_mask = self.scale:next_mask_contains(n)
 	if in_mask and in_next_mask then
-		level = 5
+		level = math.max(level, 5)
 	elseif in_next_mask then
-		level = 4
+		level = math.max(level, 4)
 	elseif in_mask then
-		level = 3
+		level = math.max(level, 3)
 	end
-	-- highlight voice notes
-	for v = 1, n_voices do
-		local voice = voices[v]
-		if voice.active and voice.gate and n == voice.pitch_id then
-			if v == top_voice_index then
-				level = 14
-			elseif voice_selector:is_selected(v) then
-				level = math.max(level, 10)
-			else
-				level = math.max(level, 7)
-			end
-		end
+	-- highlight white keys
+	if self:is_white_key(n) then
+		level = math.max(level, 2)
 	end
-	return level
-end
-
-transpose_keyboard.draw_data = {
-	voices = {}
-}
-for v = 1, n_voices do
-	transpose_keyboard.draw_data.voices[v] = {
-		bias = 0,
-		noisy_bias = 0,
-		next_bias = 0,
-		noise_range = {
-			lll = 0, ll = 0, l = 0,
-			h = 0, hh = 0, hhh = 0
-		}
-	}
-end
-
-function transpose_keyboard:predraw()
-	local data = self.draw_data
-	local scale = self.scale
-	for v = 1, n_voices do
-		local voice = voices[v]
-		local voice_data = data.voices[v]
-		local tap = voice.pitch_tap
-		local bias = tap.bias
-		voice_data.bias = scale:get_nearest_pitch_id(bias)
-		voice_data.noisy_bias = scale:get_nearest_pitch_id(bias + tap.noise_values:get(0) * tap.noise)
-		voice_data.next_bias = scale:get_nearest_pitch_id(tap.next_bias)
-		-- TODO: this seems, like... so dumb
-		local noise_range = voice_data.noise_range
-		noise_range.lll = scale:get_nearest_pitch_id(bias - tap.noise * 1.5)
-		noise_range.ll = scale:get_nearest_pitch_id(bias - tap.noise)
-		noise_range.l = scale:get_nearest_pitch_id(bias - tap.noise * 0.5)
-		noise_range.h = scale:get_nearest_pitch_id(bias + tap.noise * 0.5)
-		noise_range.hh = scale:get_nearest_pitch_id(bias + tap.noise)
-		noise_range.hhh = scale:get_nearest_pitch_id(bias + tap.noise * 1.5)
-	end
+	return math.min(15, math.floor(level))
 end
 
 function transpose_keyboard:get_key_level(x, y, n)
-	local data = self.draw_data
-	local level = 0
+	local level = relative_pitch_levels[n]
+	-- highlight transposition settings
+	-- TODO: this is mostly taken care of by flashing notes now, but it would be nice to show 'next's
 	-- highlight octaves
 	if (n - scale.center_pitch_id) % scale.length == 0 then
-		level = 2
+		level = math.max(level, 2)
 	end
-	-- highlight transposition settings
-	for v = 1, n_voices do
-		local voice = voices[v]
-		local voice_data = data.voices[v]
-		if voice.active then
-			local is_bias = n == voice_data.bias
-			local is_next_bias = n == voice_data.next_bias
-			local is_noisy_bias = n == voice_data.noisy_bias
-			if is_bias and is_next_bias then
-				if v == top_voice_index then
-					level = 14
-				elseif voice_selector:is_selected(v) then
-					level = math.max(level, 10)
-				else
-					level = math.max(level, 5)
-				end
-			elseif is_next_bias then
-				if v == top_voice_index then
-					level = math.max(level, 8)
-				elseif voice_selector:is_selected(v) then
-					level = math.max(level, 7)
-				else
-					level = math.max(level, 4)
-				end
-			elseif is_noisy_bias then
-				if v == top_voice_index then
-					level = math.max(level, 6)
-				elseif voice_selector:is_selected(v) then
-					level = math.max(level, 4)
-				else
-					level = math.max(level, 3)
-				end
-			elseif n >= voice_data.noise_range.l and n <= voice_data.noise_range.h then
-				level = math.max(level, 3)
-			elseif n >= voice_data.noise_range.ll and n <= voice_data.noise_range.hh then
-				level = math.max(level, 2)
-			elseif n >= voice_data.noise_range.lll and n <= voice_data.noise_range.hhh then
-				level = math.max(level, 1)
-			end
-		end
-	end
-	return level
+	return math.min(15, math.floor(level))
 end
 
 function x0x_roll:get_key_level(x, y, v, offset, gate)
@@ -1633,14 +1664,6 @@ function redraw()
 				screen.level(15)
 				screen.fill()
 			end
-		end
-	end
-
-	-- fade write indicators
-	for w = 1, n_recent_writes do
-		local write = recent_writes[w]
-		if write ~= nil and write.level > 0 then
-			write.level = math.floor(write.level * 0.7)
 		end
 	end
 

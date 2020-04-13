@@ -107,11 +107,7 @@ function Keyboard:is_key_last(x, y)
 	return self:get_key_id(x, y) == self.last_key
 end
 
-function Keyboard:predraw()
-end
-
 function Keyboard:draw(g)
-	self:predraw()
 	for x = self.x, self.x2 do
 		for y = self.y, self.y2 do
 			local n = self:get_key_pitch_id(x, y)
