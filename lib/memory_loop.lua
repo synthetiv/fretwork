@@ -8,7 +8,7 @@ LoopMemory.new = function(type, shift_register, default_offset)
 	mem.tap_key = type .. '_tap'
 	mem.length_param = type .. '_loop_length'
 	mem.scramble_param = 'voice_%d_' .. type .. '_scramble'
-	mem.direction_param = 'voice_%d_' .. type .. '_direction'
+	mem.rate_param = 'voice_%d_' .. type .. '_rate'
 	mem.shift_register = shift_register
 	mem.default_offset = default_offset
 	return mem
@@ -23,7 +23,7 @@ function LoopMemory:get_slot_default(s)
 		loop.voices[v] = {
 			offset = (v - 1) * self.default_offset,
 			scramble = 0,
-			direction = 1
+			rate = 2
 		}
 	end
 	return loop
@@ -39,7 +39,7 @@ function LoopMemory:set(loop, new_loop)
 		local new_voice = new_loop.voices[v]
 		voice.offset = new_voice.offset
 		voice.scramble = new_voice.scramble
-		voice.direction = new_voice.direction
+		voice.rate = new_voice.rate
 	end
 end
 
@@ -47,7 +47,7 @@ function LoopMemory:recall(loop)
 	for v = 1, n_voices do
 		voices[v][self.tap_key].next_offset = loop.voices[v].offset
 		params:set(string.format(self.scramble_param, v), loop.voices[v].scramble)
-		params:set(string.format(self.direction_param, v), loop.voices[v].direction)
+		-- params:set(string.format(self.rate_param, v), loop.voices[v].direction) -- TODO
 	end
 	if quantization_off() then
 		self.shift_register:set_loop(0, loop.values)
@@ -67,7 +67,7 @@ function LoopMemory:save(loop)
 		local tap = voices[v][self.tap_key]
 		loop_voice.offset = tap:get_offset()
 		loop_voice.scramble = tap.scramble
-		loop_voice.direction = tap.direction
+		-- loop_voice.direction = tap.direction -- TODO
 	end
 	self.shift_register.dirty = false
 end

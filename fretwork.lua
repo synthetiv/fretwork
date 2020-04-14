@@ -64,11 +64,7 @@ write_probability = 0
 clock_enable = false
 beatclock = BeatClock.new()
 beatclock.on_step = function()
-	-- TODO: take advantage of this resolution: give voices/taps fractional shift rates
-	-- (positive or negative), instead of directions
-	if beatclock.step == 0 or beatclock.step == 2 then
-		events.beat()
-	end
+	events.beat()
 end
 beatclock.on_start = function()
 	clock_enable = true
@@ -207,7 +203,7 @@ edit_tap_mod = 2
 edit_tap = edit_tap_pitch
 
 n_edit_fields = 6
-edit_field_direction = 1
+edit_field_rate = 1
 edit_field_scramble = 2
 edit_field_offset = 3
 edit_field_noise = 4
@@ -418,6 +414,7 @@ function shift(d)
 	mod_register:shift(d)
 	x0x_roll:shift(-d)
 	for v = 1, n_voices do
+		-- TODO: clock the shift registers FROM taps
 		voices[v].pitch_tap:shift(d)
 		voices[v].mod_tap:shift(d)
 	end
@@ -747,6 +744,7 @@ function mask_keyboard:key(x, y, z)
 end
 
 function transpose_keyboard:key(x, y, z)
+	-- TODO: what's up with stuck/unresponsive keys?
 	self:note(x, y, z)
 	if self.n_held_keys < 1 then
 		return
@@ -1065,14 +1063,17 @@ function add_params()
 		}
 		params:add{
 			type = 'option',
-			id = string.format('voice_%d_pitch_direction', v),
-			name = string.format('voice %d pitch direction', v),
+			id = string.format('voice_%d_pitch_rate', v),
+			name = string.format('voice %d pitch rate', v),
 			options = {
-				'forward',
-				'retrograde'
+				'-1', '-1/2', '-1/3', '-1/4', '-1/5', '-1/6', '-1/7', '-1/8',
+				'0', '1/8', '1/7', '1/6', '1/5', '1/4', '1/3', '1/2', '1',
 			},
+			default = 14,
 			action = function(value)
-				voice.pitch_tap.direction = value == 2 and -1 or 1
+				local direction = value < 9 and -1 or 1
+				local ticks_per_step = 9 - math.abs(9 - value)
+				voice.pitch_tap:set_rate(direction, ticks_per_step)
 				if top_voice_index == v then
 					pitch_register:sync_to(voice.pitch_tap)
 				end
@@ -1115,14 +1116,16 @@ function add_params()
 		}
 		params:add{
 			type = 'option',
-			id = string.format('voice_%d_mod_direction', v),
-			name = string.format('voice %d mod direction', v),
+			id = string.format('voice_%d_mod_rate', v),
+			name = string.format('voice %d mod rate', v),
 			options = {
-				'forward',
-				'retrograde'
+				'-1', '-1/2', '-1/3', '-1/4', '-1/5', '-1/6', '-1/7', '-1/8',
+				'0', '1/8', '1/7', '1/6', '1/5', '1/4', '1/3', '1/2', '1',
 			},
+			default = 14,
 			action = function(value)
-				voice.mod_tap.direction = value == 2 and -1 or 1
+				voice.mod_tap.direction = value < 9 and -1 or 1
+				voice.mod_tap.ticks_per_step = 9 - math.abs(9 - value)
 				if top_voice_index == v then
 					mod_register:sync_to(voice.mod_tap)
 				end
@@ -1163,6 +1166,7 @@ function add_params()
 		id = 'output_mode',
 		name = 'output mode',
 		options = output_mode_names,
+		default = output_mode_polysub,
 		action = function(value)
 			output_mode = value
 		end
@@ -1353,20 +1357,20 @@ function enc(n, d)
 		if edit_field ~= edit_field_offset and held_keys.edit_fine then
 			d = d / 20
 		end
-		if edit_field == edit_field_direction then
+		if edit_field == edit_field_rate then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
-				-- set pitch direction
+				-- set pitch rate/direction
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_pitch_direction', v), -d)
+						params:delta(string.format('voice_%d_pitch_rate', v), d)
 					end
 				end
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
-				-- set mod direction
+				-- set mod rate/direction
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_mod_direction', v), -d)
+						params:delta(string.format('voice_%d_mod_rate', v), d)
 					end
 				end
 			end
@@ -1393,10 +1397,10 @@ function enc(n, d)
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
-						voice.pitch_tap:shift(-d)
+						voice.pitch_tap:shift(-d, true)
 					end
 				end
-				pitch_register:shift(-d)
+				pitch_register:shift(-d) -- TODO: shift from tap
 				memory.pitch.dirty = true
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
@@ -1404,10 +1408,10 @@ function enc(n, d)
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
-						voice.mod_tap:shift(-d)
+						voice.mod_tap:shift(-d, true)
 					end
 				end
-				mod_register:shift(-d)
+				mod_register:shift(-d) -- TODO: shift from tap
 				memory.mod.dirty = true
 			end
 		elseif edit_field == edit_field_noise then
@@ -1503,6 +1507,8 @@ function calculate_voice_path(v)
 	end
 end
 
+-- TODO: these aren't getting updated when changing octaves while paused
+-- TODO: are writes even flashing correctly when not playing?
 function draw_voice_path(v, level)
 	local voice = voices[v]
 	local notes = screen_notes[v]
@@ -1525,6 +1531,7 @@ function draw_voice_path(v, level)
 	end
 
 	-- draw background/outline
+	-- TODO: fix glitchy strokes
 	screen.line_cap('square')
 	screen.line_width(3)
 	screen.level(0)
@@ -1599,7 +1606,7 @@ function draw_voice_path(v, level)
 end
 
 function draw_tap_equation(y, label, tap, multiplier, editing)
-	local highlight_direction = editing and edit_field == edit_field_direction
+	local highlight_rate = editing and edit_field == edit_field_rate
 	local highlight_scramble = editing and edit_field == edit_field_scramble
 	local highlight_offset = editing and edit_field == edit_field_offset
 	local highlight_noise = editing and edit_field == edit_field_noise
@@ -1607,8 +1614,9 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	local highlight_length = editing and edit_field == edit_field_length
 
 	local direction = tap.direction
+	local ticks_per_step = tap.ticks_per_step
 	local scramble = tap.scramble * direction
-	local offset = tap:get_offset()
+	local offset = 0 -- TODO tap:get_offset()
 	local noise = tap.noise * direction * multiplier
 	local bias = tap.next_bias * multiplier
 	local length = tap.shift_register.length
@@ -1618,11 +1626,20 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	screen.level(3)
 	screen.text(label .. '[')
 
-	screen.level(highlight_direction and 15 or 3)
-	if direction < 0 then
-		screen.text('-t')
+	screen.level(highlight_rate and 15 or 3)
+	if ticks_per_step == 9 then
+		if highlight_rate then
+			screen.text('0')
+		end
 	else
-		screen.text('t')
+		if direction < 0 then
+			screen.text('-t')
+		else
+			screen.text('t')
+		end
+		if ticks_per_step ~= 1 then
+			screen.text(string.format('/%d', ticks_per_step))
+		end
 	end
 
 	screen.level(highlight_scramble and 15 or 3)
