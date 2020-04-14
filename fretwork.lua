@@ -89,6 +89,14 @@ clock_mode_grid = 2
 clock_mode_trig_grid = 3
 clock_mode_beatclock = 4
 
+output_mode_crow = 1
+output_mode_polysub = 2
+output_mode_names = {
+	'crow',
+	'polysub'
+}
+output_mode = output_mode_crow
+
 n_voices = 4
 voices = {}
 voice_draw_order = { 4, 3, 2, 1 }
@@ -328,13 +336,19 @@ function update_voice(v)
 	local prev_pitch_id = voice.pitch_id
 	voice:update_values()
 	if voice.active and voice.gate then
-		engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
-		-- crow.output[v].volts = voice.value
+		if output_mode == output_mode_crow then
+			crow.output[v].volts = voice.pitch
+		elseif output_mode == output_mode_polysub then
+			engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
+		end
 		if not prev_gate or not prev_active or prev_pitch_id ~= voice.pitch_id then
 			flash_note(v, true)
 		end
 	else
-		engine.stop(v - 1)
+		if output_mode == output_mode_crow then
+		elseif output_mode == output_mode_polysub then
+			engine.stop(v - 1)
+		end
 		if voice.gate and voice_selector:is_selected(v) then
 			-- if gate is active but voice is muted, flash a ghost note
 			flash_note(v, false)
@@ -1143,6 +1157,16 @@ function add_params()
 	end
 
 	params:add_separator()
+
+	params:add{
+		type = 'option',
+		id = 'output_mode',
+		name = 'output mode',
+		options = output_mode_names,
+		action = function(value)
+			output_mode = value
+		end
+	}
 
 	params:add_group('polysub', 19)
 	polysub.params()
