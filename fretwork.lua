@@ -531,28 +531,22 @@ function grid_redraw()
 
 	-- voice buttons
 	for y = voice_selector.y, voice_selector.y2 do
-		local level = 0
 		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
 		local voice = voices[voice_index]
-		local gate_level = (voice.active and voice.gate) and 1 or 0
+		local notes = recent_voice_notes[voice_index]
+		local last_note = notes[notes.last]
+		local level = last_note.release_level * 3
 		if voice.next_active then
-			if voice_index == top_voice_index then
-				level = 14 + gate_level
-			elseif voice_selector:is_selected(voice_index) then
-				level = 9 + gate_level
-			else
-				level = 3 + gate_level
-			end
-		else
-			if voice_index == top_voice_index then
-				level = 12 + gate_level
-			elseif voice_selector:is_selected(voice_index) then
-				level = 7 + gate_level
-			else
-				level = 1 + gate_level
-			end
+			level = level + last_note.onset_level
 		end
-		g:led(voice_selector.x, y, level)
+		if voice_index == top_voice_index then
+			level = level + 11
+		elseif voice_selector:is_selected(voice_index) then
+			level = level + 6
+		else
+			level = level + 2
+		end
+		g:led(voice_selector.x, y, math.floor(math.min(15, level)))
 	end
 
 	-- octave switches
