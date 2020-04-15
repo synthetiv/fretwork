@@ -1526,7 +1526,6 @@ function draw_voice_path(v, level)
 	end
 
 	-- draw background/outline
-	-- TODO: fix glitchy strokes
 	screen.line_cap('square')
 	screen.line_width(3)
 	screen.level(0)
@@ -1596,6 +1595,8 @@ function draw_voice_path(v, level)
 			screen.pixel(x + 4, y)
 			screen.level(math.ceil(led_blend(level, note_level) / 3))
 			screen.fill(0)
+		else
+			screen.stroke()
 		end
 	end
 end
