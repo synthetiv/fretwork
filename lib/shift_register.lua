@@ -50,13 +50,11 @@ end
 
 --- convert a relative offset from the start point to an absolute position [start, end]
 function ShiftRegister:get_loop_offset_pos(offset)
-	-- return self.start + self:clamp_loop_offset(offset)
 	return self:clamp_loop_pos(self.start + offset)
 end
 
 function ShiftRegister:sync_to(tap)
 	local direction = tap.direction
-	self.direction = direction
 	local pos = tap.pos
 	local diff = pos - self.start
 	if direction > 0 then
@@ -66,6 +64,10 @@ function ShiftRegister:sync_to(tap)
 	end
 	diff = diff % (self.length * direction)
 	diff = diff * direction
+	print('sync from', self.direction, self.start, self.start + self.length - 1)
+	print('    ...to', direction, tap.pos)
+	print('    diff:', diff)
+	self.direction = direction
 	if diff ~= 0 then
 		self:jump(diff)
 	end

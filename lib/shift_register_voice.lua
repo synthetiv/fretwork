@@ -12,13 +12,14 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	local voice = setmetatable({}, ShiftRegisterVoice)
 	voice.active = true
 	voice.next_active = true
+	voice.sync = false
 	voice.detune = 0
 	voice.pitch_id = -1
 	voice.pitch = 0
-	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register)
+	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register, voice)
 	voice.scale = scale
 	voice.mod = 0
-	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register)
+	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register, voice)
 	voice.gate = false
 	return voice
 end

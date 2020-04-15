@@ -410,16 +410,11 @@ function write(pitch)
 end
 
 function shift(d)
-	pitch_register:shift(d)
-	mod_register:shift(d)
-	x0x_roll:shift(-d)
 	for v = 1, n_voices do
-		-- TODO: clock the shift registers FROM taps
 		voices[v].pitch_tap:shift(d)
 		voices[v].mod_tap:shift(d)
 	end
-	pitch_register:sync_to(top_voice.pitch_tap)
-	mod_register:sync_to(top_voice.mod_tap)
+	x0x_roll:shift(-d)
 	maybe_write()
 	scale:apply_edits()
 	update_voices()
@@ -488,8 +483,10 @@ function update_voice_order()
 		table.insert(new_draw_order, v)
 	end
 	top_voice_index = new_draw_order[n_voices]
+	top_voice.sync = false -- un-sync the old top voice
 	top_voice = voices[top_voice_index]
-	pitch_register:sync_to(top_voice.pitch_tap)
+	top_voice.sync = true -- sync the new one
+	pitch_register:sync_to(top_voice.pitch_tap) -- TODO
 	mod_register:sync_to(top_voice.mod_tap)
 	voice_draw_order = new_draw_order
 end
@@ -873,7 +870,7 @@ function midi_event(data)
 		for v = 1, n_voices do
 			local voice = voices[v]
 			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
-				voice.pitch_tap:shift(1) -- TODO: shift SR if appropriate
+				voice.pitch_tap:shift(1)
 				voice.mod_tap:shift(1)
 				update_voice(v)
 				dirty = true
@@ -1075,7 +1072,7 @@ function add_params()
 				local ticks_per_step = 9 - math.abs(9 - value)
 				voice.pitch_tap:set_rate(direction, ticks_per_step)
 				if top_voice_index == v then
-					pitch_register:sync_to(voice.pitch_tap)
+					pitch_register:sync_to(voice.pitch_tap) -- TODO: any simpler way to update direction?
 				end
 				dirty = true
 				memory.transposition.dirty = true
@@ -1127,7 +1124,7 @@ function add_params()
 				voice.mod_tap.direction = value < 9 and -1 or 1
 				voice.mod_tap.ticks_per_step = 9 - math.abs(9 - value)
 				if top_voice_index == v then
-					mod_register:sync_to(voice.mod_tap)
+					mod_register:sync_to(voice.mod_tap) -- TODO
 				end
 				dirty = true
 				memory.transposition.dirty = true
@@ -1400,7 +1397,6 @@ function enc(n, d)
 						voice.pitch_tap:shift(-d, true)
 					end
 				end
-				pitch_register:shift(-d) -- TODO: shift from tap
 				memory.pitch.dirty = true
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
@@ -1411,7 +1407,6 @@ function enc(n, d)
 						voice.mod_tap:shift(-d, true)
 					end
 				end
-				mod_register:shift(-d) -- TODO: shift from tap
 				memory.mod.dirty = true
 			end
 		elseif edit_field == edit_field_noise then

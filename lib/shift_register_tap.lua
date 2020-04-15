@@ -3,10 +3,11 @@ local RandomQueue = include 'lib/random_queue'
 local ShiftRegisterTap = {}
 ShiftRegisterTap.__index = ShiftRegisterTap
 
-ShiftRegisterTap.new = function(offset, shift_register)
+ShiftRegisterTap.new = function(offset, shift_register, voice)
 	local tap = setmetatable({}, ShiftRegisterTap)
 	tap.pos = shift_register:get_loop_offset_pos(offset)
 	tap.shift_register = shift_register
+	tap.voice = voice -- TODO: does this let me simplify anything that's been annoying?
 	tap.direction = 1
 	tap.scramble = 0
 	-- TODO: is there another way to handle noise/scramble that would:
@@ -27,7 +28,7 @@ end
 function ShiftRegisterTap:set_rate(direction, ticks_per_step)
 	-- retain current position as best you can
 	local tick = self.tick / self.ticks_per_step
-	self.tick = util.round(tick * ticks_per_step)
+	self.tick = math.floor(tick * ticks_per_step) -- TODO: util.round() here sometimes rounds up so that tick == ticks_per_step, and that screws up sync with register... I think
 	self.ticks_per_step = ticks_per_step
 	self.direction = direction
 end
@@ -70,6 +71,9 @@ function ShiftRegisterTap:shift(d, manual)
 	tick = tick + d
 	d = math.floor(tick / ticks_per_step) * self.direction
 	if d ~= 0 then
+		if self.voice.sync then
+			self.shift_register:shift(d * self.direction) -- TODO: argh
+		end
 		self.scramble_values:shift(d)
 		self.noise_values:shift(d)
 		self.pos = self.shift_register:clamp_loop_pos(self.pos + d)
