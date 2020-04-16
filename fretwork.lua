@@ -63,6 +63,8 @@ write_probability = 0
 
 clock_enable = false
 beatclock = BeatClock.new()
+beatclock.ticks_per_step = 3 -- default 6
+beatclock.steps_per_beat = 8 -- default 4
 beatclock.on_step = function()
 	events.beat()
 end
@@ -116,6 +118,20 @@ for v = 1, n_voices do
 			onset_level = 0,
 			release_level = 0
 		}
+	end
+end
+
+rate_divisions = {}
+slowest_rate = 13
+for r = 1, slowest_rate do
+	if r == 1 then
+		rate_divisions[r] = '-1'
+		rate_divisions[slowest_rate * 2 - r] = '1'
+	elseif r == slowest_rate then
+		rate_divisions[r] = '0'
+	else
+		rate_divisions[r] = '-1/' .. r
+		rate_divisions[slowest_rate * 2 - r] = '1/' .. r
 	end
 end
 
@@ -1062,14 +1078,11 @@ function add_params()
 			type = 'option',
 			id = string.format('voice_%d_pitch_rate', v),
 			name = string.format('voice %d pitch rate', v),
-			options = {
-				'-1', '-1/2', '-1/3', '-1/4', '-1/5', '-1/6', '-1/7', '-1/8',
-				'0', '1/8', '1/7', '1/6', '1/5', '1/4', '1/3', '1/2', '1',
-			},
-			default = 14,
+			options = rate_divisions,
+			default = 22,
 			action = function(value)
-				local direction = value < 9 and -1 or 1
-				local ticks_per_step = 9 - math.abs(9 - value)
+				local direction = value < slowest_rate and -1 or 1
+				local ticks_per_step = slowest_rate - math.abs(slowest_rate - value)
 				voice.pitch_tap:set_rate(direction, ticks_per_step)
 				if top_voice_index == v then
 					pitch_register:sync_to(voice.pitch_tap) -- TODO: any simpler way to update direction?
@@ -1115,14 +1128,12 @@ function add_params()
 			type = 'option',
 			id = string.format('voice_%d_mod_rate', v),
 			name = string.format('voice %d mod rate', v),
-			options = {
-				'-1', '-1/2', '-1/3', '-1/4', '-1/5', '-1/6', '-1/7', '-1/8',
-				'0', '1/8', '1/7', '1/6', '1/5', '1/4', '1/3', '1/2', '1',
-			},
-			default = 14,
+			options = rate_divisions,
+			default = 22,
 			action = function(value)
-				voice.mod_tap.direction = value < 9 and -1 or 1
-				voice.mod_tap.ticks_per_step = 9 - math.abs(9 - value)
+				local direction = value < slowest_rate and -1 or 1
+				local ticks_per_step = slowest_rate - math.abs(slowest_rate - value)
+				voice.mod_tap:set_rate(direction, ticks_per_step)
 				if top_voice_index == v then
 					mod_register:sync_to(voice.mod_tap) -- TODO
 				end
@@ -1623,7 +1634,7 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	screen.text(label .. '[')
 
 	screen.level(highlight_rate and 15 or 3)
-	if ticks_per_step == 9 then
+	if ticks_per_step == slowest_rate then
 		if highlight_rate then
 			screen.text('0')
 		end

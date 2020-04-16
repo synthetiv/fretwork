@@ -28,14 +28,14 @@ end
 function ShiftRegisterTap:set_rate(direction, ticks_per_step)
 	-- retain current position as best you can
 	local tick = self.tick / self.ticks_per_step
-	self.tick = math.floor(tick * ticks_per_step) -- TODO: util.round() here sometimes rounds up so that tick == ticks_per_step, and that screws up sync with register... I think
+	self.tick = math.floor(tick * ticks_per_step)
 	self.ticks_per_step = ticks_per_step
 	self.direction = direction
 end
 	
 function ShiftRegisterTap:get_offset(t)
-	-- 9 ticks/step won't be shifted by clock, so future == past == present
-	if self.ticks_per_step == 9 then
+	-- `slowest_rate` ticks/step won't be shifted by clock, so future == past == present
+	if self.ticks_per_step == slowest_rate then
 		return 0
 	end
 	return math.floor((t + self.tick) / self.ticks_per_step) * self.direction
@@ -62,8 +62,8 @@ function ShiftRegisterTap:apply_edits()
 end
 
 function ShiftRegisterTap:shift(d, manual)
-	-- don't shift automatically if 9 ticks/step
-	if not manual and self.ticks_per_step == 9 then
+	-- don't shift automatically if `slowest_rate` ticks/step
+	if not manual and self.ticks_per_step == slowest_rate then
 		return
 	end
 	local ticks_per_step = self.ticks_per_step
