@@ -29,6 +29,18 @@ pitch_in_detected = false
 pitch_in_octave = 0
 crow_in_values = { 0, 0 }
 
+crow_slew_shapes = {
+	'linear',
+	'sine',
+	'logarithmic',
+	'exponential',
+	'now',
+	'wait',
+	'over',
+	'under',
+	'rebound'
+}
+
 -- calculate pitch class values
 et12 = {} -- 12TET
 for p = 1, 12 do 
@@ -1183,7 +1195,7 @@ function add_params()
 	params:add_group('polysub', 19)
 	polysub.params()
 
-	params:add_group('crow', 4)
+	params:add_group('crow', 8)
 	for v = 1, n_voices do
 		params:add{
 			type = 'control',
@@ -1192,6 +1204,16 @@ function add_params()
 			controlspec = controlspec.new(1, 1000, 'exp', 1, 4, 'ms'),
 			action = function(value)
 				crow.output[v].slew = value / 1000
+			end
+		}
+		params:add{
+			type = 'option',
+			id = string.format('voice_%d_slew_shape', v),
+			name = string.format('voice %d slew shape', v),
+			options = crow_slew_shapes,
+			default = 2, -- sine
+			action = function(value)
+				crow.output[v].shape = crow_slew_shapes[value]
 			end
 		}
 	end
