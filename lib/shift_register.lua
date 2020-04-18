@@ -79,9 +79,8 @@ function ShiftRegister:sync_to(tap)
 	delta = math.abs(delta % (self.loop_length * direction))
 
 	-- shift until we've reached the correct position
-	while delta ~= 0 do
-		self:shift(1)
-		delta = delta - 1
+	for s = 1, delta do
+		self:shift(direction)
 	end
 end
 
@@ -89,16 +88,15 @@ end
 -- and replace loop contents with `next_loop`, if appropriate
 -- @param delta amount to shift: -1 or +1
 function ShiftRegister:shift(delta)
-	local direction = self.sync_tap.direction
 
 	-- if shifting forward, copy the value from the start of the old loop to the end of the new;
 	-- if shifting backward, copy from old end to new start
-	local copy_from = direction > 0 and 0 or -1
-	local copy_to = direction > 0 and -1 or 0
+	local copy_from = delta > 0 and 0 or -1
+	local copy_to = delta > 0 and -1 or 0
 	-- get value to copy
 	local copy_value = self:read_offset(copy_from)
 	-- move
-	self.loop_start = self.loop_start + delta * direction
+	self.loop_start = self.loop_start + delta
 	-- write directly to buffer to avoid setting `self.dirty`
 	self.buffer[self:wrap_buffer_pos(self:get_loop_offset_pos(copy_to))] = copy_value
 

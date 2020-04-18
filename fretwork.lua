@@ -1094,8 +1094,8 @@ function add_params()
 			default = 22,
 			action = function(value)
 				local direction = value < slowest_rate and -1 or 1
-				local ticks_per_step = slowest_rate - math.abs(slowest_rate - value)
-				voice.pitch_tap:set_rate(direction, ticks_per_step)
+				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
+				voice.pitch_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
 					pitch_register:sync_to(voice.pitch_tap) -- TODO: any simpler way to update direction?
 				end
@@ -1144,8 +1144,8 @@ function add_params()
 			default = 22,
 			action = function(value)
 				local direction = value < slowest_rate and -1 or 1
-				local ticks_per_step = slowest_rate - math.abs(slowest_rate - value)
-				voice.mod_tap:set_rate(direction, ticks_per_step)
+				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
+				voice.mod_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
 					mod_register:sync_to(voice.mod_tap) -- TODO
 				end
@@ -1643,7 +1643,7 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	local highlight_length = editing and edit_field == edit_field_length
 
 	local direction = tap.direction
-	local ticks_per_step = tap.ticks_per_step
+	local ticks_per_shift = tap.ticks_per_shift
 	local scramble = tap.scramble * direction
 	local offset = 0 -- TODO tap:get_offset()
 	local noise = tap.noise * direction * multiplier
@@ -1656,7 +1656,7 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	screen.text(label .. '[')
 
 	screen.level(highlight_rate and 15 or 3)
-	if ticks_per_step == slowest_rate then
+	if ticks_per_shift == slowest_rate then
 		if highlight_rate then
 			screen.text('0')
 		end
@@ -1666,8 +1666,8 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 		else
 			screen.text('t')
 		end
-		if ticks_per_step ~= 1 then
-			screen.text(string.format('/%d', ticks_per_step))
+		if ticks_per_shift ~= 1 then
+			screen.text(string.format('/%d', ticks_per_shift))
 		end
 	end
 
