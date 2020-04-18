@@ -60,11 +60,11 @@ function ShiftRegister:get_loop_offset_pos(offset)
 	return self:wrap_loop_pos(self.loop_start + offset)
 end
 
---- set a tap to which the shift register should sync
+--- set the tap to which the shift register should sync, and sync to it
 -- SR will immediately shift enough that the sync tap is placed at the loop end (if direction > 0)
 -- or loop start (direction < 0), and then shift along with the sync tap whenever it shifts
 -- @param tap a ShiftRegisterTap belonging to this shift register
-function ShiftRegister:sync_to(tap)
+function ShiftRegister:sync_to_tap(tap)
 	local direction = tap.direction
 	self.sync_tap = tap
 

@@ -511,11 +511,9 @@ function update_voice_order()
 		table.insert(new_draw_order, v)
 	end
 	top_voice_index = new_draw_order[n_voices]
-	top_voice.sync = false -- un-sync the old top voice
 	top_voice = voices[top_voice_index]
-	top_voice.sync = true -- sync the new one
-	pitch_register:sync_to(top_voice.pitch_tap) -- TODO
-	mod_register:sync_to(top_voice.mod_tap)
+	pitch_register:sync_to_tap(top_voice.pitch_tap)
+	mod_register:sync_to_tap(top_voice.mod_tap)
 	voice_draw_order = new_draw_order
 end
 
@@ -1097,7 +1095,8 @@ function add_params()
 				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
 				voice.pitch_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
-					pitch_register:sync_to(voice.pitch_tap) -- TODO: any simpler way to update direction?
+					-- resync in case direction has changed
+					pitch_register:sync_to_tap(voice.pitch_tap)
 				end
 				dirty = true
 				memory.transposition.dirty = true
@@ -1147,7 +1146,8 @@ function add_params()
 				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
 				voice.mod_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
-					mod_register:sync_to(voice.mod_tap) -- TODO
+					-- resync in case direction has changed
+					mod_register:sync_to_tap(voice.mod_tap)
 				end
 				dirty = true
 				memory.transposition.dirty = true
