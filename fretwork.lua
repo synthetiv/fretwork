@@ -231,13 +231,13 @@ edit_tap_mod = 2
 edit_tap = edit_tap_pitch
 
 n_edit_fields = 6
-edit_field_rate = 1
-edit_field_scramble = 2
-edit_field_offset = 3
+edit_field_time = 1
+edit_field_rate = 2
+edit_field_scramble = 3
 edit_field_noise = 4
 edit_field_bias = 5
 edit_field_length = 6
-edit_field = edit_field_offset
+edit_field = edit_field_time
 
 blink_slow = false
 framerate = 1 / 15
@@ -1383,14 +1383,14 @@ function enc(n, d)
 		-- select field
 		edit_field = util.clamp(edit_field + d, 1, n_edit_fields)
 		-- disable acceleration when editing offsets
-		if edit_field == edit_field_offset then
+		if edit_field == edit_field_time then
 			norns.enc.accel(3, false)
 		else
 			norns.enc.accel(3, true)
 		end
 	elseif n == 3 then
 		-- offset can only be changed by integer values, but for other fields, allow fine adjustment
-		if edit_field ~= edit_field_offset and held_keys.edit_fine then
+		if edit_field ~= edit_field_time and held_keys.edit_fine then
 			d = d / 20
 		end
 		if edit_field == edit_field_rate then
@@ -1427,7 +1427,7 @@ function enc(n, d)
 					end
 				end
 			end
-		elseif edit_field == edit_field_offset then
+		elseif edit_field == edit_field_time then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- shift pitch tap(s)
 				for v = 1, n_voices do
@@ -1641,9 +1641,9 @@ function draw_voice_path(v, level)
 end
 
 function draw_tap_equation(y, label, tap, multiplier, editing)
+	local highlight_time = editing and edit_field == edit_field_time
 	local highlight_rate = editing and edit_field == edit_field_rate
 	local highlight_scramble = editing and edit_field == edit_field_scramble
-	local highlight_offset = editing and edit_field == edit_field_offset
 	local highlight_noise = editing and edit_field == edit_field_noise
 	local highlight_bias = editing and edit_field == edit_field_bias
 	local highlight_length = editing and edit_field == edit_field_length
@@ -1651,7 +1651,6 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	local direction = tap.direction
 	local ticks_per_shift = tap.ticks_per_shift
 	local scramble = tap.scramble * direction
-	local offset = 0 -- TODO tap:get_offset()
 	local noise = tap.noise * direction * multiplier
 	local bias = tap.next_bias * multiplier
 	local loop_length = tap.shift_register.loop_length
@@ -1661,31 +1660,24 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	screen.level(3)
 	screen.text(label .. '[')
 
+	screen.level(highlight_time and 15 or 3)
+	if direction < 0 then
+		screen.text('-t')
+	else
+		screen.text('t')
+	end
+
 	screen.level(highlight_rate and 15 or 3)
 	if ticks_per_shift == slowest_rate then
-		if highlight_rate then
-			screen.text('0')
-		end
-	else
-		if direction < 0 then
-			screen.text('-t')
-		else
-			screen.text('t')
-		end
-		if ticks_per_shift ~= 1 then
-			screen.text(string.format('/%d', ticks_per_shift))
-		end
+		screen.text('/inf')
+	elseif highlight_rate or ticks_per_shift ~= 1 then
+		screen.text(string.format('/%d', ticks_per_shift))
 	end
 
 	screen.level(highlight_scramble and 15 or 3)
 	if highlight_scramble or scramble ~= 0 then
 		screen.text(string.format('+%.1fk', scramble))
 	end
-
-	-- TODO: this way of notating offset no longer makes much sense -- it will always be 0 or length-1
-	-- for the top voice. what should we do instead?
-	screen.level(highlight_offset and 15 or 3)
-	screen.text(string.format('%+d', offset))
 
 	screen.level(3)
 	screen.text(']')
