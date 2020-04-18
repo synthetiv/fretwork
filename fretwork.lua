@@ -683,6 +683,8 @@ function mask_keyboard:get_key_level(x, y, n)
 end
 
 function transpose_keyboard:get_key_level(x, y, n)
+	-- TODO: you should really highlight each voice even when gate is low, and do something to show
+	-- the full noise range (not just the current noise value)
 	local level = relative_pitch_levels[n]
 	-- highlight transposition settings
 	-- TODO: this is mostly taken care of by flashing notes now, but it would be nice to show 'next's
@@ -977,7 +979,11 @@ function add_params()
 		default = 16,
 		action = function(value)
 			pitch_register:set_length(value)
-			update_voices()
+			-- TODO: too many calls to update_voices() choke things up, and this is only necessary when
+			-- decreasing length anyway (because that's the only thing that will change voice
+			-- positions). throttle somehow? coroutine? (you don't just want a fixed refresh rate, that
+			-- would be terrible)
+			-- update_voices()
 			blinkers.info:start()
 			dirty = true
 		end
