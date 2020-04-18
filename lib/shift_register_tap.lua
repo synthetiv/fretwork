@@ -22,6 +22,10 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.bias = 0
 	tap.tick = 0
 	tap.ticks_per_step = 2
+	-- if this is the first tap created for this shift register, sync it (TODO: is this good?)
+	if shift_register.sync_tap == nil then
+		shift_register.sync_tap = tap
+	end
 	return tap
 end
 
@@ -56,7 +60,7 @@ end
 function ShiftRegisterTap:apply_edits()
 	self.bias = self.next_bias
 	if self.next_offset ~= nil then
-		self.pos = self.shift_register:clamp_loop_pos(self.shift_register.start + self.next_offset)
+		self.pos = self.shift_register:wrap_loop_pos(self.shift_register.loop_start + self.next_offset)
 		self.next_offset = nil
 	end
 end
@@ -76,7 +80,7 @@ function ShiftRegisterTap:shift(d, manual)
 		end
 		self.scramble_values:shift(d)
 		self.noise_values:shift(d)
-		self.pos = self.shift_register:clamp_loop_pos(self.pos + d)
+		self.pos = self.shift_register:wrap_loop_pos(self.pos + d)
 		self:apply_edits()
 	end
 	self.tick = tick % ticks_per_step

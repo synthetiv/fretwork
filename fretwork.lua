@@ -447,8 +447,8 @@ function shift(d)
 	scale:apply_edits()
 	update_voices()
 	-- silently update loop length params, as they may have changed after shift
-	params:set('pitch_loop_length', pitch_register.length, true)
-	params:set('mod_loop_length', mod_register.length, true)
+	params:set('pitch_loop_length', pitch_register.loop_length, true)
+	params:set('mod_loop_length', mod_register.loop_length, true)
 	dirty = true
 end
 
@@ -1547,10 +1547,10 @@ function draw_voice_path(v, level)
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
 			if write.level > 0 then
-				if write.type == write_type_pitch and note.pitch_pos == pitch_register:clamp_loop_pos(write.pos) then
+				if write.type == write_type_pitch and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
 					level = write.level
 				end
-				if write.type == write_type_mod and note.mod_pos == mod_register:clamp_loop_pos(write.pos) then
+				if write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
 					level = math.max(level, write.level)
 				end
 			end
@@ -1648,7 +1648,7 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	local offset = 0 -- TODO tap:get_offset()
 	local noise = tap.noise * direction * multiplier
 	local bias = tap.next_bias * multiplier
-	local length = tap.shift_register.length
+	local loop_length = tap.shift_register.loop_length
 
 	screen.move(8, y)
 
@@ -1699,7 +1699,7 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	screen.text('[')
 
 	screen.level(highlight_length and 15 or 3)
-	screen.text(string.format('%d', length))
+	screen.text(string.format('%d', loop_length))
 
 	screen.level(3)
 	screen.text(']')
@@ -1776,12 +1776,12 @@ function redraw()
 	screen.line_rel(pitch_register.buffer_size, 0)
 	screen.level(1)
 	screen.stroke()
-	for offset = 1, pitch_register.length do
-		local pos = pitch_register:clamp_buffer_pos(pitch_register:get_loop_offset_pos(offset))
+	for offset = 1, pitch_register.loop_length do
+		local pos = pitch_register:wrap_buffer_pos(pitch_register:get_loop_offset_pos(offset))
 		screen.pixel(pos - 1, 0)
 		screen.level(7)
 		for v = 1, n_voices do
-			if voice_selector:is_selected(v) and pos == pitch_register:clamp_buffer_pos(pitch_register:clamp_loop_pos(voices[v].pitch_tap:get_pos(0))) then
+			if voice_selector:is_selected(v) and pos == pitch_register:wrap_buffer_pos(pitch_register:wrap_loop_pos(voices[v].pitch_tap:get_pos(0))) then
 				screen.level(15)
 			end
 		end
