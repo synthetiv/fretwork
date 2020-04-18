@@ -1396,6 +1396,8 @@ function enc(n, d)
 		if edit_field == edit_field_rate then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- set pitch rate/direction
+				-- TODO: it would be nice to be able to hold a key and invert the way this is set, so fully
+				-- c/cw = stopped and +/- full speed is at the center
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						params:delta(string.format('voice_%d_pitch_rate', v), d)
@@ -1430,6 +1432,7 @@ function enc(n, d)
 		elseif edit_field == edit_field_time then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- shift pitch tap(s)
+				-- TODO: I'd still like to be able to set this incrementally using buttons/keys
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
