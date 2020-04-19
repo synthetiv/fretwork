@@ -65,12 +65,16 @@ function ShiftRegisterTap:get_offset(t)
 		t = t - increment
 		tick = tick + increment
 		if tick >= rate then
-			offset = offset + self.direction
-			rate = self:get_rate(offset)
+			repeat
+				offset = offset + self.direction
+				rate = self:get_rate(offset)
+			until rate > 0
 			tick = 0
 		elseif tick < 0 then
-			offset = offset - self.direction
-			rate = self:get_rate(offset)
+			repeat
+				offset = offset - self.direction
+				rate = self:get_rate(offset)
+			until rate > 0
 			tick = rate - 1
 		end
 	end
@@ -78,21 +82,20 @@ function ShiftRegisterTap:get_offset(t)
 end
 
 -- TODO: this has a tendency to slow things down rather than speed them up...
--- it should also probably be possible to completely skip a step? maybe?
--- or maybe I should just make it additive rather than exponential
+-- it should also probably be possible to completely skip a step (rate == 0)
 function ShiftRegisterTap:get_rate(o)
 	local jitter = self.jitter_values:get(o * self.direction) * self.jitter
 	local rate = self.ticks_per_shift + jitter
-	return math.max(1, math.floor(rate + 0.5))
+	return math.floor(rate + 0.5)
 end
 
 --- get the past/present/future value of `pos`
 -- @param t ticks from now
 -- @return the value of `pos` in `t` ticks, potentially scrambled if `scramble` > 0
 function ShiftRegisterTap:get_pos(t)
-	t = self:get_offset(t)
-	local scramble_offset = util.round(self.scramble_values:get(t) * self.scramble)
-	return t + self.pos + scramble_offset
+	local offset = self:get_offset(t)
+	local scramble_offset = util.round(self.scramble_values:get(offset) * self.scramble)
+	return offset + self.pos + scramble_offset
 end
 
 --- get a past/present/future shift register value
@@ -123,17 +126,23 @@ function ShiftRegisterTap:shift(d, manual)
 		return
 	end
 	local rate = self:get_rate(0)
+	if rate <= 0 then
+		error('caught a NaN')
+		rate = 1
+	end
 	self.tick = self.tick + d
 	d = math.floor(self.tick / rate) * self.direction
 	if d ~= 0 then
-		if self.shift_register.sync_tap == self then
-			self.shift_register:shift(d)
-		end
-		self.scramble_values:shift(d)
-		self.noise_values:shift(d)
-		self.jitter_values:shift(d)
-		self.pos = self.shift_register:wrap_loop_pos(self.pos + d)
-		self:apply_edits()
+		repeat -- TODO: I have a bad feeling about this
+			if self.shift_register.sync_tap == self then
+				self.shift_register:shift(d)
+			end
+			self.scramble_values:shift(d)
+			self.noise_values:shift(d)
+			self.jitter_values:shift(d)
+			self.pos = self.shift_register:wrap_loop_pos(self.pos + d)
+			self:apply_edits()
+		until self:get_rate(0) > 0
 	end
 	self.tick = self.tick % rate
 end
