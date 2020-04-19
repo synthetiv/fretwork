@@ -60,30 +60,28 @@ end
 --- get the corresponding shift register step for a tick
 -- @param t ticks from now
 -- @return the difference between the current `pos` and `pos` `t` ticks from now
+-- @return the remainder in ticks, after reducing `t` by step lengths
 function ShiftRegisterTap:get_tick_step(t)
 	-- `slowest_rate` ticks/shift won't be shifted by clock, so future == past == present
 	if t == 0 or self.ticks_per_shift == slowest_rate then
-		return 0
+		return 0, self.tick
 	end
-	-- reduce `|t|` by adjacent step lengths (including the current one, which we may be partway
-	-- through) until reducing further would hit 0
+	-- reduce `|t + tick|` by current + adjacent step lengths until reducing further would hit 0
+	t = t + self.tick
 	local step = 0
-	local step_length = 0
-	local direction = 0
-	if t > 0 then
-		step_length = self:get_step_length(0) - self.tick
-		direction = 1
-	else
-		step_length = self.tick + 1
-		direction = -1
-	end
+	local direction = t > 0 and 1 or -1
+	-- if `t + tick` < 0, we've effectively already skipped the current step
+	local step_length = t > 0 and self:get_step_length(0) or 1
 	t = math.abs(t)
 	while t >= step_length do
-		step = step + direction
 		t = t - step_length
+		step = step + direction
 		step_length = self:get_step_length(step)
 	end
-	return step
+	if direction <= 0 then
+		t = step_length - t - 1
+	end
+	return step * self.direction, t
 end
 
 --- get the past/present/future value of `pos`
@@ -150,14 +148,10 @@ function ShiftRegisterTap:shift(d, manual)
 	if not manual and self.ticks_per_shift == slowest_rate then
 		return
 	end
-	local tick = self.tick + d
-	local step_length = self:get_step_length(0)
 	local synced = self.shift_register.sync_tap == self
 	local direction = d > 0 and self.direction or -self.direction
-	-- step as many times as we need to in order to get `tick` below the current step length
-	-- note: this loop could, theoretically, repeat many times if jitter amount was very high and many
-	-- jitter values in a row were < 0 (thus setting many steps' lengths to 0 ticks)
-	while tick >= step_length do
+	local steps, new_tick = self:get_tick_step(d)
+	for s = 1, math.abs(steps) do
 		if synced then
 			self.shift_register:shift(direction)
 		end
@@ -166,10 +160,8 @@ function ShiftRegisterTap:shift(d, manual)
 		self.jitter_values:shift(direction)
 		self.pos = self.shift_register:wrap_loop_pos(self.pos + direction)
 		self:apply_edits()
-		tick = tick - step_length
-		step_length = self:get_step_length(0)
 	end
-	self.tick = tick
+	self.tick = new_tick
 end
 
 return ShiftRegisterTap
