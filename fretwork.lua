@@ -431,8 +431,8 @@ function write(pitch)
 		if voice_selector:is_selected(v) then
 			local voice = voices[v]
 			-- TODO: move this into voice: `next_pitch`
-			voice.pitch_tap:set_tick_value(0, pitch)
-			flash_write(write_type_pitch, voice.pitch_tap:get_tick_pos(0))
+			voice.pitch_tap:set_step_value(0, pitch)
+			flash_write(write_type_pitch, voice.pitch_tap:get_step_pos(0))
 			update_voice(v)
 		end
 	end

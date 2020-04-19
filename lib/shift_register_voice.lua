@@ -34,7 +34,7 @@ end
 function ShiftRegisterVoice:update_values()
 	self:apply_edits()
 	local scale = self.scale
-	local pitch = self.pitch_tap:get_tick_value(0)
+	local pitch = self.pitch_tap:get_step_value(0)
 	local pitch_id = scale:get_nearest_mask_pitch_id(pitch)
 	if pitch_id == -1 then
 		pitch_id = scale:get_nearest_pitch_id(pitch)
@@ -43,7 +43,7 @@ function ShiftRegisterVoice:update_values()
 	end
 	self.pitch_id = pitch_id
 	self.pitch = pitch + self.detune
-	local mod = self.mod_tap:get_tick_value(0)
+	local mod = self.mod_tap:get_step_value(0)
 	self.gate = mod_to_gate(mod)
 	self.mod = mod
 end
