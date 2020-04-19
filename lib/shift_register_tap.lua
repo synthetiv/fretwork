@@ -65,29 +65,25 @@ function ShiftRegisterTap:get_tick_step(t)
 	if t == 0 or self.ticks_per_shift == slowest_rate then
 		return 0
 	end
-	-- I wish there was a more elegant way to do this, but I don't think there is
-	local offset = 0
-	local tick = self.tick
-	local increment = t > 0 and 1 or -1
-	local rate = self:get_step_length(offset)
-	while t ~= 0 do
-		t = t - increment
-		tick = tick + increment
-		if tick >= rate then
-			repeat
-				offset = offset + self.direction
-				rate = self:get_step_length(offset)
-			until rate > 0
-			tick = 0
-		elseif tick < 0 then
-			repeat
-				offset = offset - self.direction
-				rate = self:get_step_length(offset)
-			until rate > 0
-			tick = rate - 1
-		end
+	-- reduce `|t|` by adjacent step lengths (including the current one, which we may be partway
+	-- through) until reducing further would hit 0
+	local step = 0
+	local step_length = 0
+	local direction = 0
+	if t > 0 then
+		step_length = self:get_step_length(0) - self.tick
+		direction = 1
+	else
+		step_length = self.tick + 1
+		direction = -1
 	end
-	return offset
+	t = math.abs(t)
+	while t >= step_length do
+		step = step + direction
+		t = t - step_length
+		step_length = self:get_step_length(step)
+	end
+	return step
 end
 
 --- get the past/present/future value of `pos`
@@ -158,6 +154,7 @@ function ShiftRegisterTap:shift(d, manual)
 	local step_length = self:get_step_length(0)
 	local synced = self.shift_register.sync_tap == self
 	local direction = d > 0 and self.direction or -self.direction
+	-- step as many times as we need to in order to get `tick` below the current step length
 	-- note: this loop could, theoretically, repeat many times if jitter amount was very high and many
 	-- jitter values in a row were < 0 (thus setting many steps' lengths to 0 ticks)
 	while tick >= step_length do
