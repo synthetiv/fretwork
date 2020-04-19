@@ -10,8 +10,6 @@ polysub = require 'we/lib/polysub'
 musicutil = require 'musicutil'
 BeatClock = require 'beatclock'
 
--- TODO: wow, the x0xroll HATES jitter, or something like it
--- oh! because it has to call get_pos() etc. with high `t` values! ...ugh!
 X0XRoll = include 'lib/grid_x0x_roll'
 Keyboard = include 'lib/grid_keyboard'
 Select = include 'lib/grid_select'
@@ -255,7 +253,7 @@ redraw_metro = metro.init{
 	time = framerate,
 	event = function(tick)
 
-		x0x_roll:smooth_hold_distance()
+		x0x_roll:smooth_hold_steps()
 
 		if not blink_slow and tick % 8 > 3 then
 			blink_slow = true
@@ -432,8 +430,9 @@ function write(pitch)
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
 			local voice = voices[v]
-			voice:set_pitch(0, pitch)
-			flash_write(write_type_pitch, voice.pitch_tap:get_pos(0))
+			-- TODO: move this into voice: `next_pitch`
+			voice.pitch_tap:set_tick_value(0, pitch)
+			flash_write(write_type_pitch, voice.pitch_tap:get_tick_pos(0))
 			update_voice(v)
 		end
 	end
@@ -443,9 +442,17 @@ end
 function shift(d)
 	for v = 1, n_voices do
 		voices[v].pitch_tap:shift(d)
-		voices[v].mod_tap:shift(d)
+		local mod_tap = voices[v].mod_tap
+		local prev_pos = mod_tap:get_step_pos(0)
+		mod_tap:shift(d)
+		local new_pos = mod_tap:get_step_pos(0)
+		-- if this voice's mod tap has shifted, update x0x roll hold step
+		-- TODO: might there be a less ugly way to do this?
+		-- TODO: scramble screws this up, as do rapid changes in jitter
+		if x0x_roll.hold and prev_pos ~= new_pos then
+			x0x_roll:shift_voice(v, prev_pos - new_pos)
+		end
 	end
-	x0x_roll:shift(-d)
 	maybe_write()
 	scale:apply_edits()
 	update_voices()
@@ -1601,6 +1608,8 @@ function draw_voice_path(v, level)
 				if write.type == write_type_pitch and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
 					level = write.level
 				end
+				-- TODO: it would be nice to show recently erased/closed gates consistently (why do they
+				-- flash for one frame on some voices but not always?)
 				if write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
 					level = math.max(level, write.level)
 				end

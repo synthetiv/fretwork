@@ -48,32 +48,41 @@ function ShiftRegisterTap:set_rate(direction, ticks_per_shift)
 	self.direction = direction
 end
 	
---- scale a time offset in ticks to a number of shift register 'steps'
+--- get the length of a particular step in ticks
+-- @param s steps from now
+-- @return ticks per shift, potentially affected by jitter
+function ShiftRegisterTap:get_step_length(s)
+	local jitter = self.jitter_values:get(s * self.direction) * self.jitter
+	local rate = self.ticks_per_shift * math.pow(2, jitter)
+	return math.floor(rate + 0.5)
+end
+
+--- get the corresponding shift register step for a tick
 -- @param t ticks from now
 -- @return the difference between the current `pos` and `pos` `t` ticks from now
-function ShiftRegisterTap:get_offset(t)
+function ShiftRegisterTap:get_tick_step(t)
 	-- `slowest_rate` ticks/shift won't be shifted by clock, so future == past == present
 	if t == 0 or self.ticks_per_shift == slowest_rate then
 		return 0
 	end
-	-- TODO: this seems brutish, can't you do a nice calculus here or something instead?
+	-- I wish there was a more elegant way to do this, but I don't think there is
 	local offset = 0
 	local tick = self.tick
 	local increment = t > 0 and 1 or -1
-	local rate = self:get_rate(offset)
+	local rate = self:get_step_length(offset)
 	while t ~= 0 do
 		t = t - increment
 		tick = tick + increment
 		if tick >= rate then
 			repeat
 				offset = offset + self.direction
-				rate = self:get_rate(offset)
+				rate = self:get_step_length(offset)
 			until rate > 0
 			tick = 0
 		elseif tick < 0 then
 			repeat
 				offset = offset - self.direction
-				rate = self:get_rate(offset)
+				rate = self:get_step_length(offset)
 			until rate > 0
 			tick = rate - 1
 		end
@@ -81,30 +90,50 @@ function ShiftRegisterTap:get_offset(t)
 	return offset
 end
 
--- TODO: this has a tendency to slow things down rather than speed them up...
--- it should also probably be possible to completely skip a step (rate == 0)
-function ShiftRegisterTap:get_rate(o)
-	local jitter = self.jitter_values:get(o * self.direction) * self.jitter
-	local rate = self.ticks_per_shift + jitter
-	return math.floor(rate + 0.5)
+--- get the past/present/future value of `pos`
+-- @param s steps from now
+-- @return the value of `pos` in `s` steps, potentially affected by scramble
+function ShiftRegisterTap:get_step_pos(s)
+	local scramble_offset = util.round(self.scramble_values:get(s) * self.scramble)
+	return s + self.pos + scramble_offset
 end
 
---- get the past/present/future value of `pos`
+--- get the past/present/future value of `pos`, by tick
 -- @param t ticks from now
--- @return the value of `pos` in `t` ticks, potentially scrambled if `scramble` > 0
-function ShiftRegisterTap:get_pos(t)
-	local offset = self:get_offset(t)
-	local scramble_offset = util.round(self.scramble_values:get(offset) * self.scramble)
-	return offset + self.pos + scramble_offset
+-- @return the value of `pos` in `s` steps, potentially affected by scramble
+function ShiftRegisterTap:get_tick_pos(t)
+	return self:get_step_pos(self:get_tick_step(t))
 end
 
 --- get a past/present/future shift register value
+-- @param s steps from now
+-- @return a value from the shift register, potentially offset by bias + noise
+function ShiftRegisterTap:get_step_value(s)
+	local noise_value = self.noise_values:get(s) * self.noise
+	return self.shift_register:read(self:get_step_pos(s)) + noise_value + self.bias
+end
+
+--- get a past/present/future shift register value, by tick
 -- @param t ticks from now
--- @return a value from the shift register, offset by bias + noise, if applicable
-function ShiftRegisterTap:get(t)
-	local pos = self:get_pos(t)
-	local noise_value = self.noise_values:get(self:get_offset(t)) * self.noise
-	return self.shift_register:read(pos) + noise_value + self.bias
+-- @return a value from the shift register, potentially offset by bias + noise
+function ShiftRegisterTap:get_tick_value(t)
+	return self:get_step_value(self:get_tick_step(t))
+end
+
+--- set a past/present/future shift register value, by step
+-- @param t steps from now
+-- @param value new value, will be offset by -(bias + noise) and written to scrambled/jittered index
+function ShiftRegisterTap:set_step_value(s, value)
+	local pos = self:get_step_pos(s)
+	local noise_value = self.noise_values:get(s) * self.noise
+	self.shift_register:write(pos, value - self.bias - noise_value)
+end
+
+--- set a past/present/future shift register value, by tick
+-- @param t ticks from now
+-- @param value new value, will be offset by -(bias + noise) and written to scrambled/jittered index
+function ShiftRegisterTap:set_tick_value(t, value)
+	self:set_step_value(self:get_tick_step(t), value)
 end
 
 --- apply the 'next' bias and offset values (this makes quantization of changes possible)
@@ -125,7 +154,7 @@ function ShiftRegisterTap:shift(d, manual)
 	if not manual and self.ticks_per_shift == slowest_rate then
 		return
 	end
-	local rate = self:get_rate(0)
+	local rate = self:get_step_length(0)
 	if rate <= 0 then
 		error('caught a NaN')
 		rate = 1
@@ -142,18 +171,9 @@ function ShiftRegisterTap:shift(d, manual)
 			self.jitter_values:shift(d)
 			self.pos = self.shift_register:wrap_loop_pos(self.pos + d)
 			self:apply_edits()
-		until self:get_rate(0) > 0
+		until self:get_step_length(0) > 0
 	end
 	self.tick = self.tick % rate
-end
-
---- set a past/present/future shift register value
--- @param t ticks from now
--- @param value new value, will be offset by -(bias + noise) and written to scrambled index
-function ShiftRegisterTap:set(t, value)
-	local pos = self:get_pos(t)
-	local noise_value = self.noise_values:get(self:get_offset(t)) * self.noise
-	self.shift_register:write(pos, value - self.bias - noise_value)
 end
 
 return ShiftRegisterTap
