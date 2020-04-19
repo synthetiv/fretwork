@@ -145,7 +145,7 @@ function ShiftRegisterTap:apply_edits()
 	end
 end
 
---- change `tick` and/or `pos`
+--- change `tick`, which may or may not change `pos`
 -- @param d number of ticks to shift by
 -- @param manual true if tap should always shift, even if it's 'stopped' (i.e. `ticks_per_shift` ==
 -- `slowest_rate`); will be true when shift triggered by an encoder, false when triggered by clock
@@ -154,26 +154,25 @@ function ShiftRegisterTap:shift(d, manual)
 	if not manual and self.ticks_per_shift == slowest_rate then
 		return
 	end
-	local rate = self:get_step_length(0)
-	if rate <= 0 then
-		error('caught a NaN')
-		rate = 1
+	local tick = self.tick + d
+	local step_length = self:get_step_length(0)
+	local synced = self.shift_register.sync_tap == self
+	local direction = d > 0 and self.direction or -self.direction
+	-- note: this loop could, theoretically, repeat many times if jitter amount was very high and many
+	-- jitter values in a row were < 0 (thus setting many steps' lengths to 0 ticks)
+	while tick >= step_length do
+		if synced then
+			self.shift_register:shift(direction)
+		end
+		self.scramble_values:shift(direction)
+		self.noise_values:shift(direction)
+		self.jitter_values:shift(direction)
+		self.pos = self.shift_register:wrap_loop_pos(self.pos + direction)
+		self:apply_edits()
+		tick = tick - step_length
+		step_length = self:get_step_length(0)
 	end
-	self.tick = self.tick + d
-	d = math.floor(self.tick / rate) * self.direction
-	if d ~= 0 then
-		repeat -- TODO: I have a bad feeling about this
-			if self.shift_register.sync_tap == self then
-				self.shift_register:shift(d)
-			end
-			self.scramble_values:shift(d)
-			self.noise_values:shift(d)
-			self.jitter_values:shift(d)
-			self.pos = self.shift_register:wrap_loop_pos(self.pos + d)
-			self:apply_edits()
-		until self:get_step_length(0) > 0
-	end
-	self.tick = self.tick % rate
+	self.tick = tick
 end
 
 return ShiftRegisterTap
