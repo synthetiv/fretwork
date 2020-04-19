@@ -27,6 +27,8 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.scramble_values = RandomQueue.new(131) -- prime length, so SR loop and random queues are rarely in phase
 	tap.noise = 0 -- TODO: `next_noise`, quantization
 	tap.noise_values = RandomQueue.new(137)
+	tap.jitter = 0
+	tap.jitter_values = RandomQueue.new(139)
 	tap.next_bias = 0
 	tap.bias = 0
 	-- if this is the first tap created for this shift register, sync it (so SR always has a synced tap)
@@ -51,11 +53,37 @@ end
 -- @return the difference between the current `pos` and `pos` `t` ticks from now
 function ShiftRegisterTap:get_offset(t)
 	-- `slowest_rate` ticks/shift won't be shifted by clock, so future == past == present
-	if self.ticks_per_shift == slowest_rate then
+	if t == 0 or self.ticks_per_shift == slowest_rate then
 		return 0
 	end
-	-- TODO: rate jitter! you'll have to sum jitter values from 0 to `t`
-	return math.floor((t + self.tick) / self.ticks_per_shift) * self.direction
+	-- TODO: this seems brutish, can't you do a nice calculus here or something instead?
+	local offset = 0
+	local tick = self.tick
+	local increment = t > 0 and 1 or -1
+	local rate = self:get_rate(offset)
+	while t ~= 0 do
+		t = t - increment
+		tick = tick + increment
+		if tick >= rate then
+			offset = offset + self.direction
+			rate = self:get_rate(offset)
+			tick = 0
+		elseif tick < 0 then
+			offset = offset - self.direction
+			rate = self:get_rate(offset)
+			tick = rate - 1
+		end
+	end
+	return offset
+end
+
+-- TODO: this has a tendency to slow things down rather than speed them up...
+-- it should also probably be possible to completely skip a step? maybe?
+-- or maybe I should just make it additive rather than exponential
+function ShiftRegisterTap:get_rate(o)
+	local jitter = self.jitter_values:get(o * self.direction) * self.jitter
+	local rate = self.ticks_per_shift + jitter
+	return math.max(1, math.floor(rate + 0.5))
 end
 
 --- get the past/present/future value of `pos`
@@ -94,18 +122,20 @@ function ShiftRegisterTap:shift(d, manual)
 	if not manual and self.ticks_per_shift == slowest_rate then
 		return
 	end
+	local rate = self:get_rate(0)
 	self.tick = self.tick + d
-	d = math.floor(self.tick / self.ticks_per_shift) * self.direction
+	d = math.floor(self.tick / rate) * self.direction
 	if d ~= 0 then
 		if self.shift_register.sync_tap == self then
 			self.shift_register:shift(d)
 		end
 		self.scramble_values:shift(d)
 		self.noise_values:shift(d)
+		self.jitter_values:shift(d)
 		self.pos = self.shift_register:wrap_loop_pos(self.pos + d)
 		self:apply_edits()
 	end
-	self.tick = self.tick % self.ticks_per_shift
+	self.tick = self.tick % rate
 end
 
 --- set a past/present/future shift register value

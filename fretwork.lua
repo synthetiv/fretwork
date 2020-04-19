@@ -10,6 +10,8 @@ polysub = require 'we/lib/polysub'
 musicutil = require 'musicutil'
 BeatClock = require 'beatclock'
 
+-- TODO: wow, the x0xroll HATES jitter, or something like it
+-- oh! because it has to call get_pos() etc. with high `t` values! ...ugh!
 X0XRoll = include 'lib/grid_x0x_roll'
 Keyboard = include 'lib/grid_keyboard'
 Select = include 'lib/grid_select'
@@ -230,13 +232,14 @@ edit_tap_pitch = 1
 edit_tap_mod = 2
 edit_tap = edit_tap_pitch
 
-n_edit_fields = 6
+n_edit_fields = 7
 edit_field_time = 1
 edit_field_rate = 2
-edit_field_scramble = 3
-edit_field_noise = 4
-edit_field_bias = 5
-edit_field_length = 6
+edit_field_jitter = 3
+edit_field_scramble = 4
+edit_field_noise = 5
+edit_field_bias = 6
+edit_field_length = 7
 edit_field = edit_field_time
 
 blink_slow = false
@@ -1110,6 +1113,17 @@ function add_params()
 		}
 		params:add{
 			type = 'control',
+			id = string.format('voice_%d_pitch_jitter', v),
+			name = string.format('voice %d pitch jitter', v),
+			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
+			action = function(value)
+				voice.pitch_tap.jitter = value
+				dirty = true
+				memory.pitch.dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
 			id = string.format('voice_%d_mod_bias', v),
 			name = string.format('voice %d mod bias', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
@@ -1157,6 +1171,17 @@ function add_params()
 				end
 				dirty = true
 				memory.transposition.dirty = true
+			end
+		}
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_mod_jitter', v),
+			name = string.format('voice %d mod jitter', v),
+			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
+			action = function(value)
+				voice.mod_tap.jitter = value
+				dirty = true
+				memory.pitch.dirty = true
 			end
 		}
 		-- TODO: inversion too? value scaling?
@@ -1412,6 +1437,23 @@ function enc(n, d)
 					end
 				end
 			end
+		elseif edit_field == edit_field_jitter then
+			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+				-- set pitch jitter
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_pitch_jitter', v), d)
+					end
+				end
+			end
+			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+				-- set mod jitter
+				for v = 1, n_voices do
+					if voice_selector:is_selected(v) then
+						params:delta(string.format('voice_%d_mod_jitter', v), d)
+					end
+				end
+			end
 		elseif edit_field == edit_field_scramble then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- set pitch scramble
@@ -1646,6 +1688,7 @@ end
 function draw_tap_equation(y, label, tap, multiplier, editing)
 	local highlight_time = editing and edit_field == edit_field_time
 	local highlight_rate = editing and edit_field == edit_field_rate
+	local highlight_jitter = editing and edit_field == edit_field_jitter
 	local highlight_scramble = editing and edit_field == edit_field_scramble
 	local highlight_noise = editing and edit_field == edit_field_noise
 	local highlight_bias = editing and edit_field == edit_field_bias
@@ -1653,6 +1696,7 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 
 	local direction = tap.direction
 	local ticks_per_shift = tap.ticks_per_shift
+	local jitter = tap.jitter
 	local scramble = tap.scramble * direction
 	local noise = tap.noise * direction * multiplier
 	local bias = tap.next_bias * multiplier
@@ -1670,11 +1714,25 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 		screen.text('t')
 	end
 
-	screen.level(highlight_rate and 15 or 3)
-	if ticks_per_shift == slowest_rate then
-		screen.text('/inf')
-	elseif highlight_rate or ticks_per_shift ~= 1 then
-		screen.text(string.format('/%d', ticks_per_shift))
+	screen.level(3)
+
+	if highlight_rate or highlight_jitter or ticks_per_shift ~= 1 or jitter ~= 0 then
+		screen.text('/(')
+
+		screen.level(highlight_rate and 15 or 3)
+		if ticks_per_shift == slowest_rate then
+			screen.text('inf')
+		else
+			screen.text(string.format('%d', ticks_per_shift))
+		end
+
+		if highlight_jitter or jitter ~= 0 then
+			screen.level(highlight_jitter and 15 or 3)
+			screen.text(string.format('%+.1fy', jitter))
+		end
+
+		screen.level(3)
+		screen.text(')')
 	end
 
 	screen.level(highlight_scramble and 15 or 3)
