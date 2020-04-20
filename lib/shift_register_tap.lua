@@ -103,8 +103,9 @@ end
 -- @param s steps from now
 -- @return a value from the shift register, potentially offset by bias + noise
 function ShiftRegisterTap:get_step_value(s)
-	local noise_value = self.noise_values:get(s) * self.noise
-	return self.shift_register:read(self:get_step_pos(s)) + noise_value + self.bias
+	local pos = self:get_step_pos(s)
+	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
+	return self.shift_register:read(pos) + noise_value + self.bias
 end
 
 --- get a past/present/future shift register value, by tick
@@ -119,7 +120,7 @@ end
 -- @param value new value, will be offset by -(bias + noise) and written to scrambled/jittered index
 function ShiftRegisterTap:set_step_value(s, value)
 	local pos = self:get_step_pos(s)
-	local noise_value = self.noise_values:get(s) * self.noise
+	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
 	self.shift_register:write(pos, value - self.bias - noise_value)
 end
 
