@@ -31,6 +31,7 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.jitter_values = RandomQueue.new(139)
 	tap.next_bias = 0
 	tap.bias = 0
+	tap.on_shift = function() end
 	-- if this is the first tap created for this shift register, sync it (so SR always has a synced tap)
 	if shift_register.sync_tap == nil then
 		shift_register.sync_tap = tap
@@ -160,9 +161,20 @@ function ShiftRegisterTap:shift(d, manual)
 		self.noise_values:shift(direction)
 		self.jitter_values:shift(direction)
 		self.pos = self.shift_register:wrap_loop_pos(self.pos + direction)
+		self.on_shift(direction)
 		self:apply_edits()
 	end
 	self.tick = new_tick
+end
+
+--- check whether two steps correspond to the same position in the loop
+-- @param a step A
+-- @param b step B
+-- @return true if loop positions match
+function ShiftRegisterTap:check_step_identity(a, b)
+	a = self.shift_register:wrap_loop_pos(self:get_step_pos(a))
+	b = self.shift_register:wrap_loop_pos(self:get_step_pos(b))
+	return a == b
 end
 
 return ShiftRegisterTap

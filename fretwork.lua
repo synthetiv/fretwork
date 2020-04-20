@@ -442,16 +442,7 @@ end
 function shift(d)
 	for v = 1, n_voices do
 		voices[v].pitch_tap:shift(d)
-		local mod_tap = voices[v].mod_tap
-		local prev_pos = mod_tap:get_step_pos(0)
-		mod_tap:shift(d)
-		local new_pos = mod_tap:get_step_pos(0)
-		-- if this voice's mod tap has shifted, update x0x roll hold step
-		-- TODO: might there be a less ugly way to do this?
-		-- TODO: scramble screws this up, as do rapid changes in jitter
-		if x0x_roll.hold and prev_pos ~= new_pos then
-			x0x_roll:shift_voice(v, prev_pos - new_pos)
-		end
+		voices[v].mod_tap:shift(d)
 	end
 	maybe_write()
 	scale:apply_edits()
@@ -705,8 +696,10 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return math.min(15, math.floor(level))
 end
 
-function x0x_roll:get_key_level(x, y, v, offset, gate)
-	local head = offset == 0
+function x0x_roll:get_key_level(x, y, v, step, gate)
+	local tap = voices[v].mod_tap
+	-- highlight any step whose loop position matches the current position of the tap
+	local head = tap:check_step_identity(step, 0)
 	local active = voices[v].active
 	if not active then
 		if gate then

@@ -24,6 +24,7 @@ function X0XRoll.new(x, y, width, height, n_voices, voices)
 		roll.voice_hold_steps[v] = 0
 		roll.voice_ys[v] = y
 		roll.y_voices[y] = v
+		roll.voices[v].mod_tap.on_shift = function(d) roll:shift_voice(v, -d) end
 	end
 	return roll
 end
@@ -71,11 +72,12 @@ function X0XRoll:draw(g)
 	for x = self.x, self.x2 do
 		local first_voice_step = self:get_voice_step(1, x)
 		local last_voice_step = self:get_voice_step(self.n_voices, x)
+		local head_indicator_level = not self.hold and 2 or 0
 		for y = self.y, self.y2 do
 			if y < self.voice_ys[1] then
-				g:led(x, y, first_voice_step == 0 and 2 or 0)
+				g:led(x, y, first_voice_step == 0 and head_indicator_level or 0)
 			elseif y > self.voice_ys[self.n_voices] then
-				g:led(x, y, last_voice_step == 0 and 2 or 0)
+				g:led(x, y, last_voice_step == 0 and head_indicator_level or 0)
 			else
 				g:led(x, y, 0)
 			end
