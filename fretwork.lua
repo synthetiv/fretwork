@@ -1391,6 +1391,14 @@ function key(n, z)
 	dirty = true
 end
 
+function voice_param_delta(id, d)
+	for v = 1, n_voices do
+		if voice_selector:is_selected(v) then
+			params:delta(string.format('voice_%d_%s', v, id), d)
+		end
+	end
+end
+
 -- TODO: still left to control:
 -- internal clock tempo?
 -- clock enable?
@@ -1423,53 +1431,29 @@ function enc(n, d)
 				-- set pitch rate/direction
 				-- TODO: it would be nice to be able to hold a key and invert the way this is set, so fully
 				-- c/cw = stopped and +/- full speed is at the center
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_pitch_rate', v), d)
-					end
-				end
+				voice_param_delta('pitch_rate', d)
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
 				-- set mod rate/direction
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_mod_rate', v), d)
-					end
-				end
+				voice_param_delta('mod_rate', d)
 			end
 		elseif edit_field == edit_field_jitter then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- set pitch jitter
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_pitch_jitter', v), d)
-					end
-				end
+				voice_param_delta('pitch_jitter', d)
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
 				-- set mod jitter
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_mod_jitter', v), d)
-					end
-				end
+				voice_param_delta('mod_jitter', d)
 			end
 		elseif edit_field == edit_field_scramble then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- set pitch scramble
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_pitch_scramble', v), d)
-					end
-				end
+				voice_param_delta('pitch_scramble', d)
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
 				-- set mod scramble
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_mod_scramble', v), d)
-					end
-				end
+				voice_param_delta('mod_scramble', d)
 			end
 		elseif edit_field == edit_field_time then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
@@ -1496,19 +1480,11 @@ function enc(n, d)
 		elseif edit_field == edit_field_noise then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
 				-- set pitch noise
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_pitch_noise', v), d)
-					end
-				end
+				voice_param_delta('pitch_noise', d)
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
 				-- set mod noise
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_mod_noise', v), d)
-					end
-				end
+				voice_param_delta('mod_noise', d)
 			end
 		elseif edit_field == edit_field_bias then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
@@ -1527,19 +1503,11 @@ function enc(n, d)
 					d = (4 - max_transpose) * sign
 				end
 				-- transpose 'em
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_transpose', v), d)
-					end
-				end
+				voice_param_delta('transpose', d)
 			end
 			if held_keys.edit_tap or edit_tap == edit_tap_mod then
 				-- set mod bias
-				for v = 1, n_voices do
-					if voice_selector:is_selected(v) then
-						params:delta(string.format('voice_%d_mod_bias', v), d)
-					end
-				end
+				voice_param_delta('mod_bias', d)
 			end
 		elseif edit_field == edit_field_length then
 			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
