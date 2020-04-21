@@ -1363,7 +1363,7 @@ function init()
 	norns.enc.accel(2, false)
 	norns.enc.sens(2, 4)
 	norns.enc.accel(2, true)
-	norns.enc.sens(3, 2)
+	norns.enc.accel(3, true)
 	-- encoder 3's sensitivity changes based on selected field; update it to match initial edit field
 	enc(2, 0)
 
@@ -1415,11 +1415,13 @@ function enc(n, d)
 	elseif n == 2 then
 		-- select field
 		edit_field = util.clamp(edit_field + d, 1, n_edit_fields)
-		-- disable acceleration when editing offsets
+		-- tweak encoder 3 response for the selected param
 		if edit_field == edit_field_time then
-			norns.enc.accel(3, false)
+			norns.enc.sens(3, 4)
+		elseif edit_field == edit_field_rate then
+			norns.enc.sens(3, 8)
 		else
-			norns.enc.accel(3, true)
+			norns.enc.sens(3, 2)
 		end
 	elseif n == 3 then
 		-- offset can only be changed by integer values, but for other fields, allow fine adjustment
