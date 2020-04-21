@@ -782,7 +782,7 @@ function transpose_keyboard:key(x, y, z)
 		-- adjust noise (random transposition)
 		for v = 1, n_voices do
 			if voice_selector:is_selected(v) then
-				params:set(string.format('voice_%d_pitch_noise', v), math.abs(delta))
+				params:set(string.format('voice_%d_pitch_noise', v), math.abs(delta) * 12)
 			end
 		end
 	else
@@ -1086,9 +1086,9 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_pitch_noise', v),
 			name = string.format('voice %d pitch noise', v),
-			controlspec = controlspec.new(0, 16, 'lin', 1 / 120, 0),
+			controlspec = controlspec.new(0, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
-				voice.pitch_tap.noise = value
+				voice.pitch_tap.noise = value / 12
 				dirty = true
 				memory.pitch.dirty = true
 			end
@@ -1115,7 +1115,7 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_pitch_jitter', v),
 			name = string.format('voice %d pitch jitter', v),
-			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
+			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
 			action = function(value)
 				voice.pitch_tap.jitter = value
 				dirty = true
@@ -1126,7 +1126,7 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_mod_bias', v),
 			name = string.format('voice %d mod bias', v),
-			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
+			controlspec = controlspec.new(-16, 16, 'lin', 0.1, 0),
 			action = function(value)
 				voice.mod_tap.next_bias = value
 				dirty = true
@@ -1177,7 +1177,7 @@ function add_params()
 			type = 'control',
 			id = string.format('voice_%d_mod_jitter', v),
 			name = string.format('voice %d mod jitter', v),
-			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
+			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
 			action = function(value)
 				voice.mod_tap.jitter = value
 				dirty = true
