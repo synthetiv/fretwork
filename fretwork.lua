@@ -263,14 +263,13 @@ redraw_metro = metro.init{
 			dirty = true
 		end
 
-		if dirty then
-			grid_redraw()
-			redraw()
-			dirty = false
-		end
-
 		-- fade recent voice notes
 		for v = 1, n_voices do
+			local voice = voices[v]
+			if voice.dirty then
+				voice:update_path(-screen_note_center, n_screen_notes - screen_note_center)
+				calculate_voice_path(v)
+			end
 			for n = 1, n_recent_voice_notes do
 				local note = recent_voice_notes[v][n]
 				if note.onset_level > 0 then
@@ -287,6 +286,12 @@ redraw_metro = metro.init{
 					end
 				end
 			end
+		end
+
+		if dirty then
+			grid_redraw()
+			redraw()
+			dirty = false
 		end
 
 		-- fade write indicators
@@ -381,8 +386,7 @@ function update_voice(v)
 			dim_note(v)
 		end
 	end
-	voice:update_path(-screen_note_center, n_screen_notes - screen_note_center)
-	calculate_voice_path(v)
+	voice.dirty = true
 end
 
 function update_voices()
@@ -1554,6 +1558,8 @@ function calculate_voice_path(v)
 		note.pitch_pos = point.pitch_pos
 		note.mod_pos = point.mod_pos
 	end
+	voice.dirty = false
+	dirty = true
 end
 
 -- TODO: these aren't getting updated when changing octaves while paused
