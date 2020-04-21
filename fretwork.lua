@@ -1541,7 +1541,7 @@ function get_screen_note_y(value)
 	if value == nil then
 		return -1
 	end
-	return util.round(32 + (view_octave - value) * 12)
+	return math.floor(32 + (view_octave - value) * 12 + 0.5)
 end
 
 -- calculate coordinates and levels for each visible note
@@ -1794,7 +1794,7 @@ function redraw()
 
 		-- TODO: move this
 		-- screen.move(0, 7)
-		-- screen.text(string.format('P: %d%%', util.round(write_probability)))
+		-- screen.text(string.format('P: %d%%', math.floor(write_probability + 0.5)))
 
 		screen.move(0, 54)
 		screen.level(3)

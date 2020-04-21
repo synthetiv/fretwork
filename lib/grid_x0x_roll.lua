@@ -60,7 +60,7 @@ function X0XRoll:smooth_hold_steps()
 	if not self.hold then
 		for v = 1, self.n_voices do
 			if hold_steps[v] ~= 0 then
-				hold_steps[v] = util.round(hold_steps[v] / 3)
+				hold_steps[v] = math.floor(hold_steps[v] * 0.3)
 				dirty = true
 			end
 		end

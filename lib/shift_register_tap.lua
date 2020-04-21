@@ -89,7 +89,7 @@ end
 -- @param s steps from now
 -- @return the value of `pos` in `s` steps, potentially affected by scramble
 function ShiftRegisterTap:get_step_pos(s)
-	local scramble_offset = util.round(self.scramble_values:get(s) * self.scramble)
+	local scramble_offset = math.floor(self.scramble_values:get(s) * self.scramble + 0.5)
 	return s + self.pos + scramble_offset
 end
 
