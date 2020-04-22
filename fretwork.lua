@@ -193,21 +193,29 @@ x0x_roll = X0XRoll.new(6, 1, 11, 8, n_voices, voices)
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
 screen_note_center = math.floor((n_screen_notes - 1) / 2 + 0.5)
-screen_notes = {}
--- initialize these so every redraw doesn't create a zillion new tables, triggering GC
+-- initialize voice paths, which can persist between redraws
+voice_paths = {}
 for v = 1, n_voices do
-	voices[v]:initialize_path(n_screen_notes)
-	screen_notes[v] = {}
+	local voice_path = {}
 	for n = 1, n_screen_notes do
-		screen_notes[v][n] = {
-			x = 0,
-			y = 0,
-			gate = 0,
+		voice_path[n] = {
+			pitch = 0,
+			pitch_step = 0,
 			pitch_pos = 0,
+			mod = 0,
+			mod_step = 0,
 			mod_pos = 0,
+			gate = false,
+			connect = false,
+			x = 0,
+			x2 = 0,
+			y = 0,
+			y0 = 0,
 			level = 0
 		}
 	end
+	voice_path.length = 0
+	voice_paths[v] = voice_path
 end
 
 n_recent_writes = 8
@@ -263,13 +271,12 @@ redraw_metro = metro.init{
 			dirty = true
 		end
 
-		-- fade recent voice notes
 		for v = 1, n_voices do
-			local voice = voices[v]
-			if voice.dirty then
-				voice:update_path(-screen_note_center, n_screen_notes - screen_note_center)
+			-- calculate voice paths, if necessary
+			if voices[v].dirty then
 				calculate_voice_path(v)
 			end
+			-- fade recent voice notes
 			for n = 1, n_recent_voice_notes do
 				local note = recent_voice_notes[v][n]
 				if note.onset_level > 0 then
@@ -466,6 +473,7 @@ function rewind()
 end
 
 -- DEBUG: print roughly when garbage collection starts and how much memory has been used
+--[[
 mem = 0
 mem_after_gc = 0
 ticks_since_gc = 0
@@ -1329,7 +1337,7 @@ end
 function init()
 
 	-- DEBUG
-	memory_metro:start()
+	-- memory_metro:start()
 
 	add_params()
 	params:set('hzlag', 0.02)
@@ -1549,17 +1557,52 @@ end
 -- calculate coordinates and levels for each visible note
 function calculate_voice_path(v)
 	local voice = voices[v]
-	local notes = screen_notes[v]
-	local path = voice.path
-	for n = 1, n_screen_notes do
-		local note = notes[n]
-		local point = path[n]
-		note.x = (n - 1) * screen_note_width
-		note.y = get_screen_note_y(scale:snap(point.pitch))
-		note.gate = point.gate
-		note.pitch_pos = point.pitch_pos
-		note.mod_pos = point.mod_pos
+	local pitch_tap = voice.pitch_tap
+	local mod_tap = voice.mod_tap
+	local path = voice_paths[v]
+	local n = 0
+	local note = path[1]
+	local x = 0
+	for t = 1, n_screen_notes do
+		local tick = t - screen_note_center
+		local pitch_step = pitch_tap:get_tick_step(tick)
+		local mod_step = mod_tap:get_tick_step(tick)
+		-- TODO: if you compare values instead of steps, you'll have to calculate more values (duh) but
+		-- may then be able to make fewer calls to screen() when redrawing. worth the tradeoff?
+		if n == 0 or pitch_step ~= note.pitch_step or mod_step ~= note.mod_step then
+			local pitch = pitch_tap:get_step_value(pitch_step)
+			local y = get_screen_note_y(scale:snap(pitch))
+			local y0 = note.y or y
+			local mod = mod_tap:get_step_value(mod_step)
+			local gate = voice.active and voice:mod_to_gate(mod)
+			local connect = gate and note.gate
+			x = (t - 1) * screen_note_width
+			-- set final x and y of previous note
+			note.x2 = x
+			-- fill in info for this note
+			n = n + 1
+			note = path[n]
+			note.pitch_step = pitch_step
+			note.pitch_pos = pitch_tap.shift_register:wrap_loop_pos(pitch_tap:get_step_pos(pitch_step))
+			note.pitch = pitch
+			note.mod_step = mod_step
+			note.mod_pos = mod_tap.shift_register:wrap_loop_pos(mod_tap:get_step_pos(mod_step))
+			note.mod = mod
+			note.gate = gate
+			note.connect = connect
+			note.x = x
+			note.y = y
+			note.y0 = y0
+		end
+		if tick == 0 then
+			-- set center values, to draw over the head indicator
+			path.y_center = note.y
+			path.gate_center = note.gate
+		end
 	end
+	-- set final values for last note
+	note.x2 = 128
+	path.length = n
 	voice.dirty = false
 	dirty = true
 end
@@ -1568,100 +1611,87 @@ end
 -- TODO: are writes even flashing correctly when not playing?
 function draw_voice_path(v, level)
 	local voice = voices[v]
-	local notes = screen_notes[v]
-
-	for n = 1, n_screen_notes do
-		local note = notes[n]
-		local level = 0
+	local path = voice_paths[v]
+	local prev_level = 0
+	for n = 1, path.length do
+		local note = path[n]
+		local x = note.x
+		local x2 = note.x2
+		local y = note.y
+		local y0 = note.y0
+		local gate = note.gate
+		local note_level = 0
+		-- set flash level, if this note was recently changed
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
 			if write.level > 0 then
 				if write.type == write_type_pitch and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
-					level = write.level
+					note_level = write.level
 				end
 				-- TODO: it would be nice to show recently erased/closed gates consistently (why do they
 				-- flash for one frame on some voices but not always?)
 				if write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
-					level = math.max(level, write.level)
+					note_level = math.max(level, write.level)
 				end
 			end
 		end
-		note.level = level
-	end
-
-	-- draw background/outline
-	screen.line_cap('square')
-	screen.line_width(3)
-	screen.level(0)
-	for n = 1, n_screen_notes do
-		local note = notes[n]
-		local x = note.x + 0.5
-		local y = note.y + 0.5
-		local gate = voice.active and note.gate
-		local prev_note = notes[n - 1] or note
-		local prev_gate = voice.active and prev_note.gate
-		-- draw connector, if this note and the previous note are active
-		if prev_gate and gate then
-			screen.line(x, y)
-		else
-			screen.move(x, y)
-		end
-		-- draw this note, if active; draw all notes for selected voices
-		if gate or voice_selector:is_selected(v) then
-			screen.line(x + screen_note_width, y)
-			screen.stroke()
-			screen.move(x + screen_note_width, y)
-		end
-	end
-	screen.line_cap('butt')
-
-	-- draw foreground/path
-	screen.line_width(1)
-	for n = 1, n_screen_notes do
-		local note = notes[n]
-		local x = note.x
-		local y = note.y + 0.5
-		local gate = voice.active and note.gate
-		local note_level = note.level
-		local prev_note = notes[n - 1] or note
-		local prev_x = prev_note.x
-		local prev_y = prev_note.y + 0.5
-		local prev_gate = voice.active and prev_note.gate
-		local prev_level = prev_note.level
-		-- draw connector
-		if prev_gate and gate then
-			-- TODO: this is a slow point, apparently
-			local connector_level = math.max(note_level, prev_level) / 4
-			local min_y = math.min(prev_y, y)
-			local max_y = math.max(prev_y, y)
-			screen.move(x + 0.5, math.min(max_y, min_y + 0.5))
-			screen.line(x + 0.5, math.max(min_y, max_y - 0.5))
-			screen.level(math.ceil(led_blend(level, connector_level)))
-			screen.stroke()
-		else
-			screen.move(x + 0.5, y)
+		-- if previous note was at the same `y` and its level was higher, don't redraw the leftmost
+		-- pixel of this note over it
+		if y0 == y and prev_level > note_level then
+			x = x + 1
 		end
 		-- draw this note, including dotted lines for inactive notes in selected voices
 		if gate then
 			-- solid line for active notes
-			screen.move(x, y)
-			screen.line(x + screen_note_width + 1, y)
+			local note_y = y + 0.5
+			-- outline
+			if y0 == y then -- TODO: this shouldn't happen as often as it does
+				screen.move(x, note_y)
+			else
+				screen.move(x - 1, note_y)
+			end
+			screen.line(x2 + 2, note_y)
+			screen.level(0)
+			screen.line_width(3)
+			screen.stroke()
+			-- center
+			screen.move(x, note_y)
+			screen.line(x2 + 1, note_y)
 			screen.level(math.ceil(led_blend(level, note_level)))
+			screen.line_width(1)
 			screen.stroke()
 		elseif voice_selector:is_selected(v) then
 			-- dotted line for inactive notes
-			if prev_y ~= y then
-				-- no need to re-draw this pixel if it's already been drawn as part of the previous note
-				-- (possibly brighter, if prev note was active)
-				screen.pixel(x, y)
+			for dot_x = x, note.x2 do
+				if dot_x % 2 == 0 then
+					screen.pixel(dot_x, y)
+				end
 			end
-			screen.pixel(x + 2, y)
-			screen.pixel(x + 4, y)
 			screen.level(math.ceil(led_blend(level, note_level) / 3))
-			screen.fill(0)
-		else
-			screen.stroke()
+			screen.fill()
 		end
+		-- draw connector from previous note, if any
+		if note.connect then
+			local connector_length = math.abs(y - y0) - 1
+			if connector_length > 0 then
+				local connector_x = x + 0.5
+				local connector_y = math.min(y, y0) + 1
+				-- outline
+				screen.move(connector_x, connector_y)
+				screen.line_rel(0, connector_length)
+				screen.level(0)
+				screen.line_width(3)
+				screen.stroke()
+				-- center
+				screen.move(connector_x, connector_y)
+				screen.line_rel(0, connector_length)
+				screen.level(math.ceil(led_blend(level, math.max(note_level, prev_level) / 4)))
+				screen.line_width(1)
+				screen.stroke()
+			end
+		end
+		-- save flash level to compare with next note
+		prev_level = note_level
 	end
 end
 
@@ -1746,11 +1776,6 @@ end
 
 function redraw()
 	screen.clear()
-	screen.stroke()
-	screen.line_width(1)
-	screen.font_face(1)
-	screen.font_size(8)
-	screen.line_cap('butt')
 
 	-- draw paths
 	for i, v in ipairs(voice_draw_order) do
@@ -1774,21 +1799,22 @@ function redraw()
 
 	-- highlight current notes after drawing all snakes
 	for i, v in ipairs(voice_draw_order) do
-		if voices[v].active then
-			local note = screen_notes[v][screen_note_center]
-			if note.gate then
-				screen.move(note.x + 2.5, note.y - 1)
-				screen.line(note.x + 2.5, note.y + 2)
-				screen.level(0)
-				screen.stroke()
-				screen.pixel(note.x + 2, note.y)
-				screen.level(15)
-				screen.fill()
-			end
+		local path = voice_paths[v]
+		if path.gate_center then
+			screen.move(62.5, path.y_center - 1)
+			screen.line(62.5, path.y_center + 2)
+			screen.level(0)
+			screen.stroke()
+			screen.pixel(62, path.y_center)
+			screen.level(15)
+			screen.fill()
 		end
 	end
 
 	if held_keys.edit_alt or blinkers.info.on then
+
+		screen.font_face(1)
+		screen.font_size(8)
 
 		screen.rect(0, 47, 128, 17)
 		screen.level(0)
@@ -1840,7 +1866,7 @@ function cleanup()
 	for i, blinker in ipairs(blinkers) do
 		blinker:stop()
 	end
-	if memory_metro ~= nil then
-		memory_metro:stop()
-	end
+	-- if memory_metro ~= nil then
+		-- memory_metro:stop()
+	-- end
 end
