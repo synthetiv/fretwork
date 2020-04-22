@@ -165,7 +165,6 @@ held_keys = {
 	octave_down = false,
 	octave_up = false,
 	edit_alt = false,
-	edit_tap = false,
 	edit_fine = false
 }
 
@@ -229,6 +228,7 @@ n_edit_taps = 2
 edit_tap_pitch = 1
 edit_tap_mod = 2
 edit_tap = edit_tap_pitch
+edit_both_taps = true
 
 n_edit_fields = 7
 edit_field_time = 1
@@ -1382,10 +1382,12 @@ function key(n, z)
 		-- TODO: what should this actually do?
 		held_keys.edit_alt = z == 1
 	elseif n == 2 then
-		-- press to switch from editing pitch to mod or vice versa; hold to edit both
-		held_keys.edit_tap = z == 1
+		-- switch between editing pitch only / mod only / both
 		if z == 1 then
-			edit_tap = edit_tap % n_edit_taps + 1
+			edit_both_taps = not edit_both_taps
+			if not edit_both_taps then
+				edit_tap = edit_tap % n_edit_taps + 1
+			end
 		end
 	elseif n == 3 then
 		-- enable fine control
@@ -1433,36 +1435,36 @@ function enc(n, d)
 			d = d / 20
 		end
 		if edit_field == edit_field_rate then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- set pitch rate/direction
 				-- TODO: it would be nice to be able to hold a key and invert the way this is set, so fully
 				-- c/cw = stopped and +/- full speed is at the center
 				voice_param_delta('pitch_rate', d)
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- set mod rate/direction
 				voice_param_delta('mod_rate', d)
 			end
 		elseif edit_field == edit_field_jitter then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- set pitch jitter
 				voice_param_delta('pitch_jitter', d)
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- set mod jitter
 				voice_param_delta('mod_jitter', d)
 			end
 		elseif edit_field == edit_field_scramble then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- set pitch scramble
 				voice_param_delta('pitch_scramble', d)
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- set mod scramble
 				voice_param_delta('mod_scramble', d)
 			end
 		elseif edit_field == edit_field_time then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- shift pitch tap(s)
 				-- TODO: I'd still like to be able to set this incrementally using buttons/keys
 				for v = 1, n_voices do
@@ -1473,7 +1475,7 @@ function enc(n, d)
 				end
 				memory.pitch.dirty = true
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- shift mod tap(s)
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
@@ -1484,16 +1486,16 @@ function enc(n, d)
 				memory.mod.dirty = true
 			end
 		elseif edit_field == edit_field_noise then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- set pitch noise
 				voice_param_delta('pitch_noise', d)
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- set mod noise
 				voice_param_delta('mod_noise', d)
 			end
 		elseif edit_field == edit_field_bias then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- transpose voice(s)
 				-- find highest value (or lowest, if lowering)
 				local sign = d < 0 and -1 or 1
@@ -1511,16 +1513,16 @@ function enc(n, d)
 				-- transpose 'em
 				voice_param_delta('transpose', d)
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- set mod bias
 				voice_param_delta('mod_bias', d)
 			end
 		elseif edit_field == edit_field_length then
-			if held_keys.edit_tap or edit_tap == edit_tap_pitch then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- set pitch length
 				params:delta('pitch_loop_length', d)
 			end
-			if held_keys.edit_tap or edit_tap == edit_tap_mod then
+			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- set mod length
 				params:delta('mod_loop_length', d)
 			end
@@ -1800,9 +1802,9 @@ function redraw()
 		screen.level(3)
 		screen.text(string.format('%d.', top_voice_index))
 
-		draw_tap_equation(54, 'p', top_voice.pitch_tap, 12, held_keys.edit_tap or edit_tap == edit_tap_pitch)
+		draw_tap_equation(54, 'p', top_voice.pitch_tap, 12, edit_both_taps or edit_tap == edit_tap_pitch)
 
-		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, held_keys.edit_tap or edit_tap == edit_tap_mod)
+		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, edit_both_taps or edit_tap == edit_tap_mod)
 
 	end
 	--]]
