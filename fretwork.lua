@@ -440,22 +440,24 @@ end
 function write(pitch)
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
-			local voice = voices[v]
-			-- TODO: move this into voice: `next_pitch`
-			voice.pitch_tap:set_step_value(0, pitch)
-			flash_write(write_type_pitch, voice.pitch_tap:get_step_pos(0))
-			update_voice(v)
+			voices[v].pitch_tap.next_value = pitch
 		end
 	end
 	blinkers.record:start()
 end
 
 function shift(d)
-	for v = 1, n_voices do
-		voices[v].pitch_tap:shift(d)
-		voices[v].mod_tap:shift(d)
-	end
 	maybe_write()
+	for v = 1, n_voices do
+		local voice = voices[v]
+		local write_ready = voice.pitch_tap.next_value ~= nil
+		voice.pitch_tap:shift(d)
+		voice.mod_tap:shift(d)
+		-- TODO: use an on_write() callback instead of this heuristic
+		if write_ready and voice.pitch_tap.next_value == nil then
+			flash_write(write_type_pitch, voice.pitch_tap:get_step_pos(0))
+		end
+	end
 	scale:apply_edits()
 	update_voices()
 	-- silently update loop length params, as they may have changed after shift
@@ -766,10 +768,16 @@ function pitch_keyboard:key(x, y, z)
 	self:note(x, y, z)
 	if self.n_held_keys > 0 and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
 		if write_enable then
-			if quantization_off() then
-				write(self:get_last_value())
-			else
-				pitch_keyboard_played = true
+			local pitch = self:get_last_value()
+			for v = 1, n_voices do
+				if voice_selector:is_selected(v) then
+					local tap = voices[v].pitch_tap
+					tap.next_value = pitch
+					if quantization_off() then
+						tap:apply_edits()
+						update_voice(v)
+					end
+				end
 			end
 		end
 		events.key()

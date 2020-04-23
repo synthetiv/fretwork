@@ -148,6 +148,10 @@ function ShiftRegisterTap:apply_edits()
 		self.pos = self.shift_register:wrap_loop_pos(self.shift_register.loop_start + self.next_offset)
 		self.next_offset = nil
 	end
+	if self.next_value ~= nil then
+		self:set_step_value(0, self.next_value)
+		self.next_value = nil
+	end
 end
 
 --- change `tick`, which may or may not change `pos`
