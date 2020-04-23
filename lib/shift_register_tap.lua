@@ -88,7 +88,7 @@ end
 
 --- get the past/present/future value of `pos`
 -- @param s steps from now
--- @return the value of `pos` in `s` steps, potentially affected by scramble
+-- @return the value of `pos` in `s` steps, potentially affected by scramble + jitter
 function ShiftRegisterTap:get_step_pos(s)
 	local scramble_offset = math.floor(self.scramble_values:get(s) * self.scramble + 0.5)
 	return s + self.pos + scramble_offset
@@ -96,25 +96,31 @@ end
 
 --- get the past/present/future value of `pos`, by tick
 -- @param t ticks from now
--- @return the value of `pos` in `s` steps, potentially affected by scramble
+-- @return the value of `pos` in `t` ticks, potentially affected by scramble + jitter
+-- @return the step `t` ticks from now, potentially affected by scramble + jitter
 function ShiftRegisterTap:get_tick_pos(t)
-	return self:get_step_pos(self:get_tick_step(t))
+	local step = self:get_tick_step(t)
+	return self:get_step_pos(step), step
 end
 
 --- get a past/present/future shift register value
 -- @param s steps from now
 -- @return a value from the shift register, potentially offset by bias + noise
+-- @return the position in the buffer at step `s`
 function ShiftRegisterTap:get_step_value(s)
 	local pos = self:get_step_pos(s)
 	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
-	return self.shift_register:read(pos) + noise_value + self.bias
+	return self.shift_register:read(pos) + noise_value + self.bias, pos
 end
 
 --- get a past/present/future shift register value, by tick
 -- @param t ticks from now
 -- @return a value from the shift register, potentially offset by bias + noise
+-- @return the position in the buffer at step `s`
+-- @return the step `t` ticks from now
 function ShiftRegisterTap:get_tick_value(t)
-	return self:get_step_value(self:get_tick_step(t))
+	local step, pos = self:get_tick_step(t)
+	return self:get_step_value(step), step, pos
 end
 
 --- set a past/present/future shift register value, by step

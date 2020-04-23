@@ -1565,16 +1565,12 @@ function calculate_voice_path(v)
 	local x = 0
 	for t = 1, n_screen_notes do
 		local tick = t - screen_note_center
-		local pitch_step = pitch_tap:get_tick_step(tick)
-		local mod_step = mod_tap:get_tick_step(tick)
-		-- TODO: if you compare values instead of steps, you'll have to calculate more values (duh) but
-		-- may then be able to make fewer calls to screen() when redrawing. worth the tradeoff?
-		if n == 0 or pitch_step ~= note.pitch_step or mod_step ~= note.mod_step then
-			local pitch = pitch_tap:get_step_value(pitch_step)
+		local pitch, pitch_step, pitch_pos = pitch_tap:get_tick_value(tick)
+		local mod, mod_step, mod_pos = mod_tap:get_tick_value(tick)
+		local gate = voice.active and voice:mod_to_gate(mod)
+		if n == 0 or pitch ~= note.pitch or gate ~= note.gate then
 			local y = get_screen_note_y(scale:snap(pitch))
 			local y0 = note.y or y
-			local mod = mod_tap:get_step_value(mod_step)
-			local gate = voice.active and voice:mod_to_gate(mod)
 			local connect = gate and note.gate
 			x = (t - 1) * screen_note_width
 			-- set final x and y of previous note
@@ -1583,10 +1579,10 @@ function calculate_voice_path(v)
 			n = n + 1
 			note = path[n]
 			note.pitch_step = pitch_step
-			note.pitch_pos = pitch_tap.shift_register:wrap_loop_pos(pitch_tap:get_step_pos(pitch_step))
+			note.pitch_pos = pitch_tap.shift_register:wrap_loop_pos(pitch_pos)
 			note.pitch = pitch
 			note.mod_step = mod_step
-			note.mod_pos = mod_tap.shift_register:wrap_loop_pos(mod_tap:get_step_pos(mod_step))
+			note.mod_pos = mod_tap.shift_register:wrap_loop_pos(mod_pos)
 			note.mod = mod
 			note.gate = gate
 			note.connect = connect
