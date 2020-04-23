@@ -1607,7 +1607,7 @@ function calculate_voice_path(v)
 		if n == 0 or pitch ~= note.pitch or gate ~= note.gate then
 			local y = get_screen_note_y(scale:snap(pitch))
 			local y0 = note.y or y
-			local connect = gate and note.gate
+			local connect = n ~= 0 and gate and note.gate
 			x = (t - 1) * screen_note_width
 			-- set final x and y of previous note
 			note.x2 = x
