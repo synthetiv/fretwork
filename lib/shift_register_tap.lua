@@ -53,8 +53,9 @@ end
 -- @param s steps from now
 -- @return ticks per shift, potentially affected by jitter
 function ShiftRegisterTap:get_step_length(s)
-	local jitter = self.jitter_values:get(s * self.direction) * self.jitter
-	local rate = self.ticks_per_shift * math.pow(2, jitter)
+	-- TODO: it seems absolutely insane that this should be slow
+	local jitter = self.jitter_values:get(s * self.direction) * self.jitter + 1
+	local rate = self.ticks_per_shift * math.max(0, jitter)
 	return math.floor(rate + 0.5)
 end
 
