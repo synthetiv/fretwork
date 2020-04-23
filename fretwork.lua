@@ -371,7 +371,7 @@ function update_voice(v)
 	local prev_gate = voice.gate
 	local prev_active = voice.active
 	local prev_pitch_id = voice.pitch_id
-	voice:update_values()
+	voice:update_values() -- TODO: only continue if something has changed
 	if voice.active and voice.gate then
 		if output_mode == output_mode_crow then
 			crow.output[v].volts = voice.pitch
@@ -753,7 +753,6 @@ function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
 	memory.mask.dirty = true
 	if quantization_off() then
-		scale:apply_edits()
 		update_voices()
 	end
 end
@@ -805,9 +804,6 @@ function transpose_keyboard:key(x, y, z)
 			end
 		end
 	end
-	if quantization_off() then
-		update_voices()
-	end
 end
 
 function grid_octave_key(z, d)
@@ -839,11 +835,12 @@ function grid_key(x, y, z)
 	elseif voice_selector:should_handle_key(x, y) then
 		if held_keys.shift then
 			if z == 1 then
-				local voice_index = voice_selector:get_key_option(x, y)
-				local voice = voices[voice_index]
+				local v = voice_selector:get_key_option(x, y)
+				local voice = voices[v]
 				voice.next_active = not voice.active
 				if quantization_off() then
-					update_voice(voice_index)
+					voice:apply_edits()
+					update_voice(v)
 				end
 			end
 		else
@@ -913,8 +910,7 @@ function midi_event(data)
 		for v = 1, n_voices do
 			local voice = voices[v]
 			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
-				voice.pitch_tap:shift(1)
-				voice.mod_tap:shift(1)
+				voice:shift(1)
 				update_voice(v)
 				dirty = true
 			end
@@ -1071,6 +1067,7 @@ function add_params()
 			controlspec = controlspec.new(-50, 50, 'lin', 0.5, (v - 2.5) * 2, 'cents'),
 			action = function(value)
 				voice.detune = value / 1200
+				update_voice(v)
 			end
 		}
 		params:add{
@@ -1081,6 +1078,10 @@ function add_params()
 			action = function(value)
 				voice.pitch_tap.next_bias = value / 12
 				memory.transposition.dirty = true
+				if quantization_off() then
+					voice.pitch_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1092,6 +1093,10 @@ function add_params()
 				voice.pitch_tap.scramble = value
 				dirty = true
 				memory.pitch.dirty = true
+				if quantization_off() then
+					voice.pitch_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1103,6 +1108,10 @@ function add_params()
 				voice.pitch_tap.noise = value / 12
 				dirty = true
 				memory.pitch.dirty = true
+				if quantization_off() then
+					voice.pitch_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1121,6 +1130,10 @@ function add_params()
 				end
 				dirty = true
 				memory.transposition.dirty = true
+				if quantization_off() then
+					voice.pitch_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1132,6 +1145,10 @@ function add_params()
 				voice.pitch_tap.jitter = value
 				dirty = true
 				memory.pitch.dirty = true
+				if quantization_off() then
+					voice.pitch_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1143,6 +1160,10 @@ function add_params()
 				voice.mod_tap.next_bias = value
 				dirty = true
 				memory.mod.dirty = true
+				if quantization_off() then
+					voice.mod_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1154,6 +1175,10 @@ function add_params()
 				voice.mod_tap.scramble = value
 				dirty = true
 				memory.mod.dirty = true
+				if quantization_off() then
+					voice.mod_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1165,6 +1190,10 @@ function add_params()
 				voice.mod_tap.noise = value
 				dirty = true
 				memory.mod.dirty = true
+				if quantization_off() then
+					voice.mod_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1183,6 +1212,10 @@ function add_params()
 				end
 				dirty = true
 				memory.transposition.dirty = true
+				if quantization_off() then
+					voice.mod_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		params:add{
@@ -1194,6 +1227,10 @@ function add_params()
 				voice.mod_tap.jitter = value
 				dirty = true
 				memory.pitch.dirty = true
+				if quantization_off() then
+					voice.mod_tap:apply_edits()
+					update_voice(v)
+				end
 			end
 		}
 		-- TODO: inversion too? value scaling?
@@ -1479,6 +1516,7 @@ function enc(n, d)
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
 						voice.pitch_tap:shift(-d, true)
+						update_voice(v)
 					end
 				end
 				memory.pitch.dirty = true
@@ -1489,6 +1527,7 @@ function enc(n, d)
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
 						voice.mod_tap:shift(-d, true)
+						update_voice(v)
 					end
 				end
 				memory.mod.dirty = true
@@ -1534,9 +1573,6 @@ function enc(n, d)
 				-- set mod length
 				params:delta('mod_loop_length', d)
 			end
-		end
-		if quantization_off() then
-			update_voices()
 		end
 	end
 	blinkers.info:start()

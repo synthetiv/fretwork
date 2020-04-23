@@ -24,7 +24,11 @@ function X0XRoll.new(x, y, width, height, n_voices, voices)
 		roll.voice_hold_steps[v] = 0
 		roll.voice_ys[v] = y
 		roll.y_voices[y] = v
-		roll.voices[v].mod_tap.on_shift = function(d) roll:shift_voice(v, -d) end
+		local on_shift = roll.voices[v].mod_tap.on_shift
+		roll.voices[v].mod_tap.on_shift = function(d)
+			on_shift(d)
+			roll:shift_voice(v, -d)
+		end
 	end
 	return roll
 end

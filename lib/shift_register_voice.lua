@@ -13,9 +13,11 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.pitch_id = -1
 	voice.pitch = 0
 	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register, voice)
+	voice.pitch_tap.on_shift = function() voice:apply_edits() end
 	voice.scale = scale
 	voice.mod = 0
 	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register, voice)
+	voice.mod_tap.on_shift = function() voice:apply_edits() end
 	voice.gate = false
 	return voice
 end
@@ -27,12 +29,9 @@ end
 function ShiftRegisterVoice:apply_edits()
 	-- TODO: next_pitch
 	self.active = self.next_active
-	self.pitch_tap:apply_edits()
-	self.mod_tap:apply_edits()
 end
 
 function ShiftRegisterVoice:update_values()
-	self:apply_edits()
 	local scale = self.scale
 	local pitch = self.pitch_tap:get_step_value(0)
 	local pitch_id = scale:get_nearest_mask_pitch_id(pitch)
