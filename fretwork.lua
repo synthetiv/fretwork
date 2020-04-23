@@ -1727,7 +1727,11 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	screen.level(3)
 
 	if highlight_rate or highlight_jitter or ticks_per_shift ~= 1 or jitter ~= 0 then
-		screen.text('/(')
+		screen.text('/')
+
+		if highlight_jitter or jitter ~= 0 then
+			screen.text('(')
+		end
 
 		screen.level(highlight_rate and 15 or 3)
 		if ticks_per_shift == slowest_rate then
@@ -1739,10 +1743,9 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 		if highlight_jitter or jitter ~= 0 then
 			screen.level(highlight_jitter and 15 or 3)
 			screen.text(string.format('%+.1fy', jitter))
+			screen.level(3)
+			screen.text(')')
 		end
-
-		screen.level(3)
-		screen.text(')')
 	end
 
 	screen.level(highlight_scramble and 15 or 3)
