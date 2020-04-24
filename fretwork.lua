@@ -828,6 +828,10 @@ function grid_octave_key(z, d)
 		else
 			view_octave = view_octave + d
 		end
+		-- no need to recalculate voice pitch/gate, but we will need to redraw
+		for v = 1, n_voices do
+			voices[v].dirty = true
+		end
 	end
 	if active_keyboard ~= nil then
 		active_keyboard.octave = view_octave
@@ -1649,7 +1653,6 @@ function calculate_voice_path(v)
 	dirty = true
 end
 
--- TODO: these aren't getting updated when changing octaves while paused
 function draw_voice_path(v, level)
 	local voice = voices[v]
 	local path = voice_paths[v]
