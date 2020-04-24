@@ -1685,7 +1685,7 @@ function draw_voice_path(v, level)
 			-- solid line for active notes
 			local note_y = y + 0.5
 			-- outline
-			if y0 == y then -- TODO: this shouldn't happen as often as it does
+			if y0 == y then
 				screen.move(x, note_y)
 			else
 				screen.move(x - 1, note_y)
