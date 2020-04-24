@@ -114,6 +114,12 @@ voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
 for v = 1, n_voices do
 	local voice = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
+	voice.pitch_tap.on_write = function(pos)
+		flash_write(write_type_pitch, pos)
+	end
+	voice.mod_tap.on_write = function(pos)
+		flash_write(write_type_mod, pos)
+	end
 	voices[v] = voice
 end
 top_voice = voices[top_voice_index]
@@ -451,13 +457,8 @@ function shift(d)
 	maybe_write()
 	for v = 1, n_voices do
 		local voice = voices[v]
-		local write_ready = voice.pitch_tap.next_value ~= nil
 		voice.pitch_tap:shift(d)
 		voice.mod_tap:shift(d)
-		-- TODO: use an on_write() callback instead of this heuristic
-		if write_ready and voice.pitch_tap.next_value == nil then
-			flash_write(write_type_pitch, voice.pitch_tap:get_step_pos(0))
-		end
 	end
 	scale:apply_edits()
 	update_voices()
@@ -1649,7 +1650,6 @@ function calculate_voice_path(v)
 end
 
 -- TODO: these aren't getting updated when changing octaves while paused
--- TODO: are writes even flashing correctly when not playing?
 function draw_voice_path(v, level)
 	local voice = voices[v]
 	local path = voice_paths[v]

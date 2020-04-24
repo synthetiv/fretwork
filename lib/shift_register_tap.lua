@@ -31,7 +31,9 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.jitter_values = RandomQueue.new(139)
 	tap.next_bias = 0
 	tap.bias = 0
+	tap.next_value = nil
 	tap.on_shift = function() end
+	tap.on_write = function() end
 	-- if this is the first tap created for this shift register, sync it (so SR always has a synced tap)
 	if shift_register.sync_tap == nil then
 		shift_register.sync_tap = tap
@@ -132,6 +134,7 @@ function ShiftRegisterTap:set_step_value(s, value)
 	local pos = self:get_step_pos(s)
 	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
 	self.shift_register:write(pos, value - self.bias - noise_value)
+	self.on_write(pos)
 end
 
 --- set a past/present/future shift register value, by tick
