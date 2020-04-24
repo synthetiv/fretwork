@@ -1668,8 +1668,6 @@ function draw_voice_path(v, level)
 				if write.type == write_type_pitch and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
 					note_level = math.max(note_level, write.level)
 				elseif write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
-					-- TODO: it would be nice to show recently erased/closed gates consistently (why do they
-					-- flash for one frame on some voices but not always?)
 					note_level = math.max(note_level, write.level)
 				end
 			end
@@ -1699,7 +1697,7 @@ function draw_voice_path(v, level)
 			screen.level(math.ceil(led_blend(level, note_level)))
 			screen.line_width(1)
 			screen.stroke()
-		elseif voice_selector:is_selected(v) then
+		elseif voice_selector:is_selected(v) or note_level > 0 then
 			-- dotted line for inactive notes
 			for dot_x = x, note.x2 do
 				if dot_x % 2 == 0 then
