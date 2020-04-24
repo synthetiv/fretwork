@@ -78,6 +78,7 @@ beatclock = BeatClock.new()
 beatclock.ticks_per_step = 3 -- default 6
 beatclock.steps_per_beat = 8 -- default 4
 beatclock.on_step = function()
+	-- TODO: master clock division
 	events.beat()
 end
 beatclock.on_start = function()

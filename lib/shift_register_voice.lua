@@ -27,7 +27,6 @@ function ShiftRegisterVoice:mod_to_gate(mod)
 end
 
 function ShiftRegisterVoice:apply_edits()
-	-- TODO: next_pitch
 	self.active = self.next_active
 end
 
