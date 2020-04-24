@@ -1705,7 +1705,7 @@ function draw_voice_path(v, level)
 					screen.pixel(dot_x, y)
 				end
 			end
-			screen.level(math.ceil(led_blend(level, note_level) / 3))
+			screen.level(math.ceil(led_blend(level / 3, note_level)))
 			screen.fill()
 		end
 		-- draw connector from previous note, if any
