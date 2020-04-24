@@ -1609,10 +1609,10 @@ function calculate_voice_path(v)
 	local x = 0
 	for t = 1, n_screen_notes do
 		local tick = t - screen_note_center
-		local pitch, pitch_step, pitch_pos = pitch_tap:get_tick_value(tick)
-		local mod, mod_step, mod_pos = mod_tap:get_tick_value(tick)
+		local pitch, pitch_pos, pitch_step = pitch_tap:get_tick_value(tick)
+		local mod, mod_pos, mod_step = mod_tap:get_tick_value(tick)
 		local gate = voice.active and voice:mod_to_gate(mod)
-		if n == 0 or pitch ~= note.pitch or gate ~= note.gate then
+		if n == 0 or pitch_step ~= note.pitch_step or pitch ~= note.pitch or mod_step ~= note.mod_step or gate ~= note.gate then
 			local y = get_screen_note_y(scale:snap(pitch))
 			local y0 = note.y or y
 			local connect = n ~= 0 and gate and note.gate
@@ -1666,12 +1666,11 @@ function draw_voice_path(v, level)
 			local write = recent_writes[w]
 			if write.level > 0 then
 				if write.type == write_type_pitch and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
-					note_level = write.level
-				end
-				-- TODO: it would be nice to show recently erased/closed gates consistently (why do they
-				-- flash for one frame on some voices but not always?)
-				if write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
-					note_level = math.max(level, write.level)
+					note_level = math.max(note_level, write.level)
+				elseif write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
+					-- TODO: it would be nice to show recently erased/closed gates consistently (why do they
+					-- flash for one frame on some voices but not always?)
+					note_level = math.max(note_level, write.level)
 				end
 			end
 		end

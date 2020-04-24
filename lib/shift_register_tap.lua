@@ -121,8 +121,8 @@ end
 -- @return the position in the buffer at step `s`
 -- @return the step `t` ticks from now
 function ShiftRegisterTap:get_tick_value(t)
-	local step, pos = self:get_tick_step(t)
-	return self:get_step_value(step), step, pos
+	local pos, step = self:get_tick_pos(t)
+	return self:get_step_value(step), pos, step
 end
 
 --- set a past/present/future shift register value, by step
