@@ -23,6 +23,8 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.detune = 0
 	voice.pitch_id = -1
 	voice.pitch = 0
+	voice.bias_pitch_id = -1
+	voice.noisy_bias_pitch_id = -1
 	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register, voice)
 	voice.scale = scale
 
@@ -65,17 +67,15 @@ end
 -- @param force_mod_update force mod update regardless of tap dirty state
 function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 	local pitch_tap = self.pitch_tap
-	local pitch = self.pitch
 	local pitch_change = false
 
 	local mod_tap = self.mod_tap
-	local gate = self.gate
 	local gate_change = false
 
 	-- calculate and update pitch
 	if force_pitch_update or pitch_tap.dirty then
 		local scale = self.scale
-		pitch = pitch_tap:get_step_value(0)
+		local pitch, noisy_bias, bias = pitch_tap:get_step_value(0)
 		local pitch_id = scale:get_nearest_mask_pitch_id(pitch)
 		if pitch_id == -1 then
 			pitch_id = scale:get_nearest_pitch_id(pitch)
@@ -86,6 +86,8 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 		pitch_change = self.pitch ~= pitch
 		self.pitch_id = pitch_id
 		self.pitch = pitch
+		self.noisy_bias_pitch_id = scale:get_nearest_pitch_id(noisy_bias)
+		self.bias_pitch_id = scale:get_nearest_pitch_id(bias)
 		pitch_tap.dirty = false
 		self.path_dirty = true
 	end
@@ -93,7 +95,7 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 	-- calculate and update gate
 	if force_mod_update or mod_tap.dirty then
 		local mod = mod_tap:get_step_value(0)
-		gate = self:mod_to_gate(mod) and self.active
+		local gate = self:mod_to_gate(mod) and self.active
 		gate_change = self.gate ~= gate
 		self.gate = gate
 		self.mod = mod
@@ -104,8 +106,8 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 	-- if current gate has changed, or gate is high and current pitch has changed, update output
 	-- TODO: separate callback for when pitch changes while gate is low... for drawing?
 	if gate_change or pitch_change then
-		if gate then
-			self.note_on(pitch)
+		if self.gate then
+			self.note_on(self.pitch)
 		else
 			self.note_off()
 		end

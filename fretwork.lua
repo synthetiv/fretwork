@@ -359,8 +359,7 @@ function flash_note(v)
 		return
 	end
 	-- if gate is high or this voice is selected, check whether the pitch has changed
-	local recent_pitch_id = recent_note.pitch_id
-	if recent_pitch_id == voice.pitch_id then
+	if recent_note.pitch_id == voice.pitch_id and recent_note.bias_pitch_id == voice.bias_pitch_id and recent_note.noisy_bias_pitch_id == voice.noisy_bias_pitch_id then
 		if voice.gate then
 			-- if gate is high and was high before, stay in sustain stage
 			if recent_note.stage == flash_stage_sustain then
@@ -376,12 +375,10 @@ function flash_note(v)
 	-- update the new one
 	recent_notes.last = recent_notes.last % n_recent_voice_notes + 1
 	recent_note = recent_notes[recent_notes.last]
-	-- set absolute pitch data
+	-- set pitch data
 	recent_note.pitch_id = voice.pitch_id
-	-- set relative pitch data
-	local pitch_tap = voices[v].pitch_tap
-	recent_note.bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.bias)
-	recent_note.noisy_bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.bias + pitch_tap.noise_values:get(0) * pitch_tap.noise)
+	recent_note.bias_pitch_id = voice.bias_pitch_id
+	recent_note.noisy_bias_pitch_id = voice.noisy_bias_pitch_id
 	-- set levels
 	recent_note.stage = voice.gate and flash_stage_sustain or flash_stage_ghost
 	recent_note.release_level = voice.gate and 1 or 0.4

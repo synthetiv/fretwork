@@ -110,16 +110,21 @@ end
 --- get a past/present/future shift register value
 -- @param s steps from now
 -- @return a value from the shift register, potentially offset by bias + noise
+-- @return bias + noise
+-- @return bias
 -- @return the position in the buffer at step `s`
 function ShiftRegisterTap:get_step_value(s)
 	local pos = self:get_step_pos(s)
-	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
-	return self.shift_register:read(pos) + noise_value + self.bias, pos
+	local bias = self.bias
+	local noisy_bias = self.noise_values:get(pos - self.pos) * self.noise + bias
+	return self.shift_register:read(pos) + noisy_bias, noisy_bias, bias, pos
 end
 
 --- get a past/present/future shift register value, by tick
 -- @param t ticks from now
 -- @return a value from the shift register, potentially offset by bias + noise
+-- @return bias + noise
+-- @return bias
 -- @return the position in the buffer at step `s`
 -- @return the step `t` ticks from now
 function ShiftRegisterTap:get_tick_value(t)
