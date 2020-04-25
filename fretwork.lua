@@ -403,9 +403,9 @@ function note_off(v)
 	flash_note(v)
 end
 
-function update_voices()
+function update_voices(force_pitch_update, force_mod_update)
 	for v = 1, n_voices do
-		voices[v]:update()
+		voices[v]:update(force_pitch_update, force_mod_update)
 	end
 end
 
@@ -970,13 +970,10 @@ function add_params()
 		default = 16,
 		action = function(value)
 			pitch_register:set_length(value)
-			-- TODO: too many calls to update_voices() choke things up, and this is only necessary when
-			-- decreasing length anyway (because that's the only thing that will change voice
-			-- positions). throttle somehow? coroutine? (you don't just want a fixed refresh rate, that
-			-- would be terrible)
-			-- update_voices()
+			if quantization_off() then
+				update_voices(true)
+			end
 			blinkers.info:start()
-			dirty = true
 		end
 	}
 	params:add{
@@ -988,9 +985,10 @@ function add_params()
 		default = 18,
 		action = function(value)
 			mod_register:set_length(value)
-			update_voices()
+			if quantization_off() then
+				update_voices(false, true)
+			end
 			blinkers.info:start()
-			dirty = true
 		end
 	}
 	params:add{

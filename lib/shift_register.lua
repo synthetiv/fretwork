@@ -37,6 +37,7 @@ function ShiftRegister:set_length(new_length)
 		self.loop_start = self.loop_start + self.loop_length - new_length
 	end
 	self.loop_length = new_length
+	self.dirty = true
 end
 
 --- constrain a virtual index to a valid buffer index
