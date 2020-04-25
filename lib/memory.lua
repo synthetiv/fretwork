@@ -7,7 +7,6 @@ Memory.new = function()
 	local mem = {}
 	mem.n_slots = n_memory_slots
 	mem.slots = {}
-	-- TODO: multi selects for 'pattern chaining'... or maybe pattern_time
 	mem.selector = Select.new(1, 3, 4, 4)
 	mem.selector.on_select = function(s)
 		if held_keys.shift then -- TODO: any way around this use of global state?

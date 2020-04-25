@@ -19,11 +19,6 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.shift_register = shift_register
 	tap.direction = 1
 	tap.scramble = 0
-	-- TODO: is there another way to handle noise/scramble that would:
-	-- 1. handle loop length changes better? i.e. if you change the SR length and a note moves from
-	-- point A on the screen to point B, the corresponding scramble/noise values move with it so that
-	-- the voice path doesn't twitch & jump around?
-	-- 2. really never repeat?
 	tap.scramble_values = RandomQueue.new(131) -- prime length, so SR loop and random queues are rarely in phase
 	tap.noise = 0 -- TODO: `next_noise`, quantization
 	tap.noise_values = RandomQueue.new(137)
@@ -55,7 +50,6 @@ end
 -- @param s steps from now
 -- @return ticks per shift, potentially affected by jitter
 function ShiftRegisterTap:get_step_length(s)
-	-- TODO: it seems absolutely insane that this should be slow
 	-- TODO: when clock is paused/disabled, no increase in jitter can cause the current step to
 	-- 'disappear', i.e. current pitch never changes until tap is shifted. is that good or bad?
 	local jitter = self.jitter_values:get(s * self.direction) * self.jitter + 1

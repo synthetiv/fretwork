@@ -34,8 +34,6 @@ function RandomQueue:get(i)
 end
 
 function RandomQueue:shift(d)
-	-- TODO: re-randomize values that aren't currently "in use" (visible/audible)
-	-- (right now each voice just has a set of fixed random values, which is better than nothing but not ideal)
 	self.index = self:get_index(d)
 end
 

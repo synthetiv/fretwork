@@ -1037,7 +1037,6 @@ function add_params()
 	for v = 1, n_voices do
 		local voice = voices[v]
 		params:add_group(string.format('voice %d', v), 13)
-		-- TODO: maybe some of these things really shouldn't be params?
 		params:add{
 			type = 'control',
 			id = string.format('voice_%d_detune', v),
@@ -1212,7 +1211,6 @@ function add_params()
 			end
 		}
 		-- TODO: inversion too? value scaling?
-		-- TODO: maybe even different loop lengths... which implies multiple independent SRs
 		params:add{
 			type = 'number',
 			id = string.format('voice_%d_clock_note', v),
