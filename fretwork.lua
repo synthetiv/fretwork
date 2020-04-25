@@ -400,9 +400,6 @@ function note_off(v)
 	elseif output_mode == output_mode_polysub then
 		engine.stop(v - 1)
 	end
-	-- TODO: we can no longer tell the difference between active && gate and active && ! gate, so
-	-- flashing ghost notes doesn't make a lot of sense
-	-- what about showing steady pitch indicators instead, for selected voices only?
 	flash_note(v)
 end
 
@@ -413,18 +410,13 @@ function update_voices()
 end
 
 function get_write_pitch()
-	-- TODO: watch debug output using pitch + crow sources to make sure they're working
 	if pitch_keyboard.n_held_keys > 0 then
-		-- print(string.format('writing grid pitch (source = %d)', source))
 		return pitch_keyboard:get_last_value()
 	elseif source == source_pitch then
-		-- print(string.format('writing audio pitch (source = %d)', source))
 		return pitch_in_value
 	elseif source == source_crow then
-		-- print(string.format('writing crow pitch (source = %d)', source))
 		return crow_in_values[2]
 	end
-	-- print(string.format('nothing to write (source = %d)', source))
 	return false
 end
 
@@ -475,35 +467,6 @@ end
 function rewind()
 	shift(-1)
 end
-
--- DEBUG: print roughly when garbage collection starts and how much memory has been used
---[[
-mem = 0
-mem_after_gc = 0
-ticks_since_gc = 0
-function print_memory()
-	local mem_since_gc = mem - mem_after_gc
-	print('memory since gc', mem_since_gc)
-	print('average memory per second', mem_since_gc / ticks_since_gc)
-end
-memory_metro = metro.init{
-	time = 1,
-	event = function()
-		local new_mem = collectgarbage('count') * 1024
-		if new_mem < mem then
-			if ticks_since_gc > 1 then
-				print('-- gc --', ticks_since_gc)
-				print_memory()
-			end
-			ticks_since_gc = 0
-			mem_after_gc = new_mem
-		else
-			ticks_since_gc = ticks_since_gc + 1
-		end
-		mem = new_mem
-	end
-}
---]]
 
 function tick()
 	if not clock_enable then
@@ -707,11 +670,9 @@ function mask_keyboard:get_key_level(x, y, n)
 end
 
 function transpose_keyboard:get_key_level(x, y, n)
-	-- TODO: you should really highlight each voice even when gate is low, and do something to show
-	-- the full noise range (not just the current noise value)
 	local level = relative_pitch_levels[n]
-	-- highlight transposition settings
-	-- TODO: this is mostly taken care of by flashing notes now, but it would be nice to show 'next's
+	-- TODO: do something to show the full noise range (not just the current noise value)
+	-- TODO: show 'next's
 	-- highlight octaves
 	if (n - scale.center_pitch_id) % scale.length == 0 then
 		level = math.max(level, 2)
@@ -1392,9 +1353,6 @@ end
 
 function init()
 
-	-- DEBUG
-	-- memory_metro:start()
-
 	add_params()
 	params:set('hzlag', 0.02)
 	params:set('cut', 8.32)
@@ -1882,26 +1840,6 @@ function redraw()
 		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, edit_both_taps or edit_tap == edit_tap_mod)
 
 	end
-	--]]
-
-	-- DEBUG: draw minibuffer, loop region, head
-	--[[
-	screen.move(0, 1)
-	screen.line_rel(pitch_register.buffer_size, 0)
-	screen.level(1)
-	screen.stroke()
-	for offset = 1, pitch_register.loop_length do
-		local pos = pitch_register:wrap_buffer_pos(pitch_register:get_loop_offset_pos(offset))
-		screen.pixel(pos - 1, 0)
-		screen.level(7)
-		for v = 1, n_voices do
-			if voice_selector:is_selected(v) and pos == pitch_register:wrap_buffer_pos(pitch_register:wrap_loop_pos(voices[v].pitch_tap:get_pos(0))) then
-				screen.level(15)
-			end
-		end
-		screen.fill()
-	end
-	--]]
 
 	screen.update()
 end
@@ -1915,7 +1853,4 @@ function cleanup()
 	for i, blinker in ipairs(blinkers) do
 		blinker:stop()
 	end
-	-- if memory_metro ~= nil then
-		-- memory_metro:stop()
-	-- end
 end

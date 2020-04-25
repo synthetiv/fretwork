@@ -17,7 +17,6 @@ end
 
 function Blinker:start()
 	self.on = true
-	-- self.metro:stop()
 	self.metro:start()
 end
 
