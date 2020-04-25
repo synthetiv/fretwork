@@ -23,12 +23,6 @@ MaskMemory = include 'lib/memory_mask'
 TranspositionMemory = include 'lib/memory_transposition'
 ModMemory = include 'lib/memory_mod'
 
-pitch_poll = nil
-pitch_in_value = 0
-pitch_in_detected = false
-pitch_in_octave = 0
-crow_in_values = { 0, 0 }
-
 crow_slew_shapes = {
 	'linear',
 	'sine',
@@ -51,27 +45,14 @@ scale = Scale.new(et12, 12)
 pitch_register = ShiftRegister.new(32)
 mod_register = ShiftRegister.new(11)
 
-source = 1
-source_names = {
-	'grid only',
-	'pitch track',
-	'crow input 2' -- TODO: make sure this works
-	-- TODO: random, LFO
-}
-source_grid_only = 1
-source_pitch = 2
-source_crow = 3
-
 noop = function() end
 events = {
 	beat = noop,
 	trigger1 = noop,
-	trigger2 = noop,
 	key = noop
 }
 
 write_enable = true
-write_probability = 0
 
 clock_enable = false
 beatclock = BeatClock.new()
@@ -409,26 +390,6 @@ function update_voices(force_pitch_update, force_mod_update)
 	end
 end
 
-function get_write_pitch()
-	if pitch_keyboard.n_held_keys > 0 then
-		return pitch_keyboard:get_last_value()
-	elseif source == source_pitch then
-		return pitch_in_value
-	elseif source == source_crow then
-		return crow_in_values[2]
-	end
-	return false
-end
-
-function maybe_write()
-	if write_enable and write_probability > math.random(1, 100) then
-		local pitch = get_write_pitch()
-		if pitch then
-			write(pitch)
-		end
-	end
-end
-
 function flash_write(write_type, pos)
 	recent_writes.last = recent_writes.last % n_recent_writes + 1
 	local write = recent_writes[recent_writes.last]
@@ -441,14 +402,24 @@ end
 function write(pitch)
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
-			voices[v].pitch_tap.next_value = pitch
+			local tap = voices[v].pitch_tap
+			tap.next_value = pitch
+		end
+	end
+	if quantization_off() then
+		for v = 1, n_voices do
+			local voice = voices[v]
+			voice.pitch_tap:apply_edits()
+			voice:update(true)
 		end
 	end
 	blinkers.record:start()
 end
 
 function shift(d)
-	maybe_write()
+	if write_enable and pitch_keyboard.n_held_keys > 0 then
+		write(pitch_keyboard:get_last_value())
+	end
 	scale:apply_edits() -- TODO: maintain separate scales per voice, so changes can be quantized separately
 	for v = 1, n_voices do
 		local voice = voices[v]
@@ -624,11 +595,7 @@ function grid_redraw()
 	if blinkers.record.on then
 		record_button_level = 8
 	elseif write_enable then
-		if write_probability > 0 then
-			record_button_level = 7
-		else
-			record_button_level = 4
-		end
+		record_button_level = 7
 	end
 	g:led(4, 7, record_button_level)
 
@@ -738,17 +705,7 @@ function pitch_keyboard:key(x, y, z)
 	self:note(x, y, z)
 	if self.n_held_keys > 0 and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
 		if write_enable then
-			local pitch = self:get_last_value()
-			for v = 1, n_voices do
-				if voice_selector:is_selected(v) then
-					local tap = voices[v].pitch_tap
-					tap.next_value = pitch
-					if quantization_off() then
-						tap:apply_edits()
-						voices[v]:update()
-					end
-				end
-			end
+			write(self:get_last_value())
 		end
 		events.key()
 	end
@@ -898,29 +855,10 @@ function midi_event(data)
 	end
 end
 
-function update_freq(value)
-	-- TODO: better check amplitude too -- this detects a 'pitch' when there's no audio input
-	pitch_in_detected = value > 0
-	if pitch_in_detected then
-		pitch_in_value = math.log(value / 440.0) / math.log(2) + 3.75 + pitch_in_octave
-		dirty = true
-	end
-end
-
 function crow_setup()
 	crow.clear()
-	-- input modes will be set by params
 	crow.input[1].change = function()
 		events.trigger1()
-	end
-	crow.input[2].change = function()
-		events.trigger2()
-	end
-	crow.input[1].stream = function(value) -- not used... yet!
-		crow_in_values[1] = value
-	end
-	crow.input[2].stream = function(value)
-		crow_in_values[2] = value
 	end
 	params:bang()
 end
@@ -989,46 +927,6 @@ function add_params()
 				update_voices(false, true)
 			end
 			blinkers.info:start()
-		end
-	}
-	params:add{
-		type = 'option',
-		id = 'shift_source',
-		name = 'sr source',
-		options = source_names,
-		default = source_grid_only,
-		action = function(value)
-			source = value
-			if source == source_crow then
-				crow.input[2].mode('stream', 1/32) -- TODO: is this too fast? not fast enough? what about querying?
-			else
-				crow.input[2].mode('none')
-			end
-		end
-	}
-	params:add{
-		type = 'control',
-		id = 'write_probability',
-		name = 'write probability',
-		controlspec = controlspec.new(1, 101, 'exp', 1, 101),
-		formatter = function(param)
-			return string.format('%1.f%%', param:get() - 1)
-		end,
-		action = function(value)
-			write_probability = value - 1
-			blinkers.info:start()
-		end
-	}
-	-- TODO: can you do away with this, now that you're applying the current voice's transposition to all recorded notes?
-	params:add{
-		type = 'number',
-		id = 'pitch_in_octave',
-		name = 'pitch in octave',
-		min = -2,
-		max = 2,
-		default = 0,
-		action = function(value)
-			pitch_in_octave = value
 		end
 	}
 	
@@ -1365,9 +1263,6 @@ function init()
 	voice_selector:reset(true)
 	memory_selector:reset(true)
 
-	pitch_poll = poll.set('pitch_in_l', update_freq)
-	pitch_poll.time = 1 / 10 -- was 8, is 10 OK?
-	
 	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
 	params:set('restore_memory')
 	memory.pitch:recall_slot(1)
@@ -1375,7 +1270,6 @@ function init()
 	memory.transposition:recall_slot(1)
 	memory.mod:recall_slot(1)
 
-	pitch_poll:start()
 	g.key = grid_key
 	m.event = midi_event
 	
@@ -1423,11 +1317,7 @@ function voice_param_delta(id, d)
 	end
 end
 
--- TODO: still left to control:
--- internal clock tempo?
--- clock enable?
--- write probability
--- record enable
+-- TODO: offer control over internal clock tempo?
 function enc(n, d)
 	if n == 1 then
 		-- select voice
@@ -1823,10 +1713,6 @@ function redraw()
 		screen.level(0)
 		screen.fill()
 
-		-- TODO: move this
-		-- screen.move(0, 7)
-		-- screen.text(string.format('P: %d%%', math.floor(write_probability + 0.5)))
-
 		screen.move(0, 54)
 		screen.level(3)
 		screen.text(string.format('%d.', top_voice_index))
@@ -1843,9 +1729,6 @@ end
 function cleanup()
 	redraw_metro:stop()
 	beatclock:stop()
-	if pitch_poll ~= nil then
-		pitch_poll:stop()
-	end
 	for i, blinker in ipairs(blinkers) do
 		blinker:stop()
 	end
