@@ -103,10 +103,12 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 
 	-- if current gate has changed, or gate is high and current pitch has changed, update output
 	-- TODO: separate callback for when pitch changes while gate is low... for drawing?
-	if gate and (gate_change or pitch_change) then
-		self.note_on(pitch)
-	elseif gate_change then
-		self.note_off()
+	if gate_change or pitch_change then
+		if gate then
+			self.note_on(pitch)
+		else
+			self.note_off()
+		end
 	end
 end
 

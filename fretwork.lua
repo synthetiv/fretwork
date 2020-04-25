@@ -130,6 +130,9 @@ for v = 1, n_voices do
 end
 top_voice = voices[top_voice_index]
 
+flash_stage_sustain = 1
+flash_stage_ghost = 2
+flash_stage_release = 3
 n_recent_voice_notes = 4
 recent_voice_notes = {}
 for v = 1, n_voices do
@@ -139,7 +142,7 @@ for v = 1, n_voices do
 	for n = 1, n_recent_voice_notes do
 		recent_voice_notes[v][n] = {
 			pitch_id = 0,
-			active = false,
+			stage = flash_stage_release,
 			onset_level = 0,
 			release_level = 0
 		}
@@ -295,7 +298,12 @@ redraw_metro = metro.init{
 					note.onset_level = note.onset_level - 1
 					dirty = true
 				end
-				if not note.active then
+				if note.stage == flash_stage_ghost then
+					if note.release_level > 0.4 then -- 6/15
+						note.release_level = note.release_level * 0.4
+						dirty = true
+					end
+				elseif note.stage == flash_stage_release then
 					if note.release_level > 0.06 then -- < 1/15
 						note.release_level = note.release_level * 0.4
 						dirty = true
@@ -341,40 +349,43 @@ function quantization_off()
 	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
 end
 
-function flash_note(v, active)
+function flash_note(v)
 	local voice = voices[v]
-	local pitch_tap = voices[v].pitch_tap
 	local recent_notes = recent_voice_notes[v]
 	local recent_note = recent_notes[recent_notes.last]
-	-- stop the previous note
-	recent_note.active = false
+	-- if gate is low and this voice isn't selected, just release the last note
+	if not voice.gate and not voice_selector:is_selected(v) then
+		recent_note.stage = flash_stage_release
+		return
+	end
+	-- if gate is high or this voice is selected, check whether the pitch has changed
+	local recent_pitch_id = recent_note.pitch_id
+	if recent_pitch_id == voice.pitch_id then
+		if voice.gate then
+			-- if gate is high and was high before, stay in sustain stage
+			if recent_note.stage == flash_stage_sustain then
+				return
+			end
+		elseif voice_selector:is_selected(v) then
+			-- if gate is low but the voice is selected, move to ghost stage (dim sustain)
+			recent_note.stage = flash_stage_ghost
+			return
+		end
+	end
+	recent_note.stage = flash_stage_release
 	-- update the new one
 	recent_notes.last = recent_notes.last % n_recent_voice_notes + 1
 	recent_note = recent_notes[recent_notes.last]
 	-- set absolute pitch data
 	recent_note.pitch_id = voice.pitch_id
 	-- set relative pitch data
+	local pitch_tap = voices[v].pitch_tap
 	recent_note.bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.bias)
 	recent_note.noisy_bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.bias + pitch_tap.noise_values:get(0) * pitch_tap.noise)
-	-- set level
-	if active then
-		-- real, active note
-		recent_note.active = true
-		recent_note.onset_level = 2
-		recent_note.release_level = 1
-	else
-		-- "ghost" note that just flashes once
-		recent_note.active = false
-		recent_note.onset_level = 2
-		recent_note.release_level = 0
-	end
-	dirty = true
-end
-
-function dim_note(v)
-	local recent_notes = recent_voice_notes[v]
-	local recent_note = recent_notes[recent_notes.last]
-	recent_note.active = false
+	-- set levels
+	recent_note.stage = voice.gate and flash_stage_sustain or flash_stage_ghost
+	recent_note.release_level = voice.gate and 1 or 0.4
+	recent_note.onset_level = voice.gate and 2 or 0
 	dirty = true
 end
 
@@ -384,7 +395,7 @@ function note_on(v, pitch)
 	elseif output_mode == output_mode_polysub then
 		engine.start(v - 1, musicutil.note_num_to_freq(60 + pitch * 12))
 	end
-	flash_note(v, true)
+	flash_note(v)
 end
 
 function note_off(v)
@@ -395,12 +406,7 @@ function note_off(v)
 	-- TODO: we can no longer tell the difference between active && gate and active && ! gate, so
 	-- flashing ghost notes doesn't make a lot of sense
 	-- what about showing steady pitch indicators instead, for selected voices only?
-	if voice_selector:is_selected(v) then
-		-- if voice is muted, flash a ghost note
-		flash_note(v, false)
-	else
-		dim_note(v)
-	end
+	flash_note(v)
 end
 
 function update_voices()
@@ -673,7 +679,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 	if self.scale:mask_contains(n) then
 		level = led_blend(level, 3.5)
 	end
-	return math.min(15, math.floor(level))
+	return math.min(15, math.ceil(level))
 end
 
 function mask_keyboard:get_key_level(x, y, n)
@@ -693,7 +699,7 @@ function mask_keyboard:get_key_level(x, y, n)
 	if self:is_white_key(n) then
 		level = led_blend(level, 2)
 	end
-	return math.min(15, math.floor(level))
+	return math.min(15, math.ceil(level))
 end
 
 function transpose_keyboard:get_key_level(x, y, n)
@@ -706,7 +712,7 @@ function transpose_keyboard:get_key_level(x, y, n)
 	if (n - scale.center_pitch_id) % scale.length == 0 then
 		level = math.max(level, 2)
 	end
-	return math.min(15, math.floor(level))
+	return math.min(15, math.ceil(level))
 end
 
 function x0x_roll:get_key_level(x, y, v, step, gate)
