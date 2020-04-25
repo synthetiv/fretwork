@@ -616,10 +616,12 @@ function grid_redraw()
 			local voice = voices[v]
 			local recent_notes = recent_voice_notes[v]
 			local voice_level = 3
+			local onset_scale = 0.5
 			if v == top_voice_index then
 				voice_level = 13
+				onset_scale = 1
 			elseif voice_selector:is_selected(v) then
-				voice_level = 5
+				voice_level = 6
 			end
 			for n = 1, n_recent_voice_notes do
 				local note = recent_notes[n]
@@ -627,11 +629,16 @@ function grid_redraw()
 				local bias_pitch_id = note.bias_pitch_id
 				local noisy_bias_pitch_id = note.noisy_bias_pitch_id
 				local release_level = note.release_level * voice_level
-				local level = release_level + note.onset_level
+				local onset_level = note.onset_level * onset_scale
+				local level = release_level + onset_level
 				if release_level > 0 or note.onset_level > 0 then
 					absolute_pitch_levels[pitch_id] = led_blend(absolute_pitch_levels[pitch_id], level)
-					relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], level)
-					relative_pitch_levels[noisy_bias_pitch_id] = led_blend(relative_pitch_levels[noisy_bias_pitch_id], release_level / 2 + note.onset_level)
+					if bias_pitch_id == noisy_bias_pitch_id then
+						relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], release_level * 1.25)
+					else
+						relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], level)
+						relative_pitch_levels[noisy_bias_pitch_id] = led_blend(relative_pitch_levels[noisy_bias_pitch_id], level * 0.75)
+					end
 				end
 			end
 		end
