@@ -31,7 +31,13 @@ end
 function MaskMemory:recall(mask)
 	scale:mask_from_pitches(mask)
 	if quantization_off() then
-		update_voices()
+		scale:apply_edits()
+		-- force pitch values + paths to update
+		for v = 1, n_voices do
+			local voice = voices[v]
+			voice.pitch_tap.dirty = true
+			voice:update()
+		end
 	end
 end
 

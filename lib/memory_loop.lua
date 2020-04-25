@@ -45,6 +45,8 @@ end
 
 function LoopMemory:recall(loop)
 	for v = 1, n_voices do
+		-- TODO: when tap rates differ, loop contents and tap offsets may change at different times,
+		-- which looks and sounds confusing
 		voices[v][self.tap_key].next_offset = loop.voices[v].offset
 		params:set(string.format(self.scramble_param, v), loop.voices[v].scramble)
 		-- params:set(string.format(self.rate_param, v), loop.voices[v].direction) -- TODO
@@ -52,8 +54,13 @@ function LoopMemory:recall(loop)
 	if quantization_off() then
 		self.shift_register:set_loop(0, loop.values)
 		-- silently update the loop length
-		params:set(self.length_param, self.shift_register.length, true)
-		update_voices()
+		params:set(self.length_param, self.shift_register.loop_length, true)
+		-- force values + paths to update
+		for v = 1, n_voices do
+			local voice = voices[v]
+			voice[self.tap_key].dirty = true
+			voice:update()
+		end
 	else
 		self.shift_register:set_next_loop(1, loop.values)
 	end
@@ -65,7 +72,7 @@ function LoopMemory:save(loop)
 	for v = 1, n_voices do
 		local loop_voice = loop.voices[v]
 		local tap = voices[v][self.tap_key]
-		loop_voice.offset = tap:get_offset()
+		-- loop_voice.offset = tap:get_offset() -- TODO: undefined method (!)
 		loop_voice.scramble = tap.scramble
 		-- loop_voice.direction = tap.direction -- TODO
 	end

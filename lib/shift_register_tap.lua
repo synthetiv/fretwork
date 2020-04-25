@@ -135,6 +135,7 @@ function ShiftRegisterTap:set_step_value(s, value)
 	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
 	self.shift_register:write(pos, value - self.bias - noise_value)
 	self.on_write(pos)
+	self.dirty = true
 end
 
 --- set a past/present/future shift register value, by tick
@@ -146,14 +147,19 @@ end
 
 --- apply the 'next' bias and offset values (this makes quantization of changes possible)
 function ShiftRegisterTap:apply_edits()
-	self.bias = self.next_bias
+	if self.next_bias ~= self.bias then
+		self.bias = self.next_bias
+		self.dirty = true
+	end
 	if self.next_offset ~= nil then
 		self.pos = self.shift_register:wrap_loop_pos(self.shift_register.loop_start + self.next_offset)
 		self.next_offset = nil
+		self.dirty = true
 	end
 	if self.next_value ~= nil then
 		self:set_step_value(0, self.next_value)
 		self.next_value = nil
+		self.dirty = true
 	end
 end
 
@@ -177,10 +183,12 @@ function ShiftRegisterTap:shift(d, manual)
 		self.noise_values:shift(direction)
 		self.jitter_values:shift(direction)
 		self.pos = self.shift_register:wrap_loop_pos(self.pos + direction)
-		self.on_shift(direction)
 		self:apply_edits()
+		self.dirty = true
+		self.on_shift(direction)
 	end
 	self.tick = new_tick
+	self.dirty = true
 end
 
 --- check whether two steps correspond to the same position in the loop

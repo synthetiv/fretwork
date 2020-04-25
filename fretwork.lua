@@ -120,6 +120,12 @@ for v = 1, n_voices do
 	voice.mod_tap.on_write = function(pos)
 		flash_write(write_type_mod, pos)
 	end
+	voice.note_on = function(pitch)
+		note_on(v, pitch)
+	end
+	voice.note_off = function()
+		note_off(v)
+	end
 	voices[v] = voice
 end
 top_voice = voices[top_voice_index]
@@ -184,7 +190,6 @@ end
 
 view_octave = 0
 
-pitch_keyboard_played = false -- i.e. played since last tick
 pitch_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 mask_keyboard = Keyboard.new(6, 1, 11, 8, scale)
 transpose_keyboard = Keyboard.new(6, 1, 11, 8, scale)
@@ -280,7 +285,7 @@ redraw_metro = metro.init{
 
 		for v = 1, n_voices do
 			-- calculate voice paths, if necessary
-			if voices[v].dirty then
+			if voices[v].path_dirty then
 				calculate_voice_path(v)
 			end
 			-- fade recent voice notes
@@ -373,46 +378,40 @@ function dim_note(v)
 	dirty = true
 end
 
-function update_voice(v)
-	local voice = voices[v]
-	local prev_gate = voice.gate
-	local prev_active = voice.active
-	local prev_pitch_id = voice.pitch_id
-	voice:update_values() -- TODO: only continue if something has changed
-	if voice.active and voice.gate then
-		if output_mode == output_mode_crow then
-			crow.output[v].volts = voice.pitch
-		elseif output_mode == output_mode_polysub then
-			engine.start(v - 1, musicutil.note_num_to_freq(60 + voice.pitch * 12))
-		end
-		if not prev_gate or not prev_active or prev_pitch_id ~= voice.pitch_id then
-			flash_note(v, true)
-		end
-	else
-		if output_mode == output_mode_crow then
-		elseif output_mode == output_mode_polysub then
-			engine.stop(v - 1)
-		end
-		if voice.gate and voice_selector:is_selected(v) then
-			-- if gate is active but voice is muted, flash a ghost note
-			flash_note(v, false)
-		else
-			dim_note(v)
-		end
+function note_on(v, pitch)
+	if output_mode == output_mode_crow then
+		crow.output[v].volts = pitch
+	elseif output_mode == output_mode_polysub then
+		engine.start(v - 1, musicutil.note_num_to_freq(60 + pitch * 12))
 	end
-	voice.dirty = true
+	flash_note(v, true)
+end
+
+function note_off(v)
+	if output_mode == output_mode_crow then
+	elseif output_mode == output_mode_polysub then
+		engine.stop(v - 1)
+	end
+	-- TODO: we can no longer tell the difference between active && gate and active && ! gate, so
+	-- flashing ghost notes doesn't make a lot of sense
+	-- what about showing steady pitch indicators instead, for selected voices only?
+	if voice_selector:is_selected(v) then
+		-- if voice is muted, flash a ghost note
+		flash_note(v, false)
+	else
+		dim_note(v)
+	end
 end
 
 function update_voices()
 	for v = 1, n_voices do
-		update_voice(v)
+		voices[v]:update()
 	end
 end
 
 function get_write_pitch()
 	-- TODO: watch debug output using pitch + crow sources to make sure they're working
-	if (pitch_keyboard_played or pitch_keyboard.n_held_keys > 0) then
-		pitch_keyboard_played = false
+	if pitch_keyboard.n_held_keys > 0 then
 		-- print(string.format('writing grid pitch (source = %d)', source))
 		return pitch_keyboard:get_last_value()
 	elseif source == source_pitch then
@@ -455,13 +454,11 @@ end
 
 function shift(d)
 	maybe_write()
+	scale:apply_edits() -- TODO: maintain separate scales per voice, so changes can be quantized separately
 	for v = 1, n_voices do
 		local voice = voices[v]
-		voice.pitch_tap:shift(d)
-		voice.mod_tap:shift(d)
+		voice:shift(d)
 	end
-	scale:apply_edits()
-	update_voices()
 	-- silently update loop length params, as they may have changed after shift
 	params:set('pitch_loop_length', pitch_register.loop_length, true)
 	params:set('mod_loop_length', mod_register.loop_length, true)
@@ -777,7 +774,7 @@ function pitch_keyboard:key(x, y, z)
 					tap.next_value = pitch
 					if quantization_off() then
 						tap:apply_edits()
-						update_voice(v)
+						voices[v]:update()
 					end
 				end
 			end
@@ -854,7 +851,7 @@ function grid_key(x, y, z)
 				voice.next_active = not voice.active
 				if quantization_off() then
 					voice:apply_edits()
-					update_voice(v)
+					voices[v]:update(false, true)
 				end
 			end
 		else
@@ -925,8 +922,6 @@ function midi_event(data)
 			local voice = voices[v]
 			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
 				voice:shift(1)
-				update_voice(v)
-				dirty = true
 			end
 		end
 	end
@@ -1081,7 +1076,7 @@ function add_params()
 			controlspec = controlspec.new(-50, 50, 'lin', 0.5, (v - 2.5) * 2, 'cents'),
 			action = function(value)
 				voice.detune = value / 1200
-				update_voice(v)
+				voice:update(true)
 			end
 		}
 		params:add{
@@ -1094,7 +1089,7 @@ function add_params()
 				memory.transposition.dirty = true
 				if quantization_off() then
 					voice.pitch_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1109,7 +1104,7 @@ function add_params()
 				memory.pitch.dirty = true
 				if quantization_off() then
 					voice.pitch_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1124,7 +1119,7 @@ function add_params()
 				memory.pitch.dirty = true
 				if quantization_off() then
 					voice.pitch_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1146,7 +1141,7 @@ function add_params()
 				memory.transposition.dirty = true
 				if quantization_off() then
 					voice.pitch_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1161,7 +1156,7 @@ function add_params()
 				memory.pitch.dirty = true
 				if quantization_off() then
 					voice.pitch_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1176,7 +1171,7 @@ function add_params()
 				memory.mod.dirty = true
 				if quantization_off() then
 					voice.mod_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1191,7 +1186,7 @@ function add_params()
 				memory.mod.dirty = true
 				if quantization_off() then
 					voice.mod_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1206,7 +1201,7 @@ function add_params()
 				memory.mod.dirty = true
 				if quantization_off() then
 					voice.mod_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1228,7 +1223,7 @@ function add_params()
 				memory.transposition.dirty = true
 				if quantization_off() then
 					voice.mod_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1243,7 +1238,7 @@ function add_params()
 				memory.pitch.dirty = true
 				if quantization_off() then
 					voice.mod_tap:apply_edits()
-					update_voice(v)
+					voice:update()
 				end
 			end
 		}
@@ -1530,7 +1525,7 @@ function enc(n, d)
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
 						voice.pitch_tap:shift(-d, true)
-						update_voice(v)
+						voice:update()
 					end
 				end
 				memory.pitch.dirty = true
@@ -1541,7 +1536,7 @@ function enc(n, d)
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
 						voice.mod_tap:shift(-d, true)
-						update_voice(v)
+						voice:update()
 					end
 				end
 				memory.mod.dirty = true
@@ -1649,7 +1644,7 @@ function calculate_voice_path(v)
 	-- set final values for last note
 	note.x2 = 128
 	path.length = n
-	voice.dirty = false
+	voice.path_dirty = false
 	dirty = true
 end
 
