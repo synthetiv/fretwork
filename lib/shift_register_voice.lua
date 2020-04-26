@@ -51,7 +51,7 @@ end
 -- @param mod value to convert
 -- @return true if gate is high/open
 function ShiftRegisterVoice:mod_to_gate(mod)
-	return mod > 0.5
+	return mod > 0
 end
 
 --- apply 'next' active state
@@ -137,10 +137,9 @@ function ShiftRegisterVoice:set_step_gate(s, gate)
 end
 
 --- toggle past/present/future gate state
--- TODO: occasionally, thanks to a special coincidence of noise + bias values, this doesn't work...
 -- @param s steps from now
 function ShiftRegisterVoice:toggle_step_gate(s)
-	self:set_step_gate(s, not self:get_step_gate(s))
+	self.mod_tap:set_step_value(s, -self.mod_tap:get_step_value(s))
 end
 
 return ShiftRegisterVoice

@@ -13,7 +13,7 @@ local function euclid(fill, length)
 	local pattern = {}
 	-- initialize pattern with all 1s at start
 	for i = 1, length do
-		pattern[i] = { i <= fill and 1 or 0 }
+		pattern[i] = { i <= fill and 1 or -1 }
 	end
 	-- distribute sequences from end of pattern to beginning
 	while fill > 1 do
