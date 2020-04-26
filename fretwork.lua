@@ -162,6 +162,8 @@ held_keys = {
 	octave_down = false,
 	octave_up = false,
 	edit_alt = false,
+	edit_dec = false,
+	edit_inc = false,
 	edit_fine = false
 }
 
@@ -1319,19 +1321,33 @@ end
 
 function key(n, z)
 	if n == 1 then
-		-- TODO: what should this actually do?
 		held_keys.edit_alt = z == 1
+		held_keys.edit_fine = false -- reset so it doesn't get stuck when holding both K3 and K1
 	elseif n == 2 then
-		-- switch between editing pitch only / mod only / both
-		if z == 1 then
+		if held_keys.edit_alt then
+			held_keys.edit_dec = z == 1
+			if z == 1 then
+				-- reset or decrement edit field
+				edit_field_delta(held_keys.edit_inc and 'reset' or -1)
+			end
+		elseif z == 1 then
+			-- switch between editing pitch only / mod only / both
 			edit_both_taps = not edit_both_taps
 			if not edit_both_taps then
 				edit_tap = edit_tap % n_edit_taps + 1
 			end
 		end
 	elseif n == 3 then
-		-- enable fine control
-		held_keys.edit_fine = z == 1
+		if held_keys.edit_alt then
+			held_keys.edit_inc = z == 1
+			if z == 1 then
+				-- reset or increment edit field
+				edit_field_delta(held_keys.edit_dec and 'reset' or 1)
+			end
+		else
+			-- enable fine control
+			held_keys.edit_fine = z == 1
+		end
 	end
 	blinkers.info:start()
 	dirty = true
@@ -1340,7 +1356,12 @@ end
 function voice_param_delta(id, d)
 	for v = 1, n_voices do
 		if voice_selector:is_selected(v) then
-			params:delta(string.format('voice_%d_%s', v, id), d)
+			local param = params:lookup_param(string.format('voice_%d_%s', v, id))
+			if d == 'reset' then
+				param:set_default()
+			else
+				param:delta(d)
+			end
 		end
 	end
 end
@@ -1370,48 +1391,54 @@ function enc(n, d)
 		if edit_field ~= edit_field_time and held_keys.edit_fine then
 			d = d / 20
 		end
-		if edit_field == edit_field_multiply then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- set pitch +/-
-				voice_param_delta('pitch_multiply', d)
-			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod +/-
-				voice_param_delta('mod_multiply', d)
-			end
-		elseif edit_field == edit_field_rate then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- set pitch rate/direction
-				-- TODO: it would be nice to be able to hold a key and invert the way this is set, so fully
-				-- c/cw = stopped and +/- full speed is at the center
-				voice_param_delta('pitch_rate', d)
-			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod rate/direction
-				voice_param_delta('mod_rate', d)
-			end
-		elseif edit_field == edit_field_jitter then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- set pitch jitter
-				voice_param_delta('pitch_jitter', d)
-			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod jitter
-				voice_param_delta('mod_jitter', d)
-			end
-		elseif edit_field == edit_field_scramble then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- set pitch scramble
-				voice_param_delta('pitch_scramble', d)
-			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod scramble
-				voice_param_delta('mod_scramble', d)
-			end
-		elseif edit_field == edit_field_time then
+		edit_field_delta(d)
+	end
+	blinkers.info:start()
+	dirty = true
+end
+
+function edit_field_delta(d)
+	local reset = d == 'reset'
+	if edit_field == edit_field_multiply then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch +/-
+			voice_param_delta('pitch_multiply', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod +/-
+			voice_param_delta('mod_multiply', d)
+		end
+	elseif edit_field == edit_field_rate then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch rate/direction
+			voice_param_delta('pitch_rate', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod rate/direction
+			voice_param_delta('mod_rate', d)
+		end
+	elseif edit_field == edit_field_jitter then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch jitter
+			voice_param_delta('pitch_jitter', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod jitter
+			voice_param_delta('mod_jitter', d)
+		end
+	elseif edit_field == edit_field_scramble then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch scramble
+			voice_param_delta('pitch_scramble', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod scramble
+			voice_param_delta('mod_scramble', d)
+		end
+	elseif edit_field == edit_field_time then
+		if d ~= 'reset' then -- TODO: sync selected taps to top on reset
 			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- shift pitch tap(s)
-				-- TODO: I'd still like to be able to set this incrementally using buttons/keys
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
@@ -1432,18 +1459,20 @@ function enc(n, d)
 				end
 				memory.mod.dirty = true
 			end
-		elseif edit_field == edit_field_noise then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- set pitch noise
-				voice_param_delta('pitch_noise', d)
-			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod noise
-				voice_param_delta('mod_noise', d)
-			end
-		elseif edit_field == edit_field_bias then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- transpose voice(s)
+		end
+	elseif edit_field == edit_field_noise then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch noise
+			voice_param_delta('pitch_noise', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod noise
+			voice_param_delta('mod_noise', d)
+		end
+	elseif edit_field == edit_field_bias then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- transpose voice(s)
+			if d ~= 'reset' then
 				-- find highest value (or lowest, if lowering)
 				local sign = d < 0 and -1 or 1
 				local abs_d = d * sign
@@ -1457,26 +1486,24 @@ function enc(n, d)
 				if max_transpose + abs_d > 4 then
 					d = (4 - max_transpose) * sign
 				end
-				-- transpose 'em
-				voice_param_delta('transpose', d)
 			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod bias
-				voice_param_delta('mod_bias', d)
-			end
-		elseif edit_field == edit_field_length then
-			if edit_both_taps or edit_tap == edit_tap_pitch then
-				-- set pitch length
-				params:delta('pitch_loop_length', d)
-			end
-			if edit_both_taps or edit_tap == edit_tap_mod then
-				-- set mod length
-				params:delta('mod_loop_length', d)
-			end
+			-- transpose 'em
+			voice_param_delta('transpose', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod bias
+			voice_param_delta('mod_bias', d)
+		end
+	elseif edit_field == edit_field_length then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch length
+			params:delta('pitch_loop_length', d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod length
+			params:delta('mod_loop_length', d)
 		end
 	end
-	blinkers.info:start()
-	dirty = true
 end
 
 function get_screen_offset_x(offset)
