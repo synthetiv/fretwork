@@ -26,6 +26,8 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.jitter_values = RandomQueue.new(139)
 	tap.next_bias = 0
 	tap.bias = 0
+	tap.next_multiply = 1
+	tap.multiply = 1
 	tap.next_value = nil
 	tap.on_shift = function() end
 	tap.on_write = function() end
@@ -110,8 +112,9 @@ end
 function ShiftRegisterTap:get_step_value(s)
 	local pos = self:get_step_pos(s)
 	local bias = self.bias
+	local multiply = self.multiply
 	local noisy_bias = self.noise_values:get(pos - self.pos) * self.noise + bias
-	return self.shift_register:read(pos) + noisy_bias, noisy_bias, bias, pos
+	return self.shift_register:read(pos) * multiply + noisy_bias, noisy_bias, bias, pos
 end
 
 --- get a past/present/future shift register value, by tick
@@ -131,8 +134,10 @@ end
 -- @param value new value, will be offset by -(bias + noise) and written to scrambled/jittered index
 function ShiftRegisterTap:set_step_value(s, value)
 	local pos = self:get_step_pos(s)
-	local noise_value = self.noise_values:get(pos - self.pos) * self.noise
-	self.shift_register:write(pos, value - self.bias - noise_value)
+	local bias = self.bias
+	local multiply = self.multiply
+	local noisy_bias = self.noise_values:get(pos - self.pos) * self.noise + bias
+	self.shift_register:write(pos, (value - noisy_bias) / multiply)
 	self.on_write(pos)
 	self.dirty = true
 end
@@ -148,6 +153,10 @@ end
 function ShiftRegisterTap:apply_edits()
 	if self.next_bias ~= self.bias then
 		self.bias = self.next_bias
+		self.dirty = true
+	end
+	if self.next_multiply ~= self.multiply then
+		self.multiply = self.next_multiply
 		self.dirty = true
 	end
 	if self.next_offset ~= nil then

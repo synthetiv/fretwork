@@ -234,14 +234,15 @@ edit_tap_mod = 2
 edit_tap = edit_tap_pitch
 edit_both_taps = true
 
-n_edit_fields = 7
-edit_field_time = 1
-edit_field_rate = 2
-edit_field_jitter = 3
-edit_field_scramble = 4
-edit_field_noise = 5
-edit_field_bias = 6
-edit_field_length = 7
+n_edit_fields = 8
+edit_field_multiply = 1
+edit_field_time = 2
+edit_field_rate = 3
+edit_field_jitter = 4
+edit_field_scramble = 5
+edit_field_noise = 6
+edit_field_bias = 7
+edit_field_length = 8
 edit_field = edit_field_time
 
 blink_slow = false
@@ -934,7 +935,7 @@ function add_params()
 	
 	for v = 1, n_voices do
 		local voice = voices[v]
-		params:add_group(string.format('voice %d', v), 13)
+		params:add_group(string.format('voice %d', v), 15)
 		params:add{
 			type = 'control',
 			id = string.format('voice_%d_detune', v),
@@ -953,6 +954,20 @@ function add_params()
 			action = function(value)
 				voice.pitch_tap.next_bias = value / 12
 				memory.transposition.dirty = true
+				if quantization_off() then
+					voice.pitch_tap:apply_edits()
+					voice:update()
+				end
+			end
+		}
+		params:add{
+			type = 'option',
+			id = string.format('voice_%d_pitch_multiply', v),
+			name = string.format('voice %d pitch multiply', v),
+			options = { '-1', '1' },
+			default = 2,
+			action = function(value)
+				voice.pitch_tap.next_multiply = value == 2 and 1 or -1
 				if quantization_off() then
 					voice.pitch_tap:apply_edits()
 					voice:update()
@@ -1042,6 +1057,20 @@ function add_params()
 			end
 		}
 		params:add{
+			type = 'option',
+			id = string.format('voice_%d_mod_multiply', v),
+			name = string.format('voice %d mod multiply', v),
+			options = { '-1', '1' },
+			default = 2,
+			action = function(value)
+				voice.mod_tap.next_multiply = value == 2 and 1 or -1
+				if quantization_off() then
+					voice.mod_tap:apply_edits()
+					voice:update()
+				end
+			end
+		}
+		params:add{
 			type = 'control',
 			id = string.format('voice_%d_mod_scramble', v),
 			name = string.format('voice %d mod scramble', v),
@@ -1108,7 +1137,6 @@ function add_params()
 				end
 			end
 		}
-		-- TODO: inversion too? value scaling?
 		params:add{
 			type = 'number',
 			id = string.format('voice_%d_clock_note', v),
@@ -1342,7 +1370,16 @@ function enc(n, d)
 		if edit_field ~= edit_field_time and held_keys.edit_fine then
 			d = d / 20
 		end
-		if edit_field == edit_field_rate then
+		if edit_field == edit_field_multiply then
+			if edit_both_taps or edit_tap == edit_tap_pitch then
+				-- set pitch +/-
+				voice_param_delta('pitch_multiply', d)
+			end
+			if edit_both_taps or edit_tap == edit_tap_mod then
+				-- set mod +/-
+				voice_param_delta('mod_multiply', d)
+			end
+		elseif edit_field == edit_field_rate then
 			if edit_both_taps or edit_tap == edit_tap_pitch then
 				-- set pitch rate/direction
 				-- TODO: it would be nice to be able to hold a key and invert the way this is set, so fully
@@ -1585,7 +1622,8 @@ function draw_voice_path(v, level)
 	end
 end
 
-function draw_tap_equation(y, label, tap, multiplier, editing)
+function draw_tap_equation(y, label, tap, unit_multiplier, editing)
+	local highlight_multiply = editing and edit_field == edit_field_multiply
 	local highlight_time = editing and edit_field == edit_field_time
 	local highlight_rate = editing and edit_field == edit_field_rate
 	local highlight_jitter = editing and edit_field == edit_field_jitter
@@ -1594,15 +1632,21 @@ function draw_tap_equation(y, label, tap, multiplier, editing)
 	local highlight_bias = editing and edit_field == edit_field_bias
 	local highlight_length = editing and edit_field == edit_field_length
 
+	local multiply = tap.multiply
 	local direction = tap.direction
 	local ticks_per_shift = tap.ticks_per_shift
 	local jitter = tap.jitter
 	local scramble = tap.scramble * direction
-	local noise = tap.noise * direction * multiplier
-	local bias = tap.next_bias * multiplier
+	local noise = tap.noise * direction * unit_multiplier
+	local bias = tap.next_bias * unit_multiplier
 	local loop_length = tap.shift_register.loop_length
 
 	screen.move(8, y)
+
+	if highlight_multiply or multiply ~= 1 then
+		screen.level(highlight_multiply and 15 or 3)
+		screen.text(multiply == -1 and '-' or '+')
+	end
 
 	screen.level(3)
 	screen.text(label .. '[')
