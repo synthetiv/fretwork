@@ -46,6 +46,7 @@ function ShiftRegisterTap:set_rate(direction, ticks_per_shift)
 	self.tick = math.floor(self.tick * ticks_per_shift / self.ticks_per_shift)
 	self.ticks_per_shift = ticks_per_shift
 	self.direction = direction
+	self.dirty = true
 end
 	
 --- get the length of a particular step in ticks

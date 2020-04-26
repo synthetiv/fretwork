@@ -935,6 +935,8 @@ function add_params()
 	
 	for v = 1, n_voices do
 		local voice = voices[v]
+		local pitch_tap = voice.pitch_tap
+		local mod_tap = voice.mod_tap
 		params:add_group(string.format('voice %d', v), 15)
 		params:add{
 			type = 'control',
@@ -952,10 +954,10 @@ function add_params()
 			name = string.format('voice %d transpose', v),
 			controlspec = controlspec.new(-48, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
-				voice.pitch_tap.next_bias = value / 12
+				pitch_tap.next_bias = value / 12
 				memory.transposition.dirty = true
 				if quantization_off() then
-					voice.pitch_tap:apply_edits()
+					pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -967,9 +969,9 @@ function add_params()
 			options = { '-1', '1' },
 			default = 2,
 			action = function(value)
-				voice.pitch_tap.next_multiply = value == 2 and 1 or -1
+				pitch_tap.next_multiply = value == 2 and 1 or -1
 				if quantization_off() then
-					voice.pitch_tap:apply_edits()
+					pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -980,11 +982,11 @@ function add_params()
 			name = string.format('voice %d pitch scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
-				voice.pitch_tap.scramble = value
+				pitch_tap.scramble = value
+				pitch_tap.dirty = true
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
-					voice.pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -995,11 +997,11 @@ function add_params()
 			name = string.format('voice %d pitch noise', v),
 			controlspec = controlspec.new(0, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
-				voice.pitch_tap.noise = value / 12
+				pitch_tap.noise = value / 12
+				pitch_tap.dirty = true
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
-					voice.pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1013,15 +1015,14 @@ function add_params()
 			action = function(value)
 				local direction = value < slowest_rate and -1 or 1
 				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
-				voice.pitch_tap:set_rate(direction, ticks_per_shift)
+				pitch_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
 					-- resync in case direction has changed
-					pitch_register:sync_to_tap(voice.pitch_tap)
+					pitch_register:sync_to_tap(pitch_tap)
 				end
 				dirty = true
 				memory.transposition.dirty = true
 				if quantization_off() then
-					voice.pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1032,11 +1033,11 @@ function add_params()
 			name = string.format('voice %d pitch jitter', v),
 			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
 			action = function(value)
-				voice.pitch_tap.jitter = value
+				pitch_tap.jitter = value
+				pitch_tap.dirty = true
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
-					voice.pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1047,11 +1048,11 @@ function add_params()
 			name = string.format('voice %d mod bias', v),
 			controlspec = controlspec.new(-16, 16, 'lin', 0.1, 0),
 			action = function(value)
-				voice.mod_tap.next_bias = value
+				mod_tap.next_bias = value
 				dirty = true
 				memory.mod.dirty = true
 				if quantization_off() then
-					voice.mod_tap:apply_edits()
+					mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1063,9 +1064,9 @@ function add_params()
 			options = { '-1', '1' },
 			default = 2,
 			action = function(value)
-				voice.mod_tap.next_multiply = value == 2 and 1 or -1
+				mod_tap.next_multiply = value == 2 and 1 or -1
 				if quantization_off() then
-					voice.mod_tap:apply_edits()
+					mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1076,11 +1077,11 @@ function add_params()
 			name = string.format('voice %d mod scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
-				voice.mod_tap.scramble = value
+				mod_tap.scramble = value
+				mod_tap.dirty = true
 				dirty = true
 				memory.mod.dirty = true
 				if quantization_off() then
-					voice.mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1091,11 +1092,11 @@ function add_params()
 			name = string.format('voice %d mod noise', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
-				voice.mod_tap.noise = value
+				mod_tap.noise = value
+				mod_tap.dirty = true
 				dirty = true
 				memory.mod.dirty = true
 				if quantization_off() then
-					voice.mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1109,7 +1110,7 @@ function add_params()
 			action = function(value)
 				local direction = value < slowest_rate and -1 or 1
 				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
-				voice.mod_tap:set_rate(direction, ticks_per_shift)
+				mod_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
 					-- resync in case direction has changed
 					mod_register:sync_to_tap(voice.mod_tap)
@@ -1117,7 +1118,6 @@ function add_params()
 				dirty = true
 				memory.transposition.dirty = true
 				if quantization_off() then
-					voice.mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1128,11 +1128,11 @@ function add_params()
 			name = string.format('voice %d mod jitter', v),
 			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
 			action = function(value)
-				voice.mod_tap.jitter = value
+				mod_tap.jitter = value
+				mod_tap.dirty = true
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
-					voice.mod_tap:apply_edits()
 					voice:update()
 				end
 			end
