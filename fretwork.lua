@@ -45,37 +45,21 @@ scale = Scale.new(et12, 12)
 pitch_register = ShiftRegister.new(32)
 mod_register = ShiftRegister.new(11)
 
-noop = function() end
-events = {
-	tick = noop,
-	key = noop
-}
-
 write_enable = true
 
-clock_enable = false
+clock_running = false
 clock_coro = nil
 clock.transport.start = function()
-	clock_enable = true
+	clock_running = true
 	if clock_coro ~= nil then
 		clock.cancel(clock_coro) -- don't go into double time if clock 'reset' param is triggered
 	end
 	clock_coro = clock.run(clock_tick)
 end
 clock.transport.stop = function()
-	clock_enable = false
+	clock_running = false
 	clock.cancel(clock_coro)
 end
-
-clock_mode = 1
-clock_mode_names = {
-	'norns',
-	'grid',
-	'norns OR grid'
-}
-clock_mode_norns = 1
-clock_mode_grid = 2
-clock_mode_both = 3
 
 output_mode_crow = 1
 output_mode_polysub = 2
@@ -326,7 +310,7 @@ memory = {
 
 function quantization_off()
 	-- disable quantization if ctrl is held/locked or clock is paused
-	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_enable
+	return (held_keys.ctrl ~= held_keys.ctrl_lock) == clock_running
 end
 
 function flash_note(v)
@@ -442,16 +426,8 @@ function clock_tick()
 	while true do
 		-- TODO: master clock division
 		clock.sync(1 / 8)
-		events.tick()
+		advance()
 	end
-end
-
-function tick()
-	if not clock_enable then
-		return
-	end
-	advance()
-	blinkers.play:start()
 end
 
 function update_voice_order()
@@ -594,7 +570,7 @@ function grid_redraw()
 	local play_button_level = 3
 	if blinkers.play.on then
 		play_button_level = 8
-	elseif clock_enable then
+	elseif clock_running then
 		play_button_level = 7
 	end
 	g:led(3, 7, play_button_level)
@@ -714,7 +690,6 @@ function pitch_keyboard:key(x, y, z)
 		if write_enable then
 			write(self:get_last_value())
 		end
-		events.key()
 	end
 end
 
@@ -833,14 +808,10 @@ function grid_key(x, y, z)
 		held_keys.ctrl = z == 1
 	elseif x == 3 and y == 7 and z == 1 then
 		-- play key
-		if clock_mode == clock_mode_norns then
-			if clock_enable then
-				clock.transport.stop()
-			else
-				clock.transport.start()
-			end
+		if clock_running then
+			clock.transport.stop()
 		else
-			clock_enable = not clock_enable
+			clock.transport.start()
 		end
 	elseif x == 4 and y == 7 and z == 1 then
 		-- record key
@@ -869,30 +840,6 @@ end
 function add_params()
 
 	params:add_separator()
-
-	params:add_group('clock', 4)
-	params:add{
-		type = 'option',
-		id = 'shift_clock',
-		name = 'sr/s+h clock',
-		options = clock_mode_names,
-		default = clock_mode_norns,
-		action = function(value)
-			clock_mode = value
-			if clock_mode == clock_mode_grid or clock_mode == clock_mode_both then
-				events.key = tick
-			else
-				events.key = noop
-			end
-			if clock_mode == clock_mode_norns or clock_mode == clock_mode_both then
-				events.tick = tick
-				clock.transport.start()
-			else
-				events.tick = noop
-				clock.transport.stop()
-			end
-		end
-	}
 
 	params:add{
 		type = 'number',
@@ -1309,6 +1256,8 @@ function init()
 
 	dirty = true
 	redraw_metro:start()
+
+	clock.transport.start()
 end
 
 function key(n, z)
