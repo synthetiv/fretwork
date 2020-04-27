@@ -82,6 +82,9 @@ for v = 1, n_voices do
 	voice.mod_tap.on_write = function(pos)
 		flash_write(write_type_mod, pos)
 	end
+	voice.on_shift = function()
+		blinkers.play:start()
+	end
 	voice.note_on = function(pitch)
 		note_on(v, pitch)
 	end
@@ -567,11 +570,9 @@ function grid_redraw()
 	end
 
 	-- transport
-	local play_button_level = 3
-	if blinkers.play.on then
-		play_button_level = 8
-	elseif clock_running then
-		play_button_level = 7
+	local play_button_level = blinkers.play.on and 4 or 3
+	if clock_running then
+		play_button_level = play_button_level + 4
 	end
 	g:led(3, 7, play_button_level)
 	local record_button_level = 3

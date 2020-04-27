@@ -32,14 +32,16 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register, voice)
 	voice.gate = false
 
-	local on_shift = function()
+	voice.on_shift = function() end
+	local on_tap_shift = function()
 		voice:apply_edits()
 		if not voice.skip_update then
 			voice:update()
 		end
+		voice.on_shift()
 	end
-	voice.mod_tap.on_shift = on_shift
-	voice.pitch_tap.on_shift = on_shift
+	voice.mod_tap.on_shift = on_tap_shift
+	voice.pitch_tap.on_shift = on_tap_shift
 
 	local note_on = function() end
 	local note_off = function() end
