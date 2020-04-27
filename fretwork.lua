@@ -48,6 +48,7 @@ mod_register = ShiftRegister.new(11)
 write_enable = true
 
 clock_running = false
+ticks_per_beat = 8
 clock_coro = nil
 clock.transport.start = function()
 	clock_running = true
@@ -424,8 +425,7 @@ end
 
 function clock_tick()
 	while true do
-		-- TODO: master clock division
-		clock.sync(1 / 8)
+		clock.sync(1 / ticks_per_beat)
 		advance()
 	end
 end
@@ -841,6 +841,17 @@ function add_params()
 
 	params:add_separator()
 
+	params:add{
+		type = 'number',
+		id = 'ticks_per_beat',
+		name = 'ticks/beat',
+		min = 1,
+		max = 16,
+		default = 8,
+		action = function(value)
+			ticks_per_beat = value
+		end
+	}
 	params:add{
 		type = 'number',
 		id = 'pitch_loop_length',
