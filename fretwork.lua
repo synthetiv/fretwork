@@ -1526,6 +1526,10 @@ function draw_voice_path(v, level)
 	local voice = voices[v]
 	local path = voice_paths[v]
 	local prev_level = 0
+	local pitch_tap = voice.pitch_tap
+	local mod_tap = voice.mod_tap
+	local has_pitch_edits = pitch_tap.next_jitter ~= pitch_tap.jitter or pitch_tap.next_scramble ~= pitch_tap.scramble or pitch_tap.next_noise ~= pitch_tap.noise or pitch_tap.next_bias ~= pitch_tap.bias or pitch_tap.next_multiply ~= pitch_tap.next_multiply
+	local has_mod_edits = mod_tap.next_jitter ~= mod_tap.jitter or mod_tap.next_scramble ~= mod_tap.scramble or mod_tap.next_noise ~= mod_tap.noise or mod_tap.next_bias ~= mod_tap.bias or mod_tap.next_multiply ~= mod_tap.next_multiply
 	for n = 1, path.length do
 		local note = path[n]
 		local x = note.x
@@ -1533,6 +1537,7 @@ function draw_voice_path(v, level)
 		local y = note.y
 		local y0 = note.y0
 		local gate = note.gate
+		local note_edit_dim = ((has_pitch_edits and note.pitch_step <= 0) or (has_mod_edits and note.mod_step <= 0)) and 1 or 0
 		local note_level = 0
 		-- set flash level, if this note was recently changed
 		for w = 1, n_recent_writes do
@@ -1567,7 +1572,7 @@ function draw_voice_path(v, level)
 			-- center
 			screen.move(x, note_y)
 			screen.line(x2 + 1, note_y)
-			screen.level(math.ceil(led_blend(level, note_level)))
+			screen.level(math.ceil(led_blend(level - note_edit_dim, note_level)))
 			screen.line_width(1)
 			screen.stroke()
 		elseif voice_selector:is_selected(v) or note_level > 0 then
@@ -1577,7 +1582,7 @@ function draw_voice_path(v, level)
 					screen.pixel(dot_x, y)
 				end
 			end
-			screen.level(math.ceil(led_blend(level / 3, note_level)))
+			screen.level(math.ceil(led_blend((level - note_edit_dim) / 3, note_level)))
 			screen.fill()
 		end
 		-- draw connector from previous note, if any
