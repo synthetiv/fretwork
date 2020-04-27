@@ -1487,7 +1487,7 @@ function calculate_voice_path(v)
 		local pitch, pitch_pos, pitch_step = pitch_tap:get_tick_value(tick)
 		local mod, mod_pos, mod_step = mod_tap:get_tick_value(tick)
 		local gate = voice.active and voice:mod_to_gate(mod)
-		if n == 0 or pitch_step ~= note.pitch_step or pitch ~= note.pitch or mod_step ~= note.mod_step or gate ~= note.gate then
+		if n == 0 or pitch_step ~= note.pitch_step or mod_step ~= note.mod_step then
 			local y = get_screen_note_y(scale:snap(pitch))
 			local y0 = note.y or y
 			local connect = n ~= 0 and gate and note.gate
