@@ -1562,6 +1562,14 @@ function draw_voice_path(v, level)
 			-- outline
 			if y0 == y then
 				screen.move(x, note_y)
+			elseif math.abs(y0 - y) == 1 then
+				-- when y0 and y are within 1 pixel of one another, draw a partial outline to prevent
+				-- overlap with the previous note
+				screen.move(x - 1, note_y + (y - y0) * 0.5)
+				screen.line_rel(x + 1, 0)
+				screen.level(0)
+				screen.line_width(2)
+				screen.stroke()
 			else
 				screen.move(x - 1, note_y)
 			end
