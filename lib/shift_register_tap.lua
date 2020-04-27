@@ -53,8 +53,6 @@ end
 -- @param s steps from now
 -- @return ticks per shift, potentially affected by jitter
 function ShiftRegisterTap:get_step_length(s)
-	-- TODO: when clock is paused/disabled, no increase in jitter can cause the current step to
-	-- 'disappear', i.e. current pitch never changes until tap is shifted. is that good or bad?
 	local jitter = self.jitter_values:get(s * self.direction) * self.jitter + 1
 	local rate = self.ticks_per_shift * math.max(0, jitter)
 	return math.floor(rate + 0.5)
@@ -66,7 +64,7 @@ end
 -- @return the remainder in ticks, after reducing `t` by step lengths
 function ShiftRegisterTap:get_tick_step(t)
 	-- `slowest_rate` ticks/shift won't be shifted by clock, so future == past == present
-	if t == 0 or self.ticks_per_shift == slowest_rate then
+	if self.ticks_per_shift == slowest_rate then
 		return 0, self.tick
 	end
 	-- reduce `|t + tick|` by current + adjacent step lengths until reducing further would hit 0
