@@ -47,39 +47,35 @@ mod_register = ShiftRegister.new(11)
 
 noop = function() end
 events = {
-	beat = noop,
-	trigger1 = noop,
+	tick = noop,
 	key = noop
 }
 
 write_enable = true
 
 clock_enable = false
-beatclock = BeatClock.new()
-beatclock.ticks_per_step = 3 -- default 6
-beatclock.steps_per_beat = 8 -- default 4
-beatclock.on_step = function()
-	-- TODO: master clock division
-	events.beat()
-end
-beatclock.on_start = function()
+clock_coro = nil
+clock.transport.start = function()
 	clock_enable = true
+	if clock_coro ~= nil then
+		clock.cancel(clock_coro) -- don't go into double time if clock 'reset' param is triggered
+	end
+	clock_coro = clock.run(clock_tick)
 end
-beatclock.on_stop = function()
+clock.transport.stop = function()
 	clock_enable = false
+	clock.cancel(clock_coro)
 end
 
 clock_mode = 1
 clock_mode_names = {
-	'crow input 1',
+	'norns',
 	'grid',
-	'crow in OR grid',
-	'beatclock'
+	'norns OR grid'
 }
-clock_mode_trig = 1
+clock_mode_norns = 1
 clock_mode_grid = 2
-clock_mode_trig_grid = 3
-clock_mode_beatclock = 4
+clock_mode_both = 3
 
 output_mode_crow = 1
 output_mode_polysub = 2
@@ -440,6 +436,14 @@ end
 
 function rewind()
 	shift(-1)
+end
+
+function clock_tick()
+	while true do
+		-- TODO: master clock division
+		clock.sync(1 / 8)
+		events.tick()
+	end
 end
 
 function tick()
@@ -829,12 +833,11 @@ function grid_key(x, y, z)
 		held_keys.ctrl = z == 1
 	elseif x == 3 and y == 7 and z == 1 then
 		-- play key
-		if clock_mode == clock_mode_beatclock then
+		if clock_mode == clock_mode_norns then
 			if clock_enable then
-				beatclock:stop()
+				clock.transport.stop()
 			else
-				beatclock:reset()
-				beatclock:start()
+				clock.transport.start()
 			end
 		else
 			clock_enable = not clock_enable
@@ -860,9 +863,6 @@ end
 
 function crow_setup()
 	crow.clear()
-	crow.input[1].change = function()
-		events.trigger1()
-	end
 	params:bang()
 end
 
@@ -876,31 +876,23 @@ function add_params()
 		id = 'shift_clock',
 		name = 'sr/s+h clock',
 		options = clock_mode_names,
-		default = clock_mode_beatclock,
+		default = clock_mode_norns,
 		action = function(value)
 			clock_mode = value
-			if clock_mode == clock_mode_grid or clock_mode == clock_mode_trig_grid then
+			if clock_mode == clock_mode_grid or clock_mode == clock_mode_both then
 				events.key = tick
 			else
 				events.key = noop
 			end
-			if clock_mode == clock_mode_trig or clock_mode == clock_mode_trig_grid then
-				events.trigger1 = tick
-				crow.input[1].mode('change', 2.0, 0.25, 'rising')
+			if clock_mode == clock_mode_norns or clock_mode == clock_mode_both then
+				events.tick = tick
+				clock.transport.start()
 			else
-				events.trigger1 = noop
-				crow.input[1].mode('none')
-			end
-			if clock_mode == clock_mode_beatclock then
-				events.beat = tick
-				beatclock:start()
-			else
-				events.beat = noop
-				beatclock:stop()
+				events.tick = noop
+				clock.transport.stop()
 			end
 		end
 	}
-	beatclock:add_clock_params()
 
 	params:add{
 		type = 'number',
@@ -1799,7 +1791,6 @@ end
 
 function cleanup()
 	redraw_metro:stop()
-	beatclock:stop()
 	for i, blinker in ipairs(blinkers) do
 		blinker:stop()
 	end
