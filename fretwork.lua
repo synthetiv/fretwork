@@ -908,6 +908,7 @@ function add_params()
 			controlspec = controlspec.new(-48, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
 				pitch_tap.next_bias = value / 12
+				dirty = true
 				memory.transposition.dirty = true
 				if quantization_off() then
 					pitch_tap:apply_edits()
@@ -923,6 +924,7 @@ function add_params()
 			default = 2,
 			action = function(value)
 				pitch_tap.next_multiply = value == 2 and 1 or -1
+				dirty = true
 				if quantization_off() then
 					pitch_tap:apply_edits()
 					voice:update()
@@ -935,11 +937,11 @@ function add_params()
 			name = string.format('voice %d pitch scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
-				pitch_tap.scramble = value
-				pitch_tap.dirty = true
+				pitch_tap.next_scramble = value
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
+					pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -950,11 +952,11 @@ function add_params()
 			name = string.format('voice %d pitch noise', v),
 			controlspec = controlspec.new(0, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
-				pitch_tap.noise = value / 12
-				pitch_tap.dirty = true
+				pitch_tap.next_noise = value / 12
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
+					pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -986,11 +988,11 @@ function add_params()
 			name = string.format('voice %d pitch jitter', v),
 			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
 			action = function(value)
-				pitch_tap.jitter = value
-				pitch_tap.dirty = true
+				pitch_tap.next_jitter = value
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
+					pitch_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1018,6 +1020,7 @@ function add_params()
 			default = 2,
 			action = function(value)
 				mod_tap.next_multiply = value == 2 and 1 or -1
+				dirty = true
 				if quantization_off() then
 					mod_tap:apply_edits()
 					voice:update()
@@ -1030,11 +1033,11 @@ function add_params()
 			name = string.format('voice %d mod scramble', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.1, 0),
 			action = function(value)
-				mod_tap.scramble = value
-				mod_tap.dirty = true
+				mod_tap.next_scramble = value
 				dirty = true
 				memory.mod.dirty = true
 				if quantization_off() then
+					mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1045,11 +1048,11 @@ function add_params()
 			name = string.format('voice %d mod noise', v),
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
-				mod_tap.noise = value
-				mod_tap.dirty = true
+				mod_tap.next_noise = value
 				dirty = true
 				memory.mod.dirty = true
 				if quantization_off() then
+					mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1081,11 +1084,11 @@ function add_params()
 			name = string.format('voice %d mod jitter', v),
 			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
 			action = function(value)
-				mod_tap.jitter = value
-				mod_tap.dirty = true
+				mod_tap.next_jitter = value
 				dirty = true
 				memory.pitch.dirty = true
 				if quantization_off() then
+					mod_tap:apply_edits()
 					voice:update()
 				end
 			end
@@ -1612,12 +1615,12 @@ function draw_tap_equation(y, label, tap, unit_multiplier, editing)
 	local highlight_bias = editing and edit_field == edit_field_bias
 	local highlight_length = editing and edit_field == edit_field_length
 
-	local multiply = tap.multiply
+	local multiply = tap.next_multiply
 	local direction = tap.direction
 	local ticks_per_shift = tap.ticks_per_shift
-	local jitter = tap.jitter
-	local scramble = tap.scramble * direction
-	local noise = tap.noise * direction * unit_multiplier
+	local jitter = tap.next_jitter
+	local scramble = tap.next_scramble * direction
+	local noise = tap.next_noise * direction * unit_multiplier
 	local bias = tap.next_bias * unit_multiplier
 	local loop_length = tap.shift_register.loop_length
 
