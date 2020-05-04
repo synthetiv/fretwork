@@ -62,13 +62,15 @@ clock.transport.stop = function()
 	clock.cancel(clock_coro)
 end
 
-output_mode_crow = 1
-output_mode_polysub = 2
+output_mode_crow_2 = 1
+output_mode_crow_4 = 2
+output_mode_polysub = 3
 output_mode_names = {
-	'crow',
+	'crow (2x cv/gate)',
+	'crow (4x cv)',
 	'polysub'
 }
-output_mode = output_mode_crow
+output_mode = output_mode_crow_2
 
 n_voices = 4
 voices = {}
@@ -355,8 +357,13 @@ function flash_note(v)
 end
 
 function note_on(v, pitch)
-	if output_mode == output_mode_crow then
+	if output_mode == output_mode_crow_4 then
 		crow.output[v].volts = pitch
+	elseif output_mode == output_mode_crow_2 then
+		if v < 3 then
+			crow.output[(v - 1) * 2 + 1].volts = pitch
+			crow.output[(v - 1) * 2 + 2].volts = 5
+		end
 	elseif output_mode == output_mode_polysub then
 		engine.start(v - 1, musicutil.note_num_to_freq(60 + pitch * 12))
 	end
@@ -364,7 +371,11 @@ function note_on(v, pitch)
 end
 
 function note_off(v)
-	if output_mode == output_mode_crow then
+	if output_mode == output_mode_crow_4 then
+	elseif output_mode == output_mode_crow_2 then
+		if v < 3 then
+			crow.output[(v - 1) * 2 + 2].volts = 0
+		end
 	elseif output_mode == output_mode_polysub then
 		engine.stop(v - 1)
 	end
@@ -1124,9 +1135,19 @@ function add_params()
 		id = 'output_mode',
 		name = 'output mode',
 		options = output_mode_names,
-		default = output_mode_polysub,
+		default = output_mode_crow_2,
 		action = function(value)
+			-- kill notes
+			if output_mode ~= output_mode_polysub then
+				for v = 1, n_voices do
+					engine.stop(v - 1)
+				end
+			elseif output_mode == output_mode_crow_2 then
+				crow.output[2].volts = 0
+				crow.output[4].volts = 0
+			end
 			output_mode = value
+			-- TODO: initialize slew shapes for crow gates?
 		end
 	}
 
