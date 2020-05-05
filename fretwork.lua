@@ -454,6 +454,13 @@ function clock_tick()
 	end
 end
 
+function update_top_voice()
+	top_voice_index = voice_selector.selection_order[1]
+	top_voice = voices[top_voice_index]
+	pitch_register:sync_to_tap(top_voice.pitch_tap)
+	mod_register:sync_to_tap(top_voice.mod_tap)
+end
+
 function led_blend(a, b)
 	a = 1 - a / 15
 	b = 1 - b / 15
@@ -803,8 +810,7 @@ function grid_key(x, y, z)
 			end
 		else
 			voice_selector:key(x, y, z)
-			top_voice_index = voice_selector.selection_order[1]
-			top_voice = voices[top_voice_index]
+			update_top_voice()
 		end
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
@@ -1374,8 +1380,7 @@ function enc(n, d)
 		local v = util.clamp(top_voice_index + d, 1, n_voices)
 		voice_selector:reset()
 		voice_selector:select(v)
-		top_voice_index = voice_selector.selection_order[1]
-		top_voice = voices[top_voice_index]
+		update_top_voice()
 	elseif n == 2 then
 		-- select field
 		edit_field = util.clamp(edit_field + d, 1, n_edit_fields)
