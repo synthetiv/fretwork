@@ -74,7 +74,6 @@ output_mode = output_mode_crow_2
 
 n_voices = 4
 voices = {}
-voice_draw_order = { 4, 3, 2, 1 }
 top_voice_index = 1
 for v = 1, n_voices do
 	local voice = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
@@ -171,6 +170,17 @@ keyboards = { -- lookup array; indices match corresponding modes
 	transpose_keyboard
 }
 active_keyboard = pitch_keyboard
+
+-- special stuff for transpose keyboard polyphony
+transpose_keyboard.key_count = 0
+transpose_keyboard.voice_usage = {}
+for v = 1, n_voices do
+	transpose_keyboard.voice_usage[v] = {
+		last = 0,
+		key_id = 0,
+		free = true
+	}
+end
 
 x0x_roll = X0XRoll.new(6, 1, 11, 8, n_voices, voices)
 
@@ -444,27 +454,6 @@ function clock_tick()
 	end
 end
 
-function update_voice_order()
-	-- TODO: it would be nice to avoid creating new tables here, but none have > 4 values, so... eh
-	local selected = {}
-	local new_draw_order = {}
-	for i, v in ipairs(voice_draw_order) do
-		if voice_selector:is_selected(v) then
-			table.insert(selected, v)
-		else
-			table.insert(new_draw_order, v)
-		end
-	end
-	for i, v in ipairs(selected) do
-		table.insert(new_draw_order, v)
-	end
-	top_voice_index = new_draw_order[n_voices]
-	top_voice = voices[top_voice_index]
-	pitch_register:sync_to_tap(top_voice.pitch_tap)
-	mod_register:sync_to_tap(top_voice.mod_tap)
-	voice_draw_order = new_draw_order
-end
-
 function led_blend(a, b)
 	a = 1 - a / 15
 	b = 1 - b / 15
@@ -711,26 +700,61 @@ function mask_keyboard:key(x, y, z)
 	end
 end
 
-function transpose_keyboard:key(x, y, z)
-	-- TODO: what's up with stuck/unresponsive keys?
-	self:note(x, y, z)
-	if self.n_held_keys < 1 then
-		return
-	end
-	local delta = self:get_last_value() - top_voice.pitch_tap.next_bias
-	if held_keys.shift then
-		-- adjust noise (random transposition)
-		for v = 1, n_voices do
-			if voice_selector:is_selected(v) then
-				params:set(string.format('voice_%d_pitch_noise', v), math.abs(delta) * 12)
+function transpose_keyboard:get_next_voice_index(key_id)
+	self.key_count = self.key_count + 1
+	local free_voice_index = nil
+	local free_voice_last_used = self.key_count
+	local steal_voice_index = nil
+	local steal_voice_last_used = self.key_count
+	local next_voice_index = nil
+	for n = 1, n_voices do
+		local v = voice_selector.selection_order[n]
+		if voice_selector:is_selected(v) then
+			local voice_usage = self.voice_usage[v]
+			if voice_usage.free and voice_usage.last < free_voice_last_used then
+				free_voice_index = v
+				free_voice_last_used = voice_usage.last
+			elseif voice_usage.last < steal_voice_last_used then
+				steal_voice_index = v
+				steal_voice_last_used = voice_usage.last
 			end
 		end
+	end
+	local next_voice_index = free_voice_index or steal_voice_index
+	local usage = self.voice_usage[next_voice_index]
+	usage.last = self.key_count
+	usage.free = false
+	usage.key_id = key_id
+	return next_voice_index
+end
+
+function transpose_keyboard:free_key_voice(key_id)
+	for v = 1, n_voices do
+		local voice_usage = self.voice_usage[v]
+		if voice_usage.key_id == key_id then
+			voice_usage.free = true
+		end
+	end
+end
+
+function transpose_keyboard:key(x, y, z)
+	-- TODO: what's up with stuck/unresponsive keys?
+	-- this refers to two issues, maybe related but maybe not:
+	-- 1. voices don't always update immediately after transposing, even when quantization is off
+	-- 2. transpose keys appear to be ignored when delta is very low (like less than a quarter tone)
+	self:note(x, y, z)
+	local key_id = self:get_key_id(x, y)
+	if z == 0 then
+		self:free_key_voice(key_id)
 	else
-		-- adjust bias (fixed transposition)
-		for v = 1, n_voices do
-			if voice_selector:is_selected(v) then
-				params:set(string.format('voice_%d_transpose', v), (voices[v].pitch_tap.next_bias + delta) * 12)
-			end
+		local v = self:get_next_voice_index(key_id)
+		if held_keys.shift then
+			-- adjust noise (random transposition)
+			local delta = self:get_last_value() - voices[v].pitch_tap.next_bias
+			params:set(string.format('voice_%d_pitch_noise', v), math.abs(delta) * 12)
+		else
+			-- adjust bias (fixed transposition)
+			params:set(string.format('voice_%d_transpose', v), self:get_last_value() * 12)
 		end
 	end
 end
@@ -778,9 +802,8 @@ function grid_key(x, y, z)
 			end
 		else
 			voice_selector:key(x, y, z)
-			if z == 1 then
-				update_voice_order()
-			end
+			top_voice_index = voice_selector.selection_order[1]
+			top_voice = voices[top_voice_index]
 		end
 	elseif x == 3 and y == 8 then
 		grid_octave_key(z, -1)
@@ -1347,11 +1370,11 @@ end
 function enc(n, d)
 	if n == 1 then
 		-- select voice
-		local voice_index = util.clamp(top_voice_index + d, 1, n_voices)
-		for v = 1, n_voices do
-			voice_selector.selected[v] = v == voice_index
-		end
-		update_voice_order()
+		local v = util.clamp(top_voice_index + d, 1, n_voices)
+		voice_selector:reset()
+		voice_selector:select(v)
+		top_voice_index = voice_selector.selection_order[1]
+		top_voice = voices[top_voice_index]
 	elseif n == 2 then
 		-- select field
 		edit_field = util.clamp(edit_field + d, 1, n_edit_fields)
@@ -1732,9 +1755,10 @@ function redraw()
 	screen.clear()
 
 	-- draw paths
-	for i, v in ipairs(voice_draw_order) do
+	for i = n_voices, 1, -1 do
+		local v = voice_selector.selection_order[i]
 		local level = voices[v].active and 1 or 0
-		if v == top_voice_index then
+		if i == 1 then
 			level = 15
 		elseif voice_selector:is_selected(v) then
 			level = 4
@@ -1752,7 +1776,8 @@ function redraw()
 	screen.stroke()
 
 	-- highlight current notes after drawing all snakes
-	for i, v in ipairs(voice_draw_order) do
+	for i = n_voices, 1, -1 do
+		local v = voice_selector.selection_order[i]
 		local path = voice_paths[v]
 		if path.gate_center then
 			screen.move(62.5, path.y_center - 1)
