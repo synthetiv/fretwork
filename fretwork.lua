@@ -676,7 +676,8 @@ function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
 	memory.mask.dirty = true
 	if quantization_off() then
-		update_voices()
+		scale:apply_edits()
+		update_voices(true)
 	end
 end
 
@@ -1213,7 +1214,7 @@ function add_params()
 			mask_keyboard:set_white_keys()
 			if quantization_off() then
 				scale:apply_edits()
-				update_voices()
+				update_voices(true)
 			end
 		end
 	}
