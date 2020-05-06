@@ -31,7 +31,7 @@ end
 --- change the length of the loop 
 -- @param new_length the new length
 function ShiftRegister:set_length(new_length)
-	if self.sync_tap.direction > 0 then
+	if self.sync_tap ~= nil and self.sync_tap.direction > 0 then
 		-- when direction is positive, sync tap should be locked at the end of the loop, so move the
 		-- start point instead of the end point
 		self.loop_start = self.loop_start + self.loop_length - new_length

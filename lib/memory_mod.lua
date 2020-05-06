@@ -4,7 +4,7 @@ local ModMemory = setmetatable({}, LoopMemory)
 ModMemory.__index = ModMemory
 
 ModMemory.new = function()
-	local mem = setmetatable(LoopMemory.new('mod', mod_register, -5), ModMemory)
+	local mem = setmetatable(LoopMemory.new('mod', mod_registers[1], -5), ModMemory) -- TODO!
 	mem:initialize()
 	return mem
 end

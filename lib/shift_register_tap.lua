@@ -227,4 +227,9 @@ function ShiftRegisterTap:check_step_identity(a, b)
 	return a == b
 end
 
+--- sync this tap's shift register to this tap
+function ShiftRegisterTap:sync()
+	self.shift_register:sync_to_tap(self)
+end
+
 return ShiftRegisterTap

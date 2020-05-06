@@ -4,7 +4,7 @@ local PitchMemory = setmetatable({}, LoopMemory)
 PitchMemory.__index = PitchMemory
 
 PitchMemory.new = function()
-	local mem = setmetatable(LoopMemory.new('pitch', pitch_register, -3), PitchMemory)
+	local mem = setmetatable(LoopMemory.new('pitch', pitch_registers[1], -3), PitchMemory)
 	mem:initialize()
 	return mem
 end

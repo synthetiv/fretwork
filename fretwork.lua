@@ -42,8 +42,13 @@ for p = 1, 12 do
 end
 scale = Scale.new(et12, 12)
 
-pitch_register = ShiftRegister.new(32)
-mod_register = ShiftRegister.new(11)
+pitch_registers = {}
+mod_registers = {}
+n_registers = 4
+for r = 1, n_registers do
+	pitch_registers[r] = ShiftRegister.new(16)
+	mod_registers[r] = ShiftRegister.new(16)
+end
 
 write_enable = true
 
@@ -76,7 +81,7 @@ n_voices = 4
 voices = {}
 top_voice_index = 1
 for v = 1, n_voices do
-	local voice = ShiftRegisterVoice.new(v * -3, pitch_register, scale, v * -4, mod_register)
+	local voice = ShiftRegisterVoice.new(v * -3, pitch_registers[1], scale, v * -4, mod_registers[1])
 	voice.pitch_tap.on_write = function(pos)
 		flash_write(write_type_pitch, pos)
 	end
@@ -434,8 +439,11 @@ function shift(d)
 		voice:shift(d)
 	end
 	-- silently update loop length params, as they may have changed after shift
-	params:set('pitch_loop_length', pitch_register.loop_length, true)
-	params:set('mod_loop_length', mod_register.loop_length, true)
+	-- TODO: avoid doing this more than necessary
+	for r = 1, n_registers do
+		params:set(string.format('pitch_loop_%d_length', r), pitch_registers[r].loop_length, true)
+		params:set(string.format('mod_loop_%d_length', r), mod_registers[r].loop_length, true)
+	end
 	dirty = true
 end
 
@@ -457,8 +465,8 @@ end
 function update_top_voice()
 	top_voice_index = voice_selector.selection_order[1]
 	top_voice = voices[top_voice_index]
-	pitch_register:sync_to_tap(top_voice.pitch_tap)
-	mod_register:sync_to_tap(top_voice.mod_tap)
+	top_voice.pitch_tap:sync()
+	top_voice.mod_tap:sync()
 end
 
 function led_blend(a, b)
@@ -484,7 +492,7 @@ function grid_redraw()
 		for y = 3, 6 do
 			local level = 2
 			if memory_selector:is_selected(memory_pitch_loop) and pitch_loop_selector:is_selected(pitch_loop_selector:get_key_option(x, y)) then
-				level = math.max(level, (memory.pitch.dirty or pitch_register.dirty) and blink_slow and 8 or 7)
+				level = math.max(level, (memory.pitch.dirty or top_voice.pitch_tap.shift_register.dirty) and blink_slow and 8 or 7)
 			end
 			if memory_selector:is_selected(memory_mask) and mask_selector:is_selected(mask_selector:get_key_option(x, y)) then
 				level = math.max(level, memory.mask.dirty and blink_slow and 8 or 7)
@@ -493,7 +501,7 @@ function grid_redraw()
 				level = math.max(level, memory.transposition.dirty and blink_slow and 8 or 7)
 			end
 			if memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:is_selected(mod_loop_selector:get_key_option(x, y)) then
-				level = math.max(level, (memory.mod.dirty or mod_register.dirty) and blink_slow and 8 or 7)
+				level = math.max(level, (memory.mod.dirty or top_voice.mod_tap.shift_register.dirty) and blink_slow and 8 or 7)
 			end
 			g:led(x, y, level)
 		end
@@ -894,36 +902,39 @@ function add_params()
 			ticks_per_beat = value
 		end
 	}
-	params:add{
-		type = 'number',
-		id = 'pitch_loop_length',
-		name = 'pitch loop length',
-		min = 2,
-		max = 128,
-		default = 16,
-		action = function(value)
-			pitch_register:set_length(value)
-			if quantization_off() then
-				update_voices(true)
+
+	for r = 1, n_registers do
+		params:add{
+			type = 'number',
+			id = string.format('pitch_loop_%d_length', r),
+			name = string.format('pitch loop %d length', r),
+			min = 2,
+			max = 128,
+			default = 16,
+			action = function(value)
+				pitch_registers[r]:set_length(value)
+				if quantization_off() then
+					update_voices(true)
+				end
+				blinkers.info:start()
 			end
-			blinkers.info:start()
-		end
-	}
-	params:add{
-		type = 'number',
-		id = 'mod_loop_length',
-		name = 'mod loop length',
-		min = 2,
-		max = 128,
-		default = 18,
-		action = function(value)
-			mod_register:set_length(value)
-			if quantization_off() then
-				update_voices(false, true)
+		}
+		params:add{
+			type = 'number',
+			id = string.format('mod_loop_%d_length', r),
+			name = string.format('mod loop %d length', r),
+			min = 2,
+			max = 128,
+			default = 18,
+			action = function(value)
+				mod_registers[r]:set_length(value)
+				if quantization_off() then
+					update_voices(false, true)
+				end
+				blinkers.info:start()
 			end
-			blinkers.info:start()
-		end
-	}
+		}
+	end
 	
 	params:add_separator()
 	
@@ -931,7 +942,23 @@ function add_params()
 		local voice = voices[v]
 		local pitch_tap = voice.pitch_tap
 		local mod_tap = voice.mod_tap
-		params:add_group(string.format('voice %d', v), 15)
+		params:add_group(string.format('voice %d', v), 17)
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_pitch_register', v),
+			name = string.format('voice %d pitch register', v),
+			min = 1,
+			max = n_registers,
+			default = 1,
+			action = function(value)
+				local previous_register = pitch_tap.shift_register
+				pitch_tap.shift_register = pitch_registers[value]
+				if top_voice_index == v then
+					-- TODO: un-sync previous pitch register
+					pitch_tap:sync()
+				end
+			end
+		}
 		params:add{
 			type = 'control',
 			id = string.format('voice_%d_detune', v),
@@ -1014,7 +1041,7 @@ function add_params()
 				pitch_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
 					-- resync in case direction has changed
-					pitch_register:sync_to_tap(pitch_tap)
+					top_voice.pitch_tap:sync()
 				end
 				dirty = true
 				memory.transposition.dirty = true
@@ -1035,6 +1062,22 @@ function add_params()
 				if quantization_off() then
 					pitch_tap:apply_edits()
 					voice:update()
+				end
+			end
+		}
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_mod_register', v),
+			name = string.format('voice %d mod register', v),
+			min = 1,
+			max = n_registers,
+			default = 1,
+			action = function(value)
+				local previous_register = mod_tap.shift_register
+				mod_tap.shift_register = mod_registers[value]
+				if top_voice_index == v then
+					-- TODO: un-sync previous mod register
+					mod_tap:sync()
 				end
 			end
 		}
@@ -1110,7 +1153,7 @@ function add_params()
 				mod_tap:set_rate(direction, ticks_per_shift)
 				if top_voice_index == v then
 					-- resync in case direction has changed
-					mod_register:sync_to_tap(voice.mod_tap)
+					top_voice.mod_tap:sync()
 				end
 				dirty = true
 				memory.transposition.dirty = true
@@ -1127,7 +1170,7 @@ function add_params()
 			action = function(value)
 				mod_tap.next_jitter = value
 				dirty = true
-				memory.pitch.dirty = true
+				memory.mod.dirty = true
 				if quantization_off() then
 					mod_tap:apply_edits()
 					voice:update()
@@ -1577,7 +1620,9 @@ function draw_voice_path(v, level)
 	local path = voice_paths[v]
 	local prev_level = 0
 	local pitch_tap = voice.pitch_tap
+	local pitch_register = pitch_tap.shift_register
 	local mod_tap = voice.mod_tap
+	local mod_register = mod_tap.shift_register
 	local has_pitch_edits = pitch_tap.next_jitter ~= pitch_tap.jitter or pitch_tap.next_scramble ~= pitch_tap.scramble or pitch_tap.next_noise ~= pitch_tap.noise or pitch_tap.next_bias ~= pitch_tap.bias or pitch_tap.next_multiply ~= pitch_tap.next_multiply
 	local has_mod_edits = mod_tap.next_jitter ~= mod_tap.jitter or mod_tap.next_scramble ~= mod_tap.scramble or mod_tap.next_noise ~= mod_tap.noise or mod_tap.next_bias ~= mod_tap.bias or mod_tap.next_multiply ~= mod_tap.next_multiply
 	for n = 1, path.length do
@@ -1590,6 +1635,7 @@ function draw_voice_path(v, level)
 		local note_edit_dim = ((has_pitch_edits and note.pitch_step <= 0) or (has_mod_edits and note.mod_step <= 0)) and 1 or 0
 		local note_level = 0
 		-- set flash level, if this note was recently changed
+		-- TODO: only flash when written register matches this voice's register
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
 			if write.level > 0 then
@@ -1815,6 +1861,25 @@ function redraw()
 
 	end
 
+	-- DEBUG: draw minibuffer, loop region, head
+	--[[
+	local pitch_register = top_voice.pitch_tap.shift_register
+	screen.move(0, 1)
+	screen.line_rel(pitch_register.buffer_size, 0)
+	screen.level(1)
+	screen.stroke()
+	for offset = 1, pitch_register.loop_length do
+		local pos = pitch_register:wrap_buffer_pos(pitch_register:get_loop_offset_pos(offset))
+		screen.pixel(pos - 1, 0)
+		screen.level(7)
+		for v = 1, n_voices do
+			if voice_selector:is_selected(v) and pos == pitch_register:wrap_buffer_pos(pitch_register:wrap_loop_pos(voices[v].pitch_tap.pos)) then
+				screen.level(15)
+			end
+		end
+		screen.fill()
+	end
+	--]]
 	screen.update()
 end
 

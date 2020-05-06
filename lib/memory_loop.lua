@@ -19,6 +19,7 @@ function LoopMemory:get_slot_default(s)
 		values = self:get_slot_default_values(s),
 		voices = {}
 	}
+	-- TODO: no. move this out, either into transpose memory or somewhere else
 	for v = 1, n_voices do
 		loop.voices[v] = {
 			offset = (v - 1) * self.default_offset,
@@ -46,7 +47,8 @@ end
 function LoopMemory:recall(loop)
 	for v = 1, n_voices do
 		-- TODO: when tap rates differ, loop contents and tap offsets may change at different times,
-		-- which looks and sounds confusing
+		-- which looks and sounds confusing (NOTE: this should be fixed-ish by moving offset data to a
+		-- different memory bank)
 		voices[v][self.tap_key].next_offset = loop.voices[v].offset
 		params:set(string.format(self.scramble_param, v), loop.voices[v].scramble)
 		-- params:set(string.format(self.rate_param, v), loop.voices[v].direction) -- TODO
