@@ -1666,6 +1666,7 @@ function draw_voice_path(v, level)
 				screen.level(0)
 				screen.line_width(2)
 				screen.stroke()
+				screen.move(x + 1, note_y)
 			else
 				screen.move(x - 1, note_y)
 			end
