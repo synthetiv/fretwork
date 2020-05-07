@@ -56,7 +56,8 @@ function LoopMemory:recall(loop)
 	if quantization_off() then
 		self.shift_register:set_loop(0, loop.values)
 		-- silently update the loop length
-		params:set(self.length_param, self.shift_register.loop_length, true)
+		-- TODO: set length params for all registers, or something
+		-- params:set(self.length_param, self.shift_register.loop_length, true)
 		-- force values + paths to update
 		for v = 1, n_voices do
 			local voice = voices[v]
