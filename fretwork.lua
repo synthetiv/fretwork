@@ -10,8 +10,12 @@ polysub = require 'we/lib/polysub'
 musicutil = require 'musicutil'
 BeatClock = require 'beatclock'
 
-X0XRoll = include 'lib/grid_x0x_roll'
+Roll = include 'lib/grid_roll'
+OffsetRoll = include 'lib/grid_offset_roll'
 Keyboard = include 'lib/grid_keyboard'
+VoiceSliderBank = include 'lib/grid_voice_slider_bank'
+RegisterSelector = include 'lib/grid_register_selector'
+RateSelector = include 'lib/grid_rate_selector'
 Select = include 'lib/grid_select'
 MultiSelect = include 'lib/grid_multi_select'
 ShiftRegister = include 'lib/shift_register'
@@ -121,7 +125,7 @@ for v = 1, n_voices do
 end
 
 rate_divisions = {}
-slowest_rate = 13
+slowest_rate = 8
 for r = 1, slowest_rate do
 	if r == 1 then
 		rate_divisions[r] = '-1'
@@ -134,13 +138,7 @@ for r = 1, slowest_rate do
 	end
 end
 
-grid_mode_selector = Select.new(1, 1, 4, 1)
-grid_mode_pitch = 1
-grid_mode_mask = 2
-grid_mode_transpose = 3
-grid_mode_mod = 4
-
-voice_selector = MultiSelect.new(5, 3, 1, 4)
+voice_selector = MultiSelect.new(1, 3, 1, 4)
 
 g = grid.connect()
 m = midi.connect()
@@ -166,16 +164,15 @@ end
 
 view_octave = 0
 
-pitch_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-mask_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-transpose_keyboard = Keyboard.new(6, 1, 11, 8, scale)
-keyboards = { -- lookup array; indices match corresponding modes
-	pitch_keyboard,
-	mask_keyboard,
-	transpose_keyboard
-}
-active_keyboard = pitch_keyboard
+pitch_register_selector = RegisterSelector.new(2, 2, 15, 7, n_voices, voices, 'pitch')
+pitch_rate_selector = RateSelector.new(2, 2, 15, 7, n_voices, voices, 'pitch')
 
+mod_register_selector = RegisterSelector.new(2, 2, 15, 7, n_voices, voices, 'mod')
+mod_rate_selector = RateSelector.new(2, 2, 15, 7, n_voices, voices, 'mod')
+
+pitch_keyboard = Keyboard.new(2, 2, 15, 7, scale)
+mask_keyboard = Keyboard.new(2, 2, 15, 7, scale)
+transpose_keyboard = Keyboard.new(2, 2, 15, 7, scale)
 -- special stuff for transpose keyboard polyphony
 transpose_keyboard.key_count = 0
 transpose_keyboard.voice_usage = {}
@@ -187,7 +184,41 @@ for v = 1, n_voices do
 	}
 end
 
-x0x_roll = X0XRoll.new(6, 1, 11, 8, n_voices, voices)
+pitch_offset_roll = OffsetRoll.new(2, 2, 15, 7, n_voices, voices, 'pitch')
+mod_offset_roll = OffsetRoll.new(2, 2, 15, 7, n_voices, voices, 'mod')
+
+gate_roll = Roll.new(2, 2, 15, 7, n_voices, voices)
+for v = 1, n_voices do
+	local mod_tap = voices[v].mod_tap
+	local on_shift = mod_tap.on_shift
+	mod_tap.on_shift = function(d)
+		on_shift(d)
+		gate_roll:shift_voice(v, -d)
+	end
+end
+
+grid_view_selector = Select.new(1, 1, 12, 1)
+
+grid_views = {
+	nil, -- presets (TODO)
+	nil, -- spacer
+	pitch_register_selector,
+	pitch_keyboard,
+	pitch_offset_roll,
+	pitch_rate_selector,
+	transpose_keyboard,
+	nil, -- spacer
+	mod_register_selector,
+	gate_roll,
+	mod_offset_roll,
+	mod_rate_selector
+}
+
+grid_view_selector.on_select = function(option)
+	grid_view = grid_views[option]
+end
+
+grid_view = grid_views[1]
 
 screen_note_width = 4
 n_screen_notes = 128 / screen_note_width
@@ -261,7 +292,9 @@ redraw_metro = metro.init{
 	time = framerate,
 	event = function(tick)
 
-		x0x_roll:smooth_hold_steps()
+		pitch_offset_roll:smooth_hold_steps()
+		gate_roll:smooth_hold_steps()
+		mod_offset_roll:smooth_hold_steps()
 
 		if not blink_slow and tick % 8 > 3 then
 			blink_slow = true
@@ -317,7 +350,6 @@ redraw_metro = metro.init{
 	end
 }
 
-memory_selector = MultiSelect.new(1, 2, 4, 1)
 memory_pitch_loop = 1
 memory_mask = 2
 memory_transposition = 3
@@ -477,35 +509,13 @@ end
 
 function grid_redraw()
 
-	-- mode buttons
-	grid_mode_selector:draw(g, 7, 2)
+	g:all(0)
 
-	-- recall mode buttons
-	memory_selector:draw(g, 7, 2)
-
-	-- recall buttons, for all selected memory types
-	local pitch_loop_selector = memory.pitch.selector
-	local mask_selector = memory.mask.selector
-	local transposition_selector = memory.transposition.selector
-	local mod_loop_selector = memory.mod.selector
-	for x = 1, 4 do
-		for y = 3, 6 do
-			local level = 2
-			if memory_selector:is_selected(memory_pitch_loop) and pitch_loop_selector:is_selected(pitch_loop_selector:get_key_option(x, y)) then
-				level = math.max(level, (memory.pitch.dirty or top_voice.pitch_tap.shift_register.dirty) and blink_slow and 8 or 7)
-			end
-			if memory_selector:is_selected(memory_mask) and mask_selector:is_selected(mask_selector:get_key_option(x, y)) then
-				level = math.max(level, memory.mask.dirty and blink_slow and 8 or 7)
-			end
-			if memory_selector:is_selected(memory_transposition) and transposition_selector:is_selected(transposition_selector:get_key_option(x, y)) then
-				level = math.max(level, memory.transposition.dirty and blink_slow and 8 or 7)
-			end
-			if memory_selector:is_selected(memory_mod_loop) and mod_loop_selector:is_selected(mod_loop_selector:get_key_option(x, y)) then
-				level = math.max(level, (memory.mod.dirty or top_voice.mod_tap.shift_register.dirty) and blink_slow and 8 or 7)
-			end
-			g:led(x, y, level)
-		end
-	end
+	-- view buttons
+	grid_view_selector:draw(g, 7, 2)
+	-- clear 'spacers'
+	g:led(2, 1, 0)
+	g:led(8, 1, 0)
 
 	-- shift + ctrl
 	g:led(1, 7, held_keys.shift and 15 or 2)
@@ -536,13 +546,15 @@ function grid_redraw()
 	end
 
 	-- octave switches
+	--[[ TODO: move
 	g:led(3, 8, 2 - math.min(view_octave, 0))
 	g:led(4, 8, 2 + math.max(view_octave, 0))
+	--]]
 
-	if active_keyboard ~= nil then
-		-- calculate levels for keyboards
-		local low_pitch_id = active_keyboard:get_key_pitch_id(pitch_keyboard.x, pitch_keyboard.y2)
-		local high_pitch_id = active_keyboard:get_key_pitch_id(pitch_keyboard.x2, pitch_keyboard.y)
+	-- calculate levels for keyboards
+	if grid_view ~= nil and grid_view.get_key_pitch_id ~= nil then
+		local low_pitch_id = grid_view:get_key_pitch_id(pitch_keyboard.x, pitch_keyboard.y2)
+		local high_pitch_id = grid_view:get_key_pitch_id(pitch_keyboard.x2, pitch_keyboard.y)
 		for n = low_pitch_id, high_pitch_id do
 			absolute_pitch_levels[n] = 0
 			relative_pitch_levels[n] = 0
@@ -577,14 +589,14 @@ function grid_redraw()
 				end
 			end
 		end
-		-- keyboard, for keyboard-based modes
-		active_keyboard:draw(g)
-	else
-		-- 'x0x-roll' interface for mod mode
-		x0x_roll:draw(g)
+	end
+
+	if grid_view ~= nil then
+		grid_view:draw(g)
 	end
 
 	-- transport
+	--[[ TODO: move
 	local play_button_level = blinkers.play.on and 4 or 3
 	if clock_running then
 		play_button_level = play_button_level + 4
@@ -597,6 +609,7 @@ function grid_redraw()
 		record_button_level = 7
 	end
 	g:led(4, 7, record_button_level)
+	--]]
 
 	g:refresh()
 end
@@ -646,45 +659,33 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return math.min(15, math.ceil(level))
 end
 
-function x0x_roll:get_key_level(x, y, v, step, gate)
-	local tap = voices[v].mod_tap
+function get_voice_control_level(v, accent)
+	local voice = voices[v]
+	local active = voice.active
+	if not active then
+		return 2
+	elseif v == top_voice_index then
+		return accent and 14 or 9
+	elseif voice_selector:is_selected(v) then
+		return accent and 12 or 7
+	else
+		return accent and 6 or 4
+	end
+end
+
+function gate_roll:get_key_level(x, y, v, step)
+	local voice = voices[v]
+	local gate = voice:get_step_gate(step)
+	local tap = voice.mod_tap
 	-- highlight any step whose loop position matches the current position of the tap
 	local head = tap:check_step_identity(step, 0)
-	local active = voices[v].active
-	if not active then
-		if gate then
-			return 2
-		elseif head then
-			return 1
-		end
-	elseif v == top_voice_index then
-		if gate then
-			if head then
-				return 14
-			end
-			return 9
-		elseif head then
-			return 2
-		end
-	elseif voice_selector:is_selected(v) then
-		if gate then
-			if head then
-				return 12
-			end
-			return 7
-		elseif head then
-			return 2
-		end
-	end
 	if gate then
-		if head then
-			return 6
-		end
-		return 4
+		return get_voice_control_level(v, head)
 	elseif head then
-		return 2
+		return voice.active and 2 or 1
+	else
+		return 0
 	end
-	return 0
 end
 
 function toggle_mask_class(pitch_id)
@@ -792,19 +793,21 @@ function grid_octave_key(z, d)
 			voices[v].dirty = true
 		end
 	end
+	--[[ TODO
 	if active_keyboard ~= nil then
 		active_keyboard.octave = view_octave
 	end
+		--]]
 end
 
 function grid_key(x, y, z)
-	if active_keyboard ~= nil and active_keyboard:should_handle_key(x, y) then
-		active_keyboard:key(x, y, z)
-	elseif grid_mode_selector:is_selected(grid_mode_mod) and x0x_roll:should_handle_key(x, y) then
-		x0x_roll:key(x, y, z)
+	if grid_view ~= nil and grid_view:should_handle_key(x, y) then
+		grid_view:key(x, y, z)
+		--[[ TODO: incorporate this into x0x roll's key handler; it's already in keyboards'
 		if quantization_off() then
 			update_voices()
 		end
+		--]]
 	elseif voice_selector:should_handle_key(x, y) then
 		if held_keys.shift then
 			if z == 1 then
@@ -824,28 +827,22 @@ function grid_key(x, y, z)
 		grid_octave_key(z, -1)
 	elseif x == 4 and y == 8 then
 		grid_octave_key(z, 1)
-	elseif grid_mode_selector:should_handle_key(x, y) then
+	elseif grid_view_selector:should_handle_key(x, y) then
+		-- ignore spacer keys
+		if x == 2 or x == 8 then
+			return
+		end
 		-- clear the current keyboard's held note stack, in order to prevent held notes from getting
 		-- stuck when switching to a mode that doesn't call `keyboard:note()`
-		if active_keyboard ~= nil then
-			active_keyboard:reset()
+		if grid_view ~= nil then
+			grid_view:reset()
 		end
-		grid_mode_selector:key(x, y, z)
-		active_keyboard = keyboards[grid_mode_selector.selected]
-	elseif memory_selector:should_handle_key(x, y) then
-		memory_selector:key(x, y, z)
-	elseif x <= 4 and y >= 3 and y <= 6 then
-		if memory_selector:is_selected(memory_mask) then
-			memory.mask.selector:key(x, y, z)
-		end
-		if memory_selector:is_selected(memory_transposition) then
-			memory.transposition.selector:key(x, y, z)
-		end
-		if memory_selector:is_selected(memory_pitch_loop) then
-			memory.pitch.selector:key(x, y, z)
-		end
-		if memory_selector:is_selected(memory_mod_loop) then
-			memory.mod.selector:key(x, y, z)
+		grid_view_selector:key(x, y, z)
+	elseif x == 1 and y == 1 then
+		-- esc key
+		held_keys.esc = z == 1
+		if z == 1 then
+			grid_view_selector:select(0)
 		end
 	elseif x == 1 and y == 7 then
 		-- shift key
@@ -953,6 +950,7 @@ function add_params()
 			action = function(value)
 				local previous_register = pitch_tap.shift_register
 				pitch_tap.shift_register = pitch_registers[value]
+				pitch_register_selector.sliders[v].selected = value
 				if top_voice_index == v then
 					-- TODO: un-sync previous pitch register
 					pitch_tap:sync()
@@ -1034,11 +1032,12 @@ function add_params()
 			id = string.format('voice_%d_pitch_rate', v),
 			name = string.format('voice %d pitch rate', v),
 			options = rate_divisions,
-			default = 22,
+			default = 11,
 			action = function(value)
 				local direction = value < slowest_rate and -1 or 1
 				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
 				pitch_tap:set_rate(direction, ticks_per_shift)
+				pitch_rate_selector.sliders[v].selected = value
 				if top_voice_index == v then
 					-- resync in case direction has changed
 					top_voice.pitch_tap:sync()
@@ -1075,6 +1074,7 @@ function add_params()
 			action = function(value)
 				local previous_register = mod_tap.shift_register
 				mod_tap.shift_register = mod_registers[value]
+				mod_register_selector.sliders[v].selected = value
 				if top_voice_index == v then
 					-- TODO: un-sync previous mod register
 					mod_tap:sync()
@@ -1146,11 +1146,12 @@ function add_params()
 			id = string.format('voice_%d_mod_rate', v),
 			name = string.format('voice %d mod rate', v),
 			options = rate_divisions,
-			default = 22,
+			default = 11,
 			action = function(value)
 				local direction = value < slowest_rate and -1 or 1
 				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
 				mod_tap:set_rate(direction, ticks_per_shift)
+				mod_rate_selector.sliders[v].selected = value
 				if top_voice_index == v then
 					-- resync in case direction has changed
 					top_voice.mod_tap:sync()
@@ -1337,9 +1338,7 @@ function init()
 	crow_setup() -- calls params:bang()
 	
 	-- initialize grid controls
-	grid_mode = grid_mode_pitch
 	voice_selector:reset(true)
-	memory_selector:reset(true)
 
 	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
 	params:set('restore_memory')
@@ -1546,11 +1545,11 @@ function edit_field_delta(d)
 	elseif edit_field == edit_field_length then
 		if edit_both_taps or edit_tap == edit_tap_pitch then
 			-- set pitch length
-			params:delta('pitch_loop_length', d)
+			params:delta(string.format('pitch_loop_%d_length', params:get(string.format('voice_%d_pitch_register', top_voice_index))), d)
 		end
 		if edit_both_taps or edit_tap == edit_tap_mod then
 			-- set mod length
-			params:delta('mod_loop_length', d)
+			params:delta(string.format('mod_loop_%d_length', params:get(string.format('voice_%d_mod_register', top_voice_index))), d)
 		end
 	end
 end

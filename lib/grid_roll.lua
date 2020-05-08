@@ -1,12 +1,10 @@
-local Control = include 'lib/grid_control'
+local VoiceControl = include 'lib/grid_voice_control'
 
-local X0XRoll = setmetatable({}, Control)
-X0XRoll.__index = X0XRoll
+local Roll = setmetatable({}, VoiceControl)
+Roll.__index = Roll
 
-function X0XRoll.new(x, y, width, height, n_voices, voices)
-	local roll = setmetatable(Control.new(x, y, width, height), X0XRoll)
-	roll.n_voices = n_voices
-	roll.voices = voices
+function Roll.new(x, y, width, height, n_voices, voices)
+	local roll = setmetatable(VoiceControl.new(x, y, width, height, n_voices, voices), Roll)
 	roll.hold = false
 	roll.x_left = roll.x2 - 2
 	roll.x_hold = roll.x2 - 1
@@ -16,49 +14,42 @@ function X0XRoll.new(x, y, width, height, n_voices, voices)
 		right = false
 	}
 	roll.voice_hold_steps = {}
-	roll.voice_ys = {}
-	roll.y_voices = {}
-	local voice_y_base = math.ceil((roll.height - n_voices) / 2)
 	for v = 1, n_voices do
-		local y = voice_y_base + v
 		roll.voice_hold_steps[v] = 0
-		roll.voice_ys[v] = y
-		roll.y_voices[y] = v
-		local on_shift = roll.voices[v].mod_tap.on_shift
-		roll.voices[v].mod_tap.on_shift = function(d)
-			on_shift(d)
-			roll:shift_voice(v, -d)
-		end
 	end
 	return roll
 end
 
-function X0XRoll:get_voice_step(v, x)
+function Roll:get_voice_step(v, x)
 	return x - self.x_center + self.voice_hold_steps[v]
 end
 
-function X0XRoll:shift_voice(v, d)
-	self.voice_hold_steps[v] = self.voice_hold_steps[v] + d
+function Roll:shift_voice(v, d)
+	if self.hold then
+		self.voice_hold_steps[v] = self.voice_hold_steps[v] + d
+	end
 end
 
-function X0XRoll:shift_all(d)
+function Roll:shift_all(d)
+	if not self.hold then
+		return
+	end
 	for v = 1, self.n_voices do
 		self:shift_voice(v, d)
 	end
 end
 
-function X0XRoll:draw_voice(g, v)
+function Roll:draw_voice(g, v)
 	local y = self.voice_ys[v]
 	local voice = self.voices[v]
 	for x = self.x, self.x2 do
 		local step = self:get_voice_step(v, x)
-		local value = voice:get_step_gate(step)
-		local level = self:get_key_level(x, y, v, step, value)
+		local level = self:get_key_level(x, y, v, step)
 		g:led(x, y, level)
 	end
 end
 
-function X0XRoll:smooth_hold_steps()
+function Roll:smooth_hold_steps()
 	-- if exiting hold state, smooth hold distance each frame
 	local hold_steps = self.voice_hold_steps
 	if not self.hold then
@@ -71,7 +62,7 @@ function X0XRoll:smooth_hold_steps()
 	end
 end
 
-function X0XRoll:draw(g)
+function Roll:draw(g)
 	-- clear margins and draw head indicator
 	for x = self.x, self.x2 do
 		local first_voice_step = self:get_voice_step(1, x)
@@ -97,10 +88,7 @@ function X0XRoll:draw(g)
 	g:led(self.x_right, self.y2, self.held_keys.right and 7 or 2)
 end
 
-function X0XRoll:key(x, y, z)
-	if not self:should_handle_key(x, y) then
-		return
-	end
+function Roll:key(x, y, z)
 	if y == self.y2 and x == self.x_hold and z == 1 then
 		self.hold = not self.hold
 	elseif y == self.y2 and x == self.x_left then
@@ -116,6 +104,7 @@ function X0XRoll:key(x, y, z)
 			self:shift_all(1)
 		end
 	elseif z == 1 then
+		-- TODO: move!
 		local v = self.y_voices[y]
 		if v ~= nil then
 			local voice = self.voices[v]
@@ -126,4 +115,9 @@ function X0XRoll:key(x, y, z)
 	end
 end
 
-return X0XRoll
+function Roll:reset()
+	-- TODO: this is called when switching views away; anything worth doing here?
+	-- (remove hold, do something so that it's not necessary to call smooth_hold_steps()?)
+end
+
+return Roll

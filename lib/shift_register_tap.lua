@@ -227,6 +227,16 @@ function ShiftRegisterTap:check_step_identity(a, b)
 	return a == b
 end
 
+--- check whether a step corresponds to a position in the loop
+-- @param step a tap step
+-- @param pos a loop position
+-- @return true if loop positions match
+function ShiftRegisterTap:check_step_pos(step, pos)
+	step = self.shift_register:wrap_loop_pos(self:get_step_pos(step))
+	pos = self.shift_register:wrap_loop_pos(pos)
+	return step == pos
+end
+
 --- sync this tap's shift register to this tap
 function ShiftRegisterTap:sync()
 	self.shift_register:sync_to_tap(self)

@@ -23,14 +23,18 @@ function Select:is_selected(option)
 	return self.selected == option
 end
 
+function Select:select(option)
+	self.selected = option
+	self.on_select(option)
+end
+
 function Select:key(x, y, z)
 	if not self:should_handle_key(x, y) then
 		return
 	end
 	if z == 1 then
 		local option = self:get_key_option(x, y)
-		self.selected = option
-		self.on_select(option)
+		self:select(option)
 	end
 end
 

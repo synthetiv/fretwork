@@ -141,6 +141,7 @@ end
 --- toggle past/present/future gate state
 -- @param s steps from now
 function ShiftRegisterVoice:toggle_step_gate(s)
+	print('toggle step gate', self.mod_tap.shift_register)
 	self.mod_tap:set_step_value(s, -self.mod_tap:get_step_value(s))
 end
 
