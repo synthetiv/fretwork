@@ -12,8 +12,24 @@ function RateSelector.new(x, y, width, height, n_voices, voices, type)
 	return selector
 end
 
--- TODO: draw fainter paths to center of grid, pulse with notes...
--- function RateSelector:draw(g)
--- end
+function RateSelector:draw(g)
+	local x_center = self.x_center
+	for v = 1, self.n_voices do
+		local active = voices[v].active
+		local slider = self.sliders[v]
+		local x_rate, y = slider:get_option_coords(slider.selected)
+		for x = self.x, self.x2 do
+			local level = 1
+			if x == x_rate then
+				level = active and math.ceil(get_voice_control_level(v, true)) or 4
+			elseif x < x_rate and x >= x_center then
+				level = 3
+			elseif x > x_rate and x <= x_center then
+				level = 3
+			end
+			g:led(x, y, level)
+		end
+	end
+end
 
 return RateSelector

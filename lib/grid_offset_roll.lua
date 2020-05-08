@@ -17,22 +17,10 @@ function OffsetRoll:get_key_level(x, y, v, step)
 	-- TODO: this assumes all taps' SRs are the same; is it useless if they aren't?
 	local head = tap:check_step_pos(-step, top_tap:get_step_pos(0))
 	local active = voice.active
-	if not active then
-		if head then
-			return 2
-		end
-	elseif v == top_voice_index then
-		if head then
-			return 14
-		end
-	elseif voice_selector:is_selected(v) then
-		if head then
-			return 12
-		end
-	elseif head then
-		return 6
+	if head then
+		return math.ceil(get_voice_control_level(v, true))
 	end
-	return 0
+	return 1
 end
 
 return OffsetRoll

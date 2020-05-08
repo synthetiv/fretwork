@@ -527,21 +527,8 @@ function grid_redraw()
 
 	-- voice buttons
 	for y = voice_selector.y, voice_selector.y2 do
-		local voice_index = voice_selector:get_key_option(voice_selector.x, y)
-		local voice = voices[voice_index]
-		local notes = recent_voice_notes[voice_index]
-		local last_note = notes[notes.last]
-		local level = last_note.release_level * 3
-		if voice.next_active then
-			level = level + last_note.onset_level
-		end
-		if voice_index == top_voice_index then
-			level = level + 11
-		elseif voice_selector:is_selected(voice_index) then
-			level = level + 6
-		else
-			level = level + 2
-		end
+		local v = voice_selector:get_key_option(voice_selector.x, y)
+		local level = get_voice_control_level(v, true, true)
 		g:led(voice_selector.x, y, math.floor(math.min(15, level)))
 	end
 
@@ -659,17 +646,24 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return math.min(15, math.ceil(level))
 end
 
-function get_voice_control_level(v, accent)
+function get_voice_control_level(v, flash, bright)
 	local voice = voices[v]
-	local active = voice.active
-	if not active then
-		return 2
-	elseif v == top_voice_index then
-		return accent and 14 or 9
+	base = 0
+	if flash then
+		local active = voice.active
+		local notes = recent_voice_notes[v]
+		local last_note = notes[notes.last]
+		base = last_note.release_level * 3
+		if voice.next_active then
+			base = base + last_note.onset_level
+		end
+	end
+	if v == top_voice_index then
+		return base + (bright and 11 or 5)
 	elseif voice_selector:is_selected(v) then
-		return accent and 12 or 7
+		return base + (bright and 6 or 3)
 	else
-		return accent and 6 or 4
+		return base + (bright and 2 or 1)
 	end
 end
 
@@ -680,7 +674,7 @@ function gate_roll:get_key_level(x, y, v, step)
 	-- highlight any step whose loop position matches the current position of the tap
 	local head = tap:check_step_identity(step, 0)
 	if gate then
-		return get_voice_control_level(v, head)
+		return math.ceil(get_voice_control_level(v, head))
 	elseif head then
 		return voice.active and 2 or 1
 	else
