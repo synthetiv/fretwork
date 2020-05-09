@@ -104,13 +104,9 @@ function Roll:key(x, y, z)
 			self:shift_all(1)
 		end
 	elseif z == 1 then
-		-- TODO: move!
 		local v = self.y_voices[y]
 		if v ~= nil then
-			local voice = self.voices[v]
-			local step = self:get_voice_step(v, x)
-			voice:toggle_step_gate(step)
-			flash_write(write_type_mod, voice.mod_tap:get_step_pos(step))
+			self.on_step_key(x, y, v, self:get_voice_step(v, x))
 		end
 	end
 end

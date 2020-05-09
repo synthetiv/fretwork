@@ -105,9 +105,6 @@ for v = 1, n_voices do
 end
 top_voice = voices[top_voice_index]
 
-flash_stage_sustain = 1
-flash_stage_ghost = 2
-flash_stage_release = 3
 n_recent_voice_notes = 4
 recent_voice_notes = {}
 for v = 1, n_voices do
@@ -117,9 +114,12 @@ for v = 1, n_voices do
 	for n = 1, n_recent_voice_notes do
 		recent_voice_notes[v][n] = {
 			pitch_id = 0,
-			stage = flash_stage_release,
+			bias_pitch_id = 0,
+			noisy_bias_pitch_id = 0,
+			gate = false,
 			onset_level = 0,
-			release_level = 0
+			release_level = 0,
+			highlight_level = 0
 		}
 	end
 end
@@ -305,23 +305,43 @@ redraw_metro = metro.init{
 		end
 
 		for v = 1, n_voices do
+			local voice = voices[v]
+			local recent_notes = recent_voice_notes[v]
+			local last_note = recent_notes.last
 			-- calculate voice paths, if necessary
 			if voices[v].path_dirty then
 				calculate_voice_path(v)
 			end
 			-- fade recent voice notes
 			for n = 1, n_recent_voice_notes do
-				local note = recent_voice_notes[v][n]
+				local note = recent_notes[n]
+				-- always fade onset
 				if note.onset_level > 0 then
 					note.onset_level = note.onset_level - 1
 					dirty = true
 				end
-				if note.stage == flash_stage_ghost then
-					if note.release_level > 0.4 then -- 6/15
-						note.release_level = note.release_level * 0.4
+				-- reset highlight level if selected, fade if not
+				if n == last_note and voice_selector:is_selected(v) then
+					if note.highlight_level ~= 1 then
+						note.highlight_level = 1
 						dirty = true
 					end
-				elseif note.stage == flash_stage_release then
+				else
+					if note.highlight_level > 0.06 then -- < 1/15
+						note.highlight_level = note.highlight_level * 0.4
+						dirty = true
+					elseif note.highlight_level > 0 then
+						note.highlight_level = 0
+						dirty = true
+					end
+				end
+				-- reset release level if selected, fade if not
+				if n == last_note and note.gate then
+					if note.release_level ~= 1 then
+						note.release_level = 1
+						dirty = true
+					end
+				else
 					if note.release_level > 0.06 then -- < 1/15
 						note.release_level = note.release_level * 0.4
 						dirty = true
@@ -370,37 +390,23 @@ function flash_note(v)
 	local voice = voices[v]
 	local recent_notes = recent_voice_notes[v]
 	local recent_note = recent_notes[recent_notes.last]
-	-- if gate is low and this voice isn't selected, just release the last note
-	if not voice.gate and not voice_selector:is_selected(v) then
-		recent_note.stage = flash_stage_release
-		return
+	if recent_note.pitch_id ~= voice.pitch_id or recent_note.bias_pitch_id ~= voice.bias_pitch_id or recent_note.noisy_bias_pitch_id ~= voice.noisy_bias_pitch_id then
+		-- if note has changed, release current note and move to a new one
+		recent_note.gate = false
+		recent_notes.last = recent_notes.last % n_recent_voice_notes + 1
+		recent_note = recent_notes[recent_notes.last]
+		-- set pitch data
+		recent_note.pitch_id = voice.pitch_id
+		recent_note.bias_pitch_id = voice.bias_pitch_id
+		recent_note.noisy_bias_pitch_id = voice.noisy_bias_pitch_id
+		dirty = true
 	end
-	-- if gate is high or this voice is selected, check whether the pitch has changed
-	if recent_note.pitch_id == voice.pitch_id and recent_note.bias_pitch_id == voice.bias_pitch_id and recent_note.noisy_bias_pitch_id == voice.noisy_bias_pitch_id then
-		if voice.gate then
-			-- if gate is high and was high before, stay in sustain stage
-			if recent_note.stage == flash_stage_sustain then
-				return
-			end
-		elseif voice_selector:is_selected(v) then
-			-- if gate is low but the voice is selected, move to ghost stage (dim sustain)
-			recent_note.stage = flash_stage_ghost
-			return
-		end
-	end
-	recent_note.stage = flash_stage_release
-	-- update the new one
-	recent_notes.last = recent_notes.last % n_recent_voice_notes + 1
-	recent_note = recent_notes[recent_notes.last]
-	-- set pitch data
-	recent_note.pitch_id = voice.pitch_id
-	recent_note.bias_pitch_id = voice.bias_pitch_id
-	recent_note.noisy_bias_pitch_id = voice.noisy_bias_pitch_id
 	-- set levels
-	recent_note.stage = voice.gate and flash_stage_sustain or flash_stage_ghost
-	recent_note.release_level = voice.gate and 1 or 0.4
-	recent_note.onset_level = voice.gate and 2 or 0
-	dirty = true
+	if voice.gate and not recent_note.gate then
+		recent_note.gate = true
+		recent_note.onset_level = voice.gate and 2 or 0
+		dirty = true
+	end
 end
 
 function midi_note(v)
@@ -545,7 +551,7 @@ function grid_redraw()
 	-- voice buttons
 	for y = voice_selector.y, voice_selector.y2 do
 		local v = voice_selector:get_key_option(voice_selector.x, y)
-		local level = get_voice_control_level(v, true, true)
+		local level = get_voice_control_level(v, 3)
 		g:led(voice_selector.x, y, math.floor(math.min(15, level)))
 	end
 
@@ -566,30 +572,21 @@ function grid_redraw()
 		for v = 1, n_voices do
 			local voice = voices[v]
 			local recent_notes = recent_voice_notes[v]
-			local voice_level = 3
-			local onset_scale = 0.5
-			if v == top_voice_index then
-				voice_level = 13
-				onset_scale = 1
-			elseif voice_selector:is_selected(v) then
-				voice_level = 6
-			end
 			for n = 1, n_recent_voice_notes do
+				local level = get_voice_note_level(v, recent_notes[n], 4)
 				local note = recent_notes[n]
 				local pitch_id = note.pitch_id
 				local bias_pitch_id = note.bias_pitch_id
 				local noisy_bias_pitch_id = note.noisy_bias_pitch_id
-				local release_level = note.release_level * voice_level
-				local onset_level = note.onset_level * onset_scale
-				local level = release_level + onset_level
-				if release_level > 0 or note.onset_level > 0 then
+				if pitch_id >= low_pitch_id and pitch_id <= high_pitch_id then
 					absolute_pitch_levels[pitch_id] = led_blend(absolute_pitch_levels[pitch_id], level)
-					if bias_pitch_id == noisy_bias_pitch_id then
-						relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], release_level * 1.25)
-					else
-						relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], level)
-						relative_pitch_levels[noisy_bias_pitch_id] = led_blend(relative_pitch_levels[noisy_bias_pitch_id], level * 0.75)
-					end
+				end
+				-- TODO: it's hard to distinguish between highlighted and non-highlighted relative notes now, because they pile up
+				if bias_pitch_id >= low_pitch_id and bias_pitch_id <= high_pitch_id then
+					relative_pitch_levels[bias_pitch_id] = led_blend(relative_pitch_levels[bias_pitch_id], level)
+				end
+				if noisy_bias_pitch_id >= low_pitch_id and noisy_bias_pitch_id <= high_pitch_id then
+					relative_pitch_levels[noisy_bias_pitch_id] = led_blend(relative_pitch_levels[noisy_bias_pitch_id], level * 0.75)
 				end
 			end
 		end
@@ -663,25 +660,39 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return math.min(15, math.ceil(level))
 end
 
-function get_voice_control_level(v, flash, bright)
+-- TODO: views manage memory: get_state, set_state, store em in a table
+
+function get_voice_note_level(v, note, type)
 	local voice = voices[v]
-	base = 0
-	if flash then
-		local active = voice.active
-		local notes = recent_voice_notes[v]
-		local last_note = notes[notes.last]
-		base = last_note.release_level * 3
-		if voice.next_active then
-			base = base + last_note.onset_level
-		end
+	local level = 0
+	if type == 1 then -- 2-5
+		level = 2
+		if voice.active then level = level + 1 end
+		if voice.next_active then level = level + 1 end
+		if voice_selector:is_selected(v) then level = level + 1 end
+	elseif type == 2 then -- 2-7
+		level = 2
+		if voice.active then level = level + 1 end
+		if voice.next_active then level = level + 2 end
+		if voice_selector:is_selected(v) then level = level + 2 end
+	elseif type == 3 then -- 3-15
+		level = 3
+		level = level + note.onset_level
+		level = level + note.release_level * 3
+		level = level + note.highlight_level * (v == top_voice_index and 7 or 4)
+	elseif type == 4 then -- 0-15
+		level = level + note.onset_level
+		level = level + note.release_level * 4
+		level = level + note.highlight_level * (v == top_voice_index and 9 or 4)
 	end
-	if v == top_voice_index then
-		return base + (bright and 11 or 5)
-	elseif voice_selector:is_selected(v) then
-		return base + (bright and 6 or 3)
-	else
-		return base + (bright and 2 or 1)
-	end
+	return math.min(15, math.ceil(level))
+end
+
+function get_voice_control_level(v, type)
+	local level = 0
+	local notes = recent_voice_notes[v]
+	local last_note = notes[notes.last]
+	return get_voice_note_level(v, last_note, type)
 end
 
 function gate_roll:get_key_level(x, y, v, step)
@@ -691,12 +702,18 @@ function gate_roll:get_key_level(x, y, v, step)
 	-- highlight any step whose loop position matches the current position of the tap
 	local head = tap:check_step_identity(step, 0)
 	if gate then
-		return math.ceil(get_voice_control_level(v, head))
+		return math.ceil(get_voice_control_level(v, head and 3 or 1))
 	elseif head then
 		return voice.active and 2 or 1
 	else
 		return 0
 	end
+end
+
+function gate_roll.on_step_key(x, y, v, step)
+	local voice = voices[v]
+	voice:toggle_step_gate(step)
+	flash_write(write_type_mod, voice.mod_tap:get_step_pos(step))
 end
 
 function toggle_mask_class(pitch_id)

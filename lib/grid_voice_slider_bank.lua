@@ -33,7 +33,7 @@ function VoiceSliderBank:draw(g)
 	for v = 1, self.n_voices do
 		local active = voices[v].active
 		local slider = self.sliders[v]
-		slider:draw(g, math.ceil(get_voice_control_level(v, true)), active and 2 or 1)
+		slider:draw(g, math.ceil(get_voice_control_level(v, 3)), 2)
 	end
 end
 

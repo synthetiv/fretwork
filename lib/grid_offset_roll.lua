@@ -18,9 +18,9 @@ function OffsetRoll:get_key_level(x, y, v, step)
 	local head = tap:check_step_pos(-step, top_tap:get_step_pos(0))
 	local active = voice.active
 	if head then
-		return math.ceil(get_voice_control_level(v, true))
+		return math.ceil(get_voice_control_level(v, 3))
 	end
-	return 1
+	return 2
 end
 
 return OffsetRoll

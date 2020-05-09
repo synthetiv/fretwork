@@ -21,13 +21,13 @@ function RateSelector:draw(g)
 		for x = self.x, self.x2 do
 			local level = 1
 			if x == x_rate then
-				level = active and math.ceil(get_voice_control_level(v, true)) or 4
+				level = get_voice_control_level(v, 3)
 			elseif x < x_rate and x >= x_center then
-				level = 3
+				level = get_voice_control_level(v, 1)
 			elseif x > x_rate and x <= x_center then
-				level = 3
+				level = get_voice_control_level(v, 1)
 			end
-			g:led(x, y, level)
+			g:led(x, y, math.ceil(level))
 		end
 	end
 end
