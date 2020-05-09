@@ -938,7 +938,7 @@ function add_params()
 		local voice = voices[v]
 		local pitch_tap = voice.pitch_tap
 		local mod_tap = voice.mod_tap
-		params:add_group(string.format('voice %d', v), 17)
+		params:add_group(string.format('voice %d', v), 15)
 		params:add{
 			type = 'number',
 			id = string.format('voice_%d_pitch_register', v),
@@ -1205,7 +1205,7 @@ function add_params()
 	params:add_group('polysub', 19)
 	polysub.params()
 
-	params:add_group('crow', 8)
+	params:add_group('crow', n_voices * 2)
 	for v = 1, n_voices do
 		params:add{
 			type = 'control',
@@ -1228,7 +1228,7 @@ function add_params()
 		}
 	end
 
-	params:add_group('midi', 8)
+	params:add_group('midi', n_voices * 2)
 	for v = 1, n_voices do
 		local voice = voices[v]
 		params:add{
