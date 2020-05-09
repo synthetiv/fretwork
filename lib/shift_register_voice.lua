@@ -28,6 +28,12 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register, voice)
 	voice.scale = scale
 
+	voice.midi_note = 60 -- C
+	voice.midi_bend = 8192 -- zero bend
+	voice.last_midi_note = 60
+	voice.midi_out_channel = 1
+	voice.midi_out_bend_range = 2
+
 	voice.mod = 0
 	voice.mod_tap = ShiftRegisterTap.new(mod_pos, mod_register, voice)
 	voice.gate = false
@@ -84,12 +90,17 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 		else
 			pitch = scale.values[pitch_id]
 		end
+		local midi_note = math.floor(pitch * 12 + 0.5)
+		local midi_bend = (8191 / self.midi_out_bend_range) * (pitch - midi_note / 12) + 8192 -- TODO: isn't that asymmetrical...???
+		midi_note = midi_note + 60
 		pitch = pitch + self.detune
 		pitch_change = self.pitch ~= pitch
 		self.pitch_id = pitch_id
 		self.pitch = pitch
 		self.noisy_bias_pitch_id = scale:get_nearest_pitch_id(noisy_bias)
 		self.bias_pitch_id = scale:get_nearest_pitch_id(bias)
+		self.midi_note = midi_note
+		self.midi_bend = midi_bend
 		pitch_tap.dirty = false
 		self.path_dirty = true
 	end

@@ -79,7 +79,7 @@ output_mode_names = {
 	'crow (4x cv)',
 	'polysub'
 }
-output_mode = output_mode_crow_2
+output_mode = output_mode_crow_4
 
 n_voices = 4
 voices = {}
@@ -403,9 +403,25 @@ function flash_note(v)
 	dirty = true
 end
 
+function midi_note(v)
+	local voice = voices[v]
+	local last_midi_note = voice.last_midi_note
+	if voice.gate then
+		m:pitchbend(math.floor(voice.midi_bend), voice.midi_out_channel)
+		m:note_on(voice.midi_note, 100, voice.midi_out_channel)
+		voice.last_midi_note = voice.midi_note
+		if voice.midi_note ~= last_midi_note then
+			m:note_off(last_midi_note, 0, voice.midi_out_channel)
+		end
+	else
+		m:note_off(last_midi_note, 0, voice.midi_out_channel)
+	end
+end
+
 function note_on(v, pitch)
 	if output_mode == output_mode_crow_4 then
 		crow.output[v].volts = pitch
+		midi_note(v)
 	elseif output_mode == output_mode_crow_2 then
 		if v < 3 then
 			crow.output[(v - 1) * 2 + 1].volts = pitch
@@ -419,6 +435,7 @@ end
 
 function note_off(v)
 	if output_mode == output_mode_crow_4 then
+		midi_note(v)
 	elseif output_mode == output_mode_crow_2 then
 		if v < 3 then
 			crow.output[(v - 1) * 2 + 2].volts = 0
@@ -1169,7 +1186,7 @@ function add_params()
 		id = 'output_mode',
 		name = 'output mode',
 		options = output_mode_names,
-		default = output_mode_crow_2,
+		default = output_mode_crow_4,
 		action = function(value)
 			-- kill notes
 			if output_mode ~= output_mode_polysub then
@@ -1207,6 +1224,34 @@ function add_params()
 			default = 2, -- sine
 			action = function(value)
 				crow.output[v].shape = crow_slew_shapes[value]
+			end
+		}
+	end
+
+	params:add_group('midi', 8)
+	for v = 1, n_voices do
+		local voice = voices[v]
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_out_channel', v),
+			name = string.format('voice %d out channel', v),
+			min = 1,
+			max = 16,
+			default = v,
+			action = function(value)
+				m:note_off(voice.last_midi_note, 0, voice.midi_out_channel) -- stop current note, if any
+				voice.midi_out_channel = value
+			end
+		}
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_out_bend_range', v),
+			name = string.format('voice %d bend range', v),
+			min = 1,
+			max = 12,
+			default = 2,
+			action = function(value)
+				voice.midi_out_bend_range = value
 			end
 		}
 	end
