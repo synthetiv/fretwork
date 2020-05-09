@@ -861,18 +861,6 @@ function grid_key(x, y, z)
 	dirty = true
 end
 
-function midi_event(data)
-	local msg = midi.to_msg(data)
-	if msg.type == 'note_on' then
-		for v = 1, n_voices do
-			local voice = voices[v]
-			if voice.clock_channel == msg.ch and voice.clock_note == msg.note then
-				voice:shift(1)
-			end
-		end
-	end
-end
-
 function crow_setup()
 	crow.clear()
 	params:bang()
@@ -1172,28 +1160,6 @@ function add_params()
 				end
 			end
 		}
-		params:add{
-			type = 'number',
-			id = string.format('voice_%d_clock_note', v),
-			name = string.format('voice %d clock note', v),
-			min = 0,
-			max = 127,
-			default = 63 + v,
-			action = function(value)
-				voice.clock_note = value
-			end
-		}
-		params:add{
-			type = 'number',
-			id = string.format('voice_%d_clock_channel', v),
-			name = string.format('voice %d clock channel', v),
-			min = 1,
-			max = 16,
-			default = 1,
-			action = function(value)
-				voice.clock_channel = value
-			end
-		}
 	end
 
 	params:add_separator()
@@ -1342,7 +1308,6 @@ function init()
 	memory.mod:recall_slot(1)
 
 	g.key = grid_key
-	m.event = midi_event
 	
 	-- match encoder sensitivity used in norns menus
 	norns.enc.accel(1, false)
