@@ -794,7 +794,7 @@ function grid_octave_key(z, d)
 		--]]
 end
 
-function grid_key(x, y, z)
+function g.key(x, y, z)
 	if grid_view ~= nil and grid_view:should_handle_key(x, y) then
 		grid_view:key(x, y, z)
 		--[[ TODO: incorporate this into x0x roll's key handler; it's already in keyboards'
@@ -1307,8 +1307,6 @@ function init()
 	memory.transposition:recall_slot(1)
 	memory.mod:recall_slot(1)
 
-	g.key = grid_key
-	
 	-- match encoder sensitivity used in norns menus
 	norns.enc.accel(1, false)
 	norns.enc.sens(1, 8)
