@@ -536,10 +536,21 @@ function grid_redraw()
 	g:all(0)
 
 	-- view buttons
-	grid_view_selector:draw(g, 7, 2)
+	grid_view_selector:draw(g, 7, 3)
 	-- clear 'spacers'
 	g:led(2, 1, 0)
 	g:led(9, 1, 0)
+	-- darken non-unique views
+	for v = 3, 5 do
+		if not grid_view_selector:is_selected(v) then
+			g:led(v, 1, 2)
+		end
+	end
+	for v = 10, 12 do
+		if not grid_view_selector:is_selected(v) then
+			g:led(v, 1, 2)
+		end
+	end
 
 	-- shift + ctrl
 	g:led(1, 7, held_keys.shift and 15 or 2)
