@@ -848,7 +848,7 @@ function g.key(x, y, z)
 		end
 		grid_view_selector:key(x, y, z)
 		-- update the new view's octave to match the previous view's
-		if grid_view.octave ~= nil then
+		if grid_view ~= nil and grid_view.octave ~= nil then
 			grid_view.octave = view_octave
 		end
 	elseif x == 1 and y == 1 then
