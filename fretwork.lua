@@ -783,10 +783,6 @@ function transpose_keyboard:free_key_voice(key_id)
 end
 
 function transpose_keyboard:key(x, y, z)
-	-- TODO: what's up with stuck/unresponsive keys?
-	-- this refers to two issues, maybe related but maybe not:
-	-- 1. voices don't always update immediately after transposing, even when quantization is off
-	-- 2. transpose keys appear to be ignored when delta is very low (like less than a quarter tone)
 	self:note(x, y, z)
 	local key_id = self:get_key_id(x, y)
 	if z == 0 then

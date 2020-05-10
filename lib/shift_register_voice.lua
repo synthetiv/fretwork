@@ -90,11 +90,13 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 		else
 			pitch = scale.values[pitch_id]
 		end
+		pitch = pitch + self.detune
 		local midi_note = math.floor(pitch * 12 + 0.5)
 		local midi_bend = (8191 / self.midi_out_bend_range) * (pitch - midi_note / 12) + 8192 -- TODO: isn't that asymmetrical...???
 		midi_note = midi_note + 60
-		pitch = pitch + self.detune
-		pitch_change = self.pitch ~= pitch
+		local noisy_bias_pitch_id = scale:get_nearest_pitch_id(noisy_bias)
+		local bias_pitch_id = scale:get_nearest_pitch_id(bias)
+		pitch_change = (self.pitch ~= pitch or self.noisy_bias_pitch_id ~= noisy_bias_pitch_id or self.bias_pitch_id ~= bias_pitch_id)
 		self.pitch_id = pitch_id
 		self.pitch = pitch
 		self.noisy_bias_pitch_id = scale:get_nearest_pitch_id(noisy_bias)
