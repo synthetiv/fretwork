@@ -402,8 +402,8 @@ function flash_note(v)
 		dirty = true
 	end
 	-- set levels
-	if voice.gate and not recent_note.gate then
-		recent_note.gate = true
+	if voice.gate ~= recent_note.gate then
+		recent_note.gate = voice.gate
 		recent_note.onset_level = voice.gate and 2 or 0
 		dirty = true
 	end
@@ -717,6 +717,9 @@ function gate_roll.on_step_key(x, y, v, step)
 	local voice = voices[v]
 	voice:toggle_step_gate(step)
 	flash_write(write_type_mod, voice.mod_tap:get_step_pos(step))
+	if quantization_off() then
+		update_voices(false, true)
+	end
 end
 
 function toggle_mask_class(pitch_id)
@@ -806,7 +809,6 @@ end
 function g.key(x, y, z)
 	if grid_view ~= nil and grid_view:should_handle_key(x, y) then
 		grid_view:key(x, y, z)
-
 		if grid_view.is_octave_key ~= nil and grid_view:is_octave_key(x, y) then
 			view_octave = grid_view.octave
 			-- no need to recalculate voice pitch/gate, but we will need to redraw
@@ -814,12 +816,6 @@ function g.key(x, y, z)
 				voices[v].dirty = true
 			end
 		end
-
-		--[[ TODO: incorporate this into x0x roll's key handler; it's already in keyboards'
-		if quantization_off() then
-			update_voices()
-		end
-		--]]
 	elseif voice_selector:should_handle_key(x, y) then
 		if held_keys.shift then
 			if z == 1 then
