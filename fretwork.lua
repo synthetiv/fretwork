@@ -86,10 +86,10 @@ top_voice_index = 1
 for v = 1, n_voices do
 	local voice = ShiftRegisterVoice.new(v * -3, pitch_registers[1], scale, v * -4, mod_registers[1])
 	voice.pitch_tap.on_write = function(pos)
-		flash_write(write_type_pitch, pos)
+		flash_write(voice.pitch_tap.shift_register, pos)
 	end
 	voice.mod_tap.on_write = function(pos)
-		flash_write(write_type_mod, pos)
+		flash_write(voice.mod_tap.shift_register, pos)
 	end
 	voice.on_shift = function()
 		blinkers.play:start()
@@ -249,14 +249,12 @@ for v = 1, n_voices do
 end
 
 n_recent_writes = 8
-write_type_pitch = 1
-write_type_mod = 2
 recent_writes = {
 	last = n_recent_writes
 }
 for w = 1, n_recent_writes do
 	recent_writes[w] = {
-		type = 0,
+		shift_register = 0,
 		level = 0,
 		pos = 0,
 	}
@@ -458,10 +456,10 @@ function update_voices(force_pitch_update, force_mod_update)
 	end
 end
 
-function flash_write(write_type, pos)
+function flash_write(shift_register, pos)
 	recent_writes.last = recent_writes.last % n_recent_writes + 1
 	local write = recent_writes[recent_writes.last]
-	write.type = write_type
+	write.shift_register = shift_register
 	write.pos = pos
 	write.level = 15
 	dirty = true
@@ -716,7 +714,7 @@ end
 function gate_roll.on_step_key(x, y, v, step)
 	local voice = voices[v]
 	voice:toggle_step_gate(step)
-	flash_write(write_type_mod, voice.mod_tap:get_step_pos(step))
+	flash_write(voice.mod_tap.shift_register, voice.mod_tap:get_step_pos(step))
 	if quantization_off() then
 		update_voices(false, true)
 	end
@@ -1670,13 +1668,12 @@ function draw_voice_path(v, level)
 		local note_edit_dim = ((has_pitch_edits and note.pitch_step <= 0) or (has_mod_edits and note.mod_step <= 0)) and 1 or 0
 		local note_level = 0
 		-- set flash level, if this note was recently changed
-		-- TODO: only flash when written register matches this voice's register
 		for w = 1, n_recent_writes do
 			local write = recent_writes[w]
 			if write.level > 0 then
-				if write.type == write_type_pitch and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
+				if write.shift_register == pitch_register and note.pitch_pos == pitch_register:wrap_loop_pos(write.pos) then
 					note_level = math.max(note_level, write.level)
-				elseif write.type == write_type_mod and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
+				elseif write.shift_register == mod_register and note.mod_pos == mod_register:wrap_loop_pos(write.pos) then
 					note_level = math.max(note_level, write.level)
 				end
 			end
