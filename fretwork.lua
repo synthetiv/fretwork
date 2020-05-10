@@ -210,8 +210,8 @@ grid_views = {
 	transpose_keyboard,
 	nil, -- spacer
 	mod_register_selector,
-	mod_offset_roll,
 	mod_rate_selector,
+	mod_offset_roll,
 	gate_roll
 }
 
