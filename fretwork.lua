@@ -197,7 +197,7 @@ for v = 1, n_voices do
 	end
 end
 
-grid_view_selector = Select.new(1, 1, 12, 1)
+grid_view_selector = Select.new(1, 1, 13, 1)
 
 grid_views = {
 	nil, -- presets (TODO)
@@ -206,6 +206,7 @@ grid_views = {
 	pitch_rate_selector,
 	pitch_offset_roll,
 	pitch_keyboard,
+	mask_keyboard,
 	transpose_keyboard,
 	nil, -- spacer
 	mod_register_selector,
@@ -538,7 +539,7 @@ function grid_redraw()
 	grid_view_selector:draw(g, 7, 2)
 	-- clear 'spacers'
 	g:led(2, 1, 0)
-	g:led(8, 1, 0)
+	g:led(9, 1, 0)
 
 	-- shift + ctrl
 	g:led(1, 7, held_keys.shift and 15 or 2)
@@ -851,7 +852,7 @@ function g.key(x, y, z)
 		grid_octave_key(z, 1)
 	elseif grid_view_selector:should_handle_key(x, y) then
 		-- ignore spacer keys
-		if x == 2 or x == 8 then
+		if x == 2 or x == 9 then
 			return
 		end
 		-- clear the current keyboard's held note stack, in order to prevent held notes from getting
