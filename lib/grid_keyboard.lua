@@ -105,6 +105,8 @@ end
 function Keyboard:reset()
 	self.held_keys = {}
 	self.n_held_keys = 0
+	self.held_octave_keys.down = false
+	self.held_octave_keys.up = false
 end
 
 function Keyboard:is_key_held(x, y)

@@ -112,8 +112,9 @@ function Roll:key(x, y, z)
 end
 
 function Roll:reset()
-	-- TODO: this is called when switching views away; anything worth doing here?
-	-- (remove hold, do something so that it's not necessary to call smooth_hold_steps()?)
+	-- TODO: remove hold, do something so that it's not necessary to call smooth_hold_steps()?
+	self.held_keys.left = false
+	self.held_keys.right = false
 end
 
 return Roll
