@@ -36,7 +36,7 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.on_write = function() end
 	-- if this is the first tap created for this shift register, sync it (so SR always has a synced tap)
 	if shift_register.sync_tap == nil then
-		shift_register.sync_tap = tap
+		tap:sync()
 	end
 	return tap
 end

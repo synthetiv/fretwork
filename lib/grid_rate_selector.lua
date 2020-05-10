@@ -4,7 +4,7 @@ local RateSelector = setmetatable({}, VoiceSliderBank)
 RateSelector.__index = RateSelector
 
 function RateSelector.new(x, y, width, height, n_voices, voices, type)
-	local selector = setmetatable(VoiceSliderBank.new(x, y, width, height, n_voices, voices, 1, 15), RateSelector)
+	local selector = setmetatable(VoiceSliderBank.new(x, y, width, height, n_voices, voices, 1, 1, 15), RateSelector)
 	local rate_param = 'voice_%d_' .. type .. '_rate'
 	selector.tap_key = type .. '_tap'
 	selector.rate_param = rate_param

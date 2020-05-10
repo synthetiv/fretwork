@@ -4,12 +4,12 @@ local Select = include 'lib/grid_select'
 local VoiceSliderBank = setmetatable({}, VoiceControl)
 VoiceSliderBank.__index = VoiceSliderBank
 
-function VoiceSliderBank.new(x, y, width, height, n_voices, voices, min, max)
+function VoiceSliderBank.new(x, y, width, height, n_voices, voices, x_slider, min, max)
 	local bank = setmetatable(VoiceControl.new(x, y, width, height, n_voices, voices), VoiceSliderBank)
 	local length = max - min + 1
 	bank.sliders = {}
 	for v = 1, n_voices do
-		local slider = Select.new(2, bank.voice_ys[v], length, 1)
+		local slider = Select.new(x + x_slider - 1, bank.voice_ys[v], length, 1)
 		slider.on_select = function(option)
 			bank.on_select(v, option + min - 1)
 		end

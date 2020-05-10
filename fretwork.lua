@@ -13,7 +13,6 @@ BeatClock = require 'beatclock'
 Roll = include 'lib/grid_roll'
 OffsetRoll = include 'lib/grid_offset_roll'
 Keyboard = include 'lib/grid_keyboard'
-VoiceSliderBank = include 'lib/grid_voice_slider_bank'
 RegisterSelector = include 'lib/grid_register_selector'
 RateSelector = include 'lib/grid_rate_selector'
 Select = include 'lib/grid_select'
@@ -48,7 +47,7 @@ scale = Scale.new(et12, 12)
 
 pitch_registers = {}
 mod_registers = {}
-n_registers = 4
+n_registers = 7
 for r = 1, n_registers do
 	pitch_registers[r] = ShiftRegister.new(16)
 	mod_registers[r] = ShiftRegister.new(16)
@@ -901,11 +900,12 @@ function add_params()
 		end
 	}
 
+	params:add_group('loop lengths', n_registers * 2)
 	for r = 1, n_registers do
 		params:add{
 			type = 'number',
 			id = string.format('pitch_loop_%d_length', r),
-			name = string.format('pitch loop %d length', r),
+			name = string.format('pitch loop %d', r),
 			min = 2,
 			max = 128,
 			default = 16,
@@ -920,10 +920,10 @@ function add_params()
 		params:add{
 			type = 'number',
 			id = string.format('mod_loop_%d_length', r),
-			name = string.format('mod loop %d length', r),
+			name = string.format('mod loop %d', r),
 			min = 2,
 			max = 128,
-			default = 18,
+			default = 16,
 			action = function(value)
 				mod_registers[r]:set_length(value)
 				if quantization_off() then
@@ -952,8 +952,26 @@ function add_params()
 				local previous_register = pitch_tap.shift_register
 				pitch_tap.shift_register = pitch_registers[value]
 				pitch_register_selector.sliders[v].selected = value
-				if top_voice_index == v then
-					-- TODO: un-sync previous pitch register
+				if previous_register.sync_tap == pitch_tap then
+					-- try to find another tap that uses this shift register, and sync it if we can
+					local next_tap = nil
+					for v2 = 1, n_voices do
+						if next_tap == nil then
+							local other_tap = voices[voice_selector.selection_order[v2]].pitch_tap
+							if other_tap.shift_register == previous_register then
+								next_tap = other_tap
+							end
+						end
+					end
+					if next_tap ~= nil then
+						next_tap:sync()
+					else
+						previous_register.sync_tap = nil
+					end
+					-- sync this tap to the new shift register
+					pitch_tap:sync()
+				elseif pitch_tap.shift_register.sync_tap == nil then
+					-- if this shift register has never been synced, sync it
 					pitch_tap:sync()
 				end
 			end
@@ -1076,8 +1094,26 @@ function add_params()
 				local previous_register = mod_tap.shift_register
 				mod_tap.shift_register = mod_registers[value]
 				mod_register_selector.sliders[v].selected = value
-				if top_voice_index == v then
-					-- TODO: un-sync previous mod register
+				if previous_register.sync_tap == mod_tap then
+					-- try to find another tap that uses this shift register, and sync it if we can
+					local next_tap = nil
+					for v2 = 1, n_voices do
+						if next_tap == nil then
+							local other_tap = voices[voice_selector.selection_order[v2]].mod_tap
+							if other_tap.shift_register == previous_register then
+								next_tap = other_tap
+							end
+						end
+					end
+					if next_tap ~= nil then
+						next_tap:sync()
+					else
+						previous_register.sync_tap = nil
+					end
+					-- sync this tap to the new shift register
+					mod_tap:sync()
+				elseif mod_tap.shift_register.sync_tap == nil then
+					-- if this shift register has never been synced, sync it
 					mod_tap:sync()
 				end
 			end
