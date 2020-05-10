@@ -203,15 +203,15 @@ grid_views = {
 	nil, -- presets (TODO)
 	nil, -- spacer
 	pitch_register_selector,
-	pitch_keyboard,
-	pitch_offset_roll,
 	pitch_rate_selector,
+	pitch_offset_roll,
+	pitch_keyboard,
 	transpose_keyboard,
 	nil, -- spacer
 	mod_register_selector,
-	gate_roll,
 	mod_offset_roll,
-	mod_rate_selector
+	mod_rate_selector,
+	gate_roll
 }
 
 grid_view_selector.on_select = function(option)
@@ -597,20 +597,18 @@ function grid_redraw()
 	end
 
 	-- transport
-	--[[ TODO: move
 	local play_button_level = blinkers.play.on and 4 or 3
 	if clock_running then
 		play_button_level = play_button_level + 4
 	end
-	g:led(3, 7, play_button_level)
+	g:led(15, 1, play_button_level)
 	local record_button_level = 3
 	if blinkers.record.on then
 		record_button_level = 8
 	elseif write_enable then
 		record_button_level = 7
 	end
-	g:led(4, 7, record_button_level)
-	--]]
+	g:led(16, 1, record_button_level)
 
 	g:refresh()
 end
@@ -877,14 +875,14 @@ function g.key(x, y, z)
 			held_keys.ctrl_lock = not held_keys.ctrl_lock
 		end
 		held_keys.ctrl = z == 1
-	elseif x == 3 and y == 7 and z == 1 then
+	elseif x == 15 and y == 1 and z == 1 then
 		-- play key
 		if clock_running then
 			clock.transport.stop()
 		else
 			clock.transport.start()
 		end
-	elseif x == 4 and y == 7 and z == 1 then
+	elseif x == 16 and y == 1 and z == 1 then
 		-- record key
 		write_enable = not write_enable
 	end
