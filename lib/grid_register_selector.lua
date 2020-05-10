@@ -35,39 +35,45 @@ function RegisterSelector:key(x, y, z)
 	if v == nil then
 		return
 	end
-	local r = self.sliders[v].selected
+	local slider = self.sliders[v]
+	local r = slider.selected
 	local tap = voices[v][self.tap_key]
-	local held_keys = self.held_keys[v]
+	local held_loop_keys = self.held_keys[v]
 	if x == self.x_inversion then
 		if z == 1 then
 			params:set(string.format(self.multiply_param, v), tap.next_multiply < 0 and 2 or 1)
 		end
 	elseif x == self.x_half then
-		held_keys.half = z == 1
+		held_loop_keys.half = z == 1
 		if z == 1 then
 			params:set(string.format(self.loop_length_param, r), math.ceil(tap.shift_register.loop_length / 2))
 		end
 	elseif x == self.x_double then
-		held_keys.double = z == 1
+		held_loop_keys.double = z == 1
 		if z == 1 then
 			params:set(string.format(self.loop_length_param, r), tap.shift_register.loop_length * 2)
 		end
 	elseif x == self.x_dec then
-		held_keys.dec = z == 1
+		held_loop_keys.dec = z == 1
 		if z == 1 then
 			params:set(string.format(self.loop_length_param, r), tap.shift_register.loop_length - 1)
 		end
 	elseif x == self.x_inc then
-		held_keys.inc = z == 1
+		held_loop_keys.inc = z == 1
 		if z == 1 then
 			params:set(string.format(self.loop_length_param, r), tap.shift_register.loop_length + 1)
 		end
+	elseif held_keys.shift then
+		local pos = tap:get_step_pos(0)
+		local r2 = slider:get_key_option(x, y)
+		local loop = tap.shift_register:get_loop(pos)
+		slider:key(x, y, z) -- changes tap's shift register
+		tap.shift_register:set_loop(pos, loop)
 	else
-		VoiceSliderBank.key(self, x, y, z)
+		slider:key(x, y, z)
 	end
 end
 
--- TODO: shift to copy loop
 function RegisterSelector:draw(g)
 	VoiceSliderBank.draw(self, g)
 	for v = 1, self.n_voices do

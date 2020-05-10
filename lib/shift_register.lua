@@ -141,24 +141,24 @@ function ShiftRegister:write_offset(offset, value)
 end
 
 --- return a table of the entire current loop contents
--- @param offset an offset from the loop start point
+-- @param pos first position in the buffer to read from
 -- @return a table of values, with the value found at `offset` at index 1, the value at `offset + 1`
 -- at index 2, etc.
-function ShiftRegister:get_loop(offset)
+function ShiftRegister:get_loop(pos)
 	local loop = {}
 	for i = 1, self.loop_length do
-		loop[i] = self:read_offset(offset + i - 1)
+		loop[i] = self:read(pos + i - 1)
 	end
 	return loop
 end
 
 --- set the loop contents and length to match the provided table of values
--- @param offset an offset from the loop start point
+-- @param pos first position in the buffer to write to
 -- @param loop a table of values to match the loop to
-function ShiftRegister:set_loop(offset, loop)
+function ShiftRegister:set_loop(pos, loop)
 	self:set_length(#loop)
 	for i = 1, self.loop_length do
-		self:write_offset(offset + i - 1, loop[i])
+		self:write(pos + i - 1, loop[i])
 	end
 	self.dirty = false -- assume the loop that's just been set has been saved somewhere
 end
