@@ -6,7 +6,6 @@ Keyboard.__index = Keyboard
 function Keyboard.new(x, y, width, height, scale)
 	local instance = setmetatable(Control.new(x, y, width, height), Keyboard)
 	instance.scale = scale
-	instance.octave = 0
 	instance.held_keys = {}
 	instance.n_held_keys = 0
 	instance.last_key = 0
@@ -16,6 +15,11 @@ function Keyboard.new(x, y, width, height, scale)
 		instance.row_offsets[row] = instance.scale.center_pitch_id + (instance.y_center - row) * 5
 	end
 	instance:set_white_keys()
+	instance.octave = 0
+	instance.held_octave_keys = {
+		down = false,
+		up = false
+	}
 	return instance
 end
 
@@ -41,6 +45,17 @@ end
 
 function Keyboard:get_last_value()
 	return self.scale.values[self:get_last_pitch_id()]
+end
+
+function Keyboard:key(x, y, z)
+	if not self:should_handle_key(x, y) then
+		return
+	end
+	if self:is_octave_key(x, y) then
+		self:octave_key(x, y, z)
+		return
+	end
+	self:note_key(x, y, z)
 end
 
 function Keyboard:note(x, y, z)
@@ -108,12 +123,23 @@ function Keyboard:is_key_last(x, y)
 end
 
 function Keyboard:draw(g)
-	for x = self.x, self.x2 do
-		for y = self.y, self.y2 do
-			local n = self:get_key_pitch_id(x, y)
-			g:led(x, y, self:get_key_level(x, y, n))
+	local x2 = self.x2
+	local y2 = self.y2
+	for x = self.x, x2 do
+		for y = self.y, y2 do
+			if self:is_octave_key(x, y) then
+				g:led(x, y, 0) -- clear space around octave keys
+			else
+				local n = self:get_key_pitch_id(x, y)
+				g:led(x, y, self:get_key_level(x, y, n))
+			end
 		end
 	end
+	-- draw octave keys
+	local down_level = self.held_octave_keys.down and 7 or 2
+	local up_level = self.held_octave_keys.up and 7 or 2
+	g:led(x2 - 1, y2, math.min(15, math.max(0, down_level - math.min(self.octave, 0))))
+	g:led(x2, y2, math.min(15, math.max(0, up_level + math.max(self.octave, 0))))
 end
 
 function Keyboard:set_white_keys()
@@ -137,6 +163,28 @@ end
 
 function Keyboard:is_white_key(n)
 	return self.white_keys[self.scale:get_pitch_class(n)]
+end
+
+function Keyboard:is_octave_key(x, y)
+	return y >= self.y2 - 1 and x >= self.x2 - 2
+end
+
+function Keyboard:octave_key(x, y, z)
+	local d = 0
+	if y == self.y2 then
+		if x == self.x2 then
+			self.held_octave_keys.up = z == 1
+			d = 1
+		elseif x == self.x2 - 1 then
+			self.held_octave_keys.down = z == 1
+			d = -1
+		end
+	end
+	if self.held_octave_keys.up and self.held_octave_keys.down then
+		self.octave = 0
+	elseif z == 1 then
+		self.octave = self.octave + d
+	end
 end
 
 -- this method can be redefined on the fly

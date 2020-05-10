@@ -556,12 +556,6 @@ function grid_redraw()
 		g:led(voice_selector.x, y, math.floor(math.min(15, level)))
 	end
 
-	-- octave switches
-	--[[ TODO: move
-	g:led(3, 8, 2 - math.min(view_octave, 0))
-	g:led(4, 8, 2 + math.max(view_octave, 0))
-	--]]
-
 	-- calculate levels for keyboards
 	if grid_view ~= nil and grid_view.get_key_pitch_id ~= nil then
 		local low_pitch_id = grid_view:get_key_pitch_id(pitch_keyboard.x, pitch_keyboard.y2)
@@ -724,7 +718,7 @@ function toggle_mask_class(pitch_id)
 	end
 end
 
-function pitch_keyboard:key(x, y, z)
+function pitch_keyboard:note_key(x, y, z)
 	if held_keys.shift and z == 1 then
 		toggle_mask_class(self:get_key_pitch_id(x, y))
 		return
@@ -738,7 +732,7 @@ function pitch_keyboard:key(x, y, z)
 	end
 end
 
-function mask_keyboard:key(x, y, z)
+function mask_keyboard:note_key(x, y, z)
 	if z == 1 then
 		toggle_mask_class(self:get_key_pitch_id(x, y))
 	end
@@ -781,7 +775,7 @@ function transpose_keyboard:free_key_voice(key_id)
 	end
 end
 
-function transpose_keyboard:key(x, y, z)
+function transpose_keyboard:note_key(x, y, z)
 	self:note(x, y, z)
 	local key_id = self:get_key_id(x, y)
 	if z == 0 then
@@ -799,33 +793,18 @@ function transpose_keyboard:key(x, y, z)
 	end
 end
 
-function grid_octave_key(z, d)
-	if d < 0 then
-		held_keys.octave_down = z == 1
-	elseif d > 0 then
-		held_keys.octave_up = z == 1
-	end
-	if z == 1 then
-		if held_keys.octave_down and held_keys.octave_up then
-			view_octave = 0
-		else
-			view_octave = view_octave + d
-		end
-		-- no need to recalculate voice pitch/gate, but we will need to redraw
-		for v = 1, n_voices do
-			voices[v].dirty = true
-		end
-	end
-	--[[ TODO
-	if active_keyboard ~= nil then
-		active_keyboard.octave = view_octave
-	end
-		--]]
-end
-
 function g.key(x, y, z)
 	if grid_view ~= nil and grid_view:should_handle_key(x, y) then
 		grid_view:key(x, y, z)
+
+		if grid_view.is_octave_key ~= nil and grid_view:is_octave_key(x, y) then
+			view_octave = grid_view.octave
+			-- no need to recalculate voice pitch/gate, but we will need to redraw
+			for v = 1, n_voices do
+				voices[v].dirty = true
+			end
+		end
+
 		--[[ TODO: incorporate this into x0x roll's key handler; it's already in keyboards'
 		if quantization_off() then
 			update_voices()
@@ -846,10 +825,6 @@ function g.key(x, y, z)
 			voice_selector:key(x, y, z)
 			update_top_voice()
 		end
-	elseif x == 3 and y == 8 then
-		grid_octave_key(z, -1)
-	elseif x == 4 and y == 8 then
-		grid_octave_key(z, 1)
 	elseif grid_view_selector:should_handle_key(x, y) then
 		-- ignore spacer keys
 		if x == 2 or x == 9 then
@@ -861,6 +836,10 @@ function g.key(x, y, z)
 			grid_view:reset()
 		end
 		grid_view_selector:key(x, y, z)
+		-- update the new view's octave to match the previous view's
+		if grid_view.octave ~= nil then
+			grid_view.octave = view_octave
+		end
 	elseif x == 1 and y == 1 then
 		-- esc key
 		held_keys.esc = z == 1
