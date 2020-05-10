@@ -15,6 +15,7 @@ OffsetRoll = include 'lib/grid_offset_roll'
 Keyboard = include 'lib/grid_keyboard'
 RegisterSelector = include 'lib/grid_register_selector'
 RateSelector = include 'lib/grid_rate_selector'
+MemorySelector = include 'lib/grid_memory_selector'
 Select = include 'lib/grid_select'
 MultiSelect = include 'lib/grid_multi_select'
 ShiftRegister = include 'lib/shift_register'
@@ -143,6 +144,7 @@ g = grid.connect()
 m = midi.connect()
 
 held_keys = {
+	esc = false,
 	ctrl = false,
 	ctrl_lock = false,
 	shift = false,
@@ -196,6 +198,8 @@ for v = 1, n_voices do
 	end
 end
 
+memory_view = MemorySelector.new(2, 1, 15, 7)
+
 grid_view_selector = Select.new(3, 8, 11, 1)
 
 grid_views = {
@@ -213,7 +217,10 @@ grid_views = {
 }
 
 grid_view_selector.on_select = function(option)
-	grid_view = grid_views[option]
+	if not held_keys.esc then
+		grid_view = grid_views[option]
+		dirty = true
+	end
 end
 
 grid_view = grid_views[1]
@@ -554,6 +561,9 @@ function grid_redraw()
 		g:led(1, 8, held_keys.ctrl and 15 or 2)
 	end
 
+	-- esc
+	g:led(1, 1, held_keys.esc and 15 or 2)
+
 	-- voice buttons
 	for y = voice_selector.y, voice_selector.y2 do
 		local v = voice_selector:get_key_option(voice_selector.x, y)
@@ -853,7 +863,11 @@ function g.key(x, y, z)
 		-- esc key
 		held_keys.esc = z == 1
 		if z == 1 then
-			grid_view_selector:select(0)
+			if grid_view == memory_view then
+				grid_view = grid_views[grid_view_selector.selected]
+			else
+				grid_view = memory_view
+			end
 		end
 	elseif x == 1 and y == 7 then
 		-- shift key
