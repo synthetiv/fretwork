@@ -125,10 +125,8 @@ function Keyboard:is_key_last(x, y)
 end
 
 function Keyboard:draw(g)
-	local x2 = self.x2
-	local y2 = self.y2
-	for x = self.x, x2 do
-		for y = self.y, y2 do
+	for x = self.x, self.x2 do
+		for y = self.y, self.y2 do
 			if self:is_octave_key(x, y) then
 				g:led(x, y, 0) -- clear space around octave keys
 			else
@@ -140,8 +138,8 @@ function Keyboard:draw(g)
 	-- draw octave keys
 	local down_level = self.held_octave_keys.down and 7 or 2
 	local up_level = self.held_octave_keys.up and 7 or 2
-	g:led(x2 - 1, y2, math.min(15, math.max(0, down_level - math.min(self.octave, 0))))
-	g:led(x2, y2, math.min(15, math.max(0, up_level + math.max(self.octave, 0))))
+	g:led(self.x2 - 1, self.y, math.min(15, math.max(0, down_level - math.min(self.octave, 0))))
+	g:led(self.x2, self.y, math.min(15, math.max(0, up_level + math.max(self.octave, 0))))
 end
 
 function Keyboard:set_white_keys()
@@ -168,12 +166,12 @@ function Keyboard:is_white_key(n)
 end
 
 function Keyboard:is_octave_key(x, y)
-	return y >= self.y2 - 1 and x >= self.x2 - 2
+	return y <= self.y + 1 and x >= self.x2 - 2
 end
 
 function Keyboard:octave_key(x, y, z)
 	local d = 0
-	if y == self.y2 then
+	if y == self.y then
 		if x == self.x2 then
 			self.held_octave_keys.up = z == 1
 			d = 1

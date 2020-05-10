@@ -163,15 +163,15 @@ end
 
 view_octave = 0
 
-pitch_register_selector = RegisterSelector.new(2, 2, 15, 7, n_voices, voices, 'pitch')
-pitch_rate_selector = RateSelector.new(2, 2, 15, 7, n_voices, voices, 'pitch')
+pitch_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'pitch')
+pitch_rate_selector = RateSelector.new(2, 1, 15, 7, n_voices, voices, 'pitch')
 
-mod_register_selector = RegisterSelector.new(2, 2, 15, 7, n_voices, voices, 'mod')
-mod_rate_selector = RateSelector.new(2, 2, 15, 7, n_voices, voices, 'mod')
+mod_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'mod')
+mod_rate_selector = RateSelector.new(2, 1, 15, 7, n_voices, voices, 'mod')
 
-pitch_keyboard = Keyboard.new(2, 2, 15, 7, scale)
-mask_keyboard = Keyboard.new(2, 2, 15, 7, scale)
-transpose_keyboard = Keyboard.new(2, 2, 15, 7, scale)
+pitch_keyboard = Keyboard.new(2, 1, 15, 7, scale)
+mask_keyboard = Keyboard.new(2, 1, 15, 7, scale)
+transpose_keyboard = Keyboard.new(2, 1, 15, 7, scale)
 -- special stuff for transpose keyboard polyphony
 transpose_keyboard.key_count = 0
 transpose_keyboard.voice_usage = {}
@@ -183,10 +183,10 @@ for v = 1, n_voices do
 	}
 end
 
-pitch_offset_roll = OffsetRoll.new(2, 2, 15, 7, n_voices, voices, 'pitch')
-mod_offset_roll = OffsetRoll.new(2, 2, 15, 7, n_voices, voices, 'mod')
+pitch_offset_roll = OffsetRoll.new(2, 1, 15, 7, n_voices, voices, 'pitch')
+mod_offset_roll = OffsetRoll.new(2, 1, 15, 7, n_voices, voices, 'mod')
 
-gate_roll = Roll.new(2, 2, 15, 7, n_voices, voices)
+gate_roll = Roll.new(2, 1, 15, 7, n_voices, voices)
 for v = 1, n_voices do
 	local mod_tap = voices[v].mod_tap
 	local on_shift = mod_tap.on_shift
@@ -196,11 +196,9 @@ for v = 1, n_voices do
 	end
 end
 
-grid_view_selector = Select.new(1, 1, 13, 1)
+grid_view_selector = Select.new(3, 8, 11, 1)
 
 grid_views = {
-	nil, -- presets (TODO)
-	nil, -- spacer
 	pitch_register_selector,
 	pitch_rate_selector,
 	pitch_offset_roll,
@@ -534,18 +532,17 @@ function grid_redraw()
 
 	-- view buttons
 	grid_view_selector:draw(g, 7, 3)
-	-- clear 'spacers'
-	g:led(2, 1, 0)
-	g:led(9, 1, 0)
+	-- clear 'spacer'
+	g:led(9, 8, 0)
 	-- darken non-unique views
-	for v = 3, 5 do
+	for v = 1, 3 do
 		if not grid_view_selector:is_selected(v) then
-			g:led(v, 1, 2)
+			g:led(v + 2, 8, 2)
 		end
 	end
-	for v = 10, 12 do
+	for v = 8, 10 do
 		if not grid_view_selector:is_selected(v) then
-			g:led(v, 1, 2)
+			g:led(v + 2, 8, 2)
 		end
 	end
 
@@ -604,14 +601,14 @@ function grid_redraw()
 	if clock_running then
 		play_button_level = play_button_level + 4
 	end
-	g:led(15, 1, play_button_level)
+	g:led(15, 8, play_button_level)
 	local record_button_level = 3
 	if blinkers.record.on then
 		record_button_level = 8
 	elseif write_enable then
 		record_button_level = 7
 	end
-	g:led(16, 1, record_button_level)
+	g:led(16, 8, record_button_level)
 
 	g:refresh()
 end
@@ -718,6 +715,14 @@ function gate_roll.on_step_key(x, y, v, step)
 	if quantization_off() then
 		update_voices(false, true)
 	end
+end
+
+function pitch_offset_roll.on_step_key(x, y, v, step)
+	-- TODO
+end
+
+function mod_offset_roll.on_step_key(x, y, v, step)
+	-- TODO
 end
 
 function toggle_mask_class(pitch_id)
@@ -859,14 +864,14 @@ function g.key(x, y, z)
 			held_keys.ctrl_lock = not held_keys.ctrl_lock
 		end
 		held_keys.ctrl = z == 1
-	elseif x == 15 and y == 1 and z == 1 then
+	elseif x == 15 and y == 8 and z == 1 then
 		-- play key
 		if clock_running then
 			clock.transport.stop()
 		else
 			clock.transport.start()
 		end
-	elseif x == 16 and y == 1 and z == 1 then
+	elseif x == 16 and y == 8 and z == 1 then
 		-- record key
 		write_enable = not write_enable
 	end

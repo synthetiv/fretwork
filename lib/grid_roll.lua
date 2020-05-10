@@ -83,21 +83,21 @@ function Roll:draw(g)
 		self:draw_voice(g, v)
 	end
 	-- left/hold/right keys
-	g:led(self.x_left, self.y2, self.held_keys.left and 7 or 2)
-	g:led(self.x_hold, self.y2, self.hold and 2 or 7)
-	g:led(self.x_right, self.y2, self.held_keys.right and 7 or 2)
+	g:led(self.x_left, self.y, self.held_keys.left and 7 or 2)
+	g:led(self.x_hold, self.y, self.hold and 2 or 7)
+	g:led(self.x_right, self.y, self.held_keys.right and 7 or 2)
 end
 
 function Roll:key(x, y, z)
-	if y == self.y2 and x == self.x_hold and z == 1 then
+	if y == self.y and x == self.x_hold and z == 1 then
 		self.hold = not self.hold
-	elseif y == self.y2 and x == self.x_left then
+	elseif y == self.y and x == self.x_left then
 		self.held_keys.left = z == 1
 		if z == 1 then
 			self.hold = true
 			self:shift_all(-1)
 		end
-	elseif y == self.y2 and x == self.x_right then
+	elseif y == self.y and x == self.x_right then
 		self.held_keys.right = z == 1
 		if z == 1 then
 			self.hold = true
