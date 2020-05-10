@@ -38,7 +38,6 @@ function VoiceSliderBank:draw(g)
 end
 
 function VoiceSliderBank:reset()
-	-- TODO: ?
 end
 
 return VoiceSliderBank
