@@ -22,10 +22,6 @@ ShiftRegister = include 'lib/shift_register'
 ShiftRegisterVoice = include 'lib/shift_register_voice'
 Scale = include 'lib/scale'
 Blinker = include 'lib/blinker'
-PitchMemory = include 'lib/memory_pitch'
-MaskMemory = include 'lib/memory_mask'
-TranspositionMemory = include 'lib/memory_transposition'
-ModMemory = include 'lib/memory_mod'
 
 crow_slew_shapes = {
 	'linear',
@@ -371,17 +367,6 @@ redraw_metro = metro.init{
 			end
 		end
 	end
-}
-
-memory_pitch_loop = 1
-memory_mask = 2
-memory_transposition = 3
-memory_mod_loop = 4
-memory = {
-	pitch = PitchMemory.new(),
-	mask = MaskMemory.new(),
-	transposition = TranspositionMemory.new(),
-	mod = ModMemory.new()
 }
 
 function quantization_off()
@@ -1007,7 +992,7 @@ function add_params()
 			action = function(value)
 				pitch_tap.next_bias = value / 12
 				dirty = true
-				memory.transposition.dirty = true
+				-- memory.transposition.dirty = true -- TODO
 				if quantization_off() then
 					pitch_tap:apply_edits()
 					voice:update()
@@ -1037,7 +1022,7 @@ function add_params()
 			action = function(value)
 				pitch_tap.next_scramble = value
 				dirty = true
-				memory.pitch.dirty = true
+				-- memory.pitch.dirty = true -- TODO
 				if quantization_off() then
 					pitch_tap:apply_edits()
 					voice:update()
@@ -1052,7 +1037,7 @@ function add_params()
 			action = function(value)
 				pitch_tap.next_noise = value / 12
 				dirty = true
-				memory.pitch.dirty = true
+				-- memory.pitch.dirty = true -- TODO
 				if quantization_off() then
 					pitch_tap:apply_edits()
 					voice:update()
@@ -1075,7 +1060,7 @@ function add_params()
 					top_voice.pitch_tap:sync()
 				end
 				dirty = true
-				memory.transposition.dirty = true
+				-- memory.transposition.dirty = true -- TODO
 				if quantization_off() then
 					voice:update()
 				end
@@ -1089,7 +1074,7 @@ function add_params()
 			action = function(value)
 				pitch_tap.next_jitter = value
 				dirty = true
-				memory.pitch.dirty = true
+				-- memory.pitch.dirty = true -- TODO
 				if quantization_off() then
 					pitch_tap:apply_edits()
 					voice:update()
@@ -1139,7 +1124,7 @@ function add_params()
 			action = function(value)
 				mod_tap.next_bias = value
 				dirty = true
-				memory.mod.dirty = true
+				-- memory.mod.dirty = true -- TODO
 				if quantization_off() then
 					mod_tap:apply_edits()
 					voice:update()
@@ -1169,7 +1154,7 @@ function add_params()
 			action = function(value)
 				mod_tap.next_scramble = value
 				dirty = true
-				memory.mod.dirty = true
+				-- memory.mod.dirty = true -- TODO
 				if quantization_off() then
 					mod_tap:apply_edits()
 					voice:update()
@@ -1184,7 +1169,7 @@ function add_params()
 			action = function(value)
 				mod_tap.next_noise = value
 				dirty = true
-				memory.mod.dirty = true
+				-- memory.mod.dirty = true -- TODO
 				if quantization_off() then
 					mod_tap:apply_edits()
 					voice:update()
@@ -1207,7 +1192,7 @@ function add_params()
 					top_voice.mod_tap:sync()
 				end
 				dirty = true
-				memory.transposition.dirty = true
+				-- memory.transposition.dirty = true -- TODO
 				if quantization_off() then
 					voice:update()
 				end
@@ -1221,7 +1206,7 @@ function add_params()
 			action = function(value)
 				mod_tap.next_jitter = value
 				dirty = true
-				memory.mod.dirty = true
+				-- memory.mod.dirty = true -- TODO
 				if quantization_off() then
 					mod_tap:apply_edits()
 					voice:update()
@@ -1359,6 +1344,7 @@ function add_params()
 	}
 end
 
+--[[
 function load_memory(data)
 	for s = 1, 16 do
 		if data.pitch_loops ~= nil then
@@ -1379,6 +1365,7 @@ function load_memory(data)
 	memory.transposition.dirty = true
 	memory.mod.dirty = true
 end
+	--]]
 
 function init()
 
@@ -1397,11 +1384,11 @@ function init()
 	voice_selector:reset(true)
 
 	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
-	params:set('restore_memory')
-	memory.pitch:recall_slot(1)
-	memory.mask:recall_slot(1)
-	memory.transposition:recall_slot(1)
-	memory.mod:recall_slot(1)
+	-- params:set('restore_memory')
+	-- memory.pitch:recall_slot(1)
+	-- memory.mask:recall_slot(1)
+	-- memory.transposition:recall_slot(1)
+	-- memory.mod:recall_slot(1)
 
 	-- match encoder sensitivity used in norns menus
 	norns.enc.accel(1, false)
@@ -1547,7 +1534,7 @@ function edit_field_delta(d)
 						voice:update()
 					end
 				end
-				memory.pitch.dirty = true
+				-- memory.pitch.dirty = true -- TODO
 			end
 			if edit_both_taps or edit_tap == edit_tap_mod then
 				-- shift mod tap(s)
@@ -1558,7 +1545,7 @@ function edit_field_delta(d)
 						voice:update()
 					end
 				end
-				memory.mod.dirty = true
+				-- memory.mod.dirty = true -- TODO
 			end
 		end
 	elseif edit_field == edit_field_noise then
