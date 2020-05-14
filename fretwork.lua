@@ -567,6 +567,8 @@ function grid_redraw()
 		for v = 1, n_voices do
 			local voice = voices[v]
 			local recent_notes = recent_voice_notes[v]
+			local next_bias_pitch_id = voice.next_bias_pitch_id
+			local show_next_bias = next_bias_pitch_id ~= voice.bias_pitch_id
 			for n = 1, n_recent_voice_notes do
 				local level = get_voice_note_level(v, recent_notes[n], 4)
 				local note = recent_notes[n]
@@ -583,6 +585,9 @@ function grid_redraw()
 				if noisy_bias_pitch_id >= low_pitch_id and noisy_bias_pitch_id <= high_pitch_id then
 					relative_pitch_levels[noisy_bias_pitch_id] = led_blend(relative_pitch_levels[noisy_bias_pitch_id], level * 0.75)
 				end
+			end
+			if voice_selector:is_selected(v) and show_next_bias and next_bias_pitch_id >= low_pitch_id and next_bias_pitch_id <= high_pitch_id then
+				relative_pitch_levels[next_bias_pitch_id] = led_blend(relative_pitch_levels[next_bias_pitch_id], 2)
 			end
 		end
 	end
@@ -645,7 +650,6 @@ end
 function transpose_keyboard:get_key_level(x, y, n)
 	local level = relative_pitch_levels[n]
 	-- TODO: do something to show the full noise range (not just the current noise value)
-	-- TODO: show 'next's
 	-- highlight octaves
 	if (n - scale.center_pitch_id) % scale.length == 0 then
 		level = math.max(level, 2)
@@ -991,6 +995,7 @@ function add_params()
 			controlspec = controlspec.new(-48, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
 				pitch_tap.next_bias = value / 12
+				voice.next_bias_pitch_id = scale:get_nearest_pitch_id(pitch_tap.next_bias)
 				dirty = true
 				-- memory.transposition.dirty = true -- TODO
 				if quantization_off() then

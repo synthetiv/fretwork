@@ -25,6 +25,7 @@ ShiftRegisterVoice.new = function(pitch_pos, pitch_register, scale, mod_pos, mod
 	voice.pitch = 0
 	voice.bias_pitch_id = -1
 	voice.noisy_bias_pitch_id = -1
+	voice.next_bias_pitch_id = -1
 	voice.pitch_tap = ShiftRegisterTap.new(pitch_pos, pitch_register, voice)
 	voice.scale = scale
 
