@@ -15,7 +15,7 @@ end
 function OffsetRoll:get_voice_step(v, x)
 	local step = x - self.x_center + self.voice_hold_steps[top_voice_index]
 	if self.hold then
-		step = step - top_voice.tick / top_voice:get_step_length(0) -- TODO: global
+		step = step - taps[v].direction * top_voice.tick / top_voice:get_step_length(0) -- TODO: global
 	end
 	return step
 end
@@ -23,7 +23,7 @@ end
 function OffsetRoll:get_tap_pos(v)
 	local tap = self.taps[v]
 	local voice = self.voices[v]
-	return tap.shift_register:wrap_loop_pos(tap.pos + voice.tick / voice:get_step_length(0))
+	return tap.shift_register:wrap_loop_pos(tap.pos + tap.direction * voice.tick / voice:get_step_length(0))
 end
 
 function OffsetRoll:get_key_level(x, y, v, step)
