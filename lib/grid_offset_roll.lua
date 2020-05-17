@@ -8,7 +8,6 @@ function OffsetRoll.new(x, y, width, height, n_voices, voices, type)
 	return roll
 end
 
--- TODO: this is... very confusing-looking
 -- TODO: jump to offset with key, shift + key sets scramble
 -- TODO: shift with taps...?
 
@@ -21,12 +20,13 @@ function OffsetRoll:get_key_level(x, y, v, step)
 	local top_pos = top_tap.shift_register:wrap_loop_pos(top_tap.pos + top_tap.tick / top_tap:get_step_length(0))
 	local pos = tap.shift_register:wrap_loop_pos(tap.pos + tap.tick / tap:get_step_length(0))
 	local diff = pos - top_pos
-	local half_length = tap.shift_register.loop_length / 2
-	diff = math.floor((diff + half_length) % tap.shift_register.loop_length - half_length + 0.5)
-	if step == diff then
-		return math.ceil(get_voice_control_level(v, 3))
+	step = tap.shift_register:wrap_loop_pos(step)
+	diff = math.abs((step - diff + 1) % tap.shift_register.loop_length - 1)
+	diff = math.min(1, 2.5 - diff * 4)
+	if diff > 0 then
+		return math.ceil(get_voice_control_level(v, 3) * math.abs(diff))
 	end
-	return 2
+	return 0
 end
 
 return OffsetRoll
