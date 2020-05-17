@@ -20,6 +20,7 @@ Select = include 'lib/grid_select'
 MultiSelect = include 'lib/grid_multi_select'
 ShiftRegister = include 'lib/shift_register'
 ShiftRegisterVoice = include 'lib/shift_register_voice'
+VoiceParams = include 'lib/voice_params'
 Scale = include 'lib/scale'
 Blinker = include 'lib/blinker'
 
@@ -77,6 +78,30 @@ output_mode_names = {
 }
 output_mode = output_mode_crow_4
 
+voice_param_names = {
+	pitch = {
+		loop_length = 'pitch_loop_%%d_length',
+		register = 'voice_%d_pitch_register',
+		detune = 'voice_%d_detune',
+		transpose = 'voice_%d_transpose',
+		multiply = 'voice_%d_pitch_multiply',
+		scramble = 'voice_%d_pitch_scramble',
+		noise = 'voice_%d_pitch_noise',
+		rate = 'voice_%d_pitch_rate',
+		jitter = 'voice_%d_pitch_jitter'
+	},
+	mod = {
+		loop_length = 'mod_loop_%%d_length',
+		register = 'voice_%d_pitch_register',
+		bias = 'voice_%d_bias',
+		multiply = 'voice_%d_pitch_multiply',
+		scramble = 'voice_%d_pitch_scramble',
+		noise = 'voice_%d_pitch_noise',
+		rate = 'voice_%d_pitch_rate',
+		jitter = 'voice_%d_pitch_jitter'
+	}
+}
+
 n_voices = 4
 voices = {}
 top_voice_index = 1
@@ -97,6 +122,7 @@ for v = 1, n_voices do
 	voice.note_off = function()
 		note_off(v)
 	end
+	voice.params = VoiceParams.new(v, voice_param_names)
 	voices[v] = voice
 end
 top_voice = voices[top_voice_index]
