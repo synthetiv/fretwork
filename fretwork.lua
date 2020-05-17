@@ -209,14 +209,21 @@ end
 
 pitch_offset_roll = OffsetRoll.new(2, 1, 15, 7, n_voices, voices, 'pitch')
 mod_offset_roll = OffsetRoll.new(2, 1, 15, 7, n_voices, voices, 'mod')
-
 gate_roll = Roll.new(2, 1, 15, 7, n_voices, voices, 'mod')
+
 for v = 1, n_voices do
+	local pitch_tap = voices[v].pitch_tap
+	local on_pitch_shift = pitch_tap.on_shift
 	local mod_tap = voices[v].mod_tap
-	local on_shift = mod_tap.on_shift
+	local on_mod_shift = mod_tap.on_shift
+	pitch_tap.on_shift = function(d)
+		on_pitch_shift(d)
+		pitch_offset_roll:shift_voice(v, d)
+	end
 	mod_tap.on_shift = function(d)
-		on_shift(d)
-		gate_roll:shift_voice(v, -d)
+		on_mod_shift(d)
+		gate_roll:shift_voice(v, d)
+		mod_offset_roll:shift_voice(v, d)
 	end
 end
 

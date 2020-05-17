@@ -21,12 +21,12 @@ function Roll.new(x, y, width, height, n_voices, voices, type)
 end
 
 function Roll:get_voice_step(v, x)
-	return x - self.x_center + self.voice_hold_steps[v]
+	return x - self.x_center + math.floor(self.voice_hold_steps[v] + 0.5)
 end
 
 function Roll:shift_voice(v, d)
 	if self.hold then
-		self.voice_hold_steps[v] = self.voice_hold_steps[v] + d
+		self.voice_hold_steps[v] = self.voice_hold_steps[v] - d
 	end
 end
 
@@ -55,7 +55,11 @@ function Roll:smooth_hold_steps()
 	if not self.hold then
 		for v = 1, self.n_voices do
 			if hold_steps[v] ~= 0 then
-				hold_steps[v] = math.floor(hold_steps[v] * 0.3)
+				if math.abs(hold_steps[v]) < 0.3 then
+					hold_steps[v] = 0
+				else
+					hold_steps[v] = hold_steps[v] * 0.3
+				end
 				dirty = true
 			end
 		end
@@ -95,13 +99,13 @@ function Roll:key(x, y, z)
 		self.held_keys.left = z == 1
 		if z == 1 then
 			self.hold = true
-			self:shift_all(-1)
+			self:shift_all(1)
 		end
 	elseif y == self.y and x == self.x_right then
 		self.held_keys.right = z == 1
 		if z == 1 then
 			self.hold = true
-			self:shift_all(1)
+			self:shift_all(-1)
 		end
 	elseif z == 1 then
 		local v = self.y_voices[y]
