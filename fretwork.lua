@@ -740,21 +740,13 @@ function gate_roll:get_key_level(x, y, v, step)
 	end
 end
 
-function gate_roll.on_step_key(x, y, v, step)
+function gate_roll:on_step_key(x, y, v, step)
 	local voice = voices[v]
 	voice:toggle_step_gate(step)
 	flash_write(voice.mod_tap.shift_register, voice.mod_tap:get_step_pos(step))
 	if quantization_off() then
 		update_voices(false, true)
 	end
-end
-
-function pitch_offset_roll.on_step_key(x, y, v, step)
-	-- TODO
-end
-
-function mod_offset_roll.on_step_key(x, y, v, step)
-	-- TODO
 end
 
 function toggle_mask_class(pitch_id)

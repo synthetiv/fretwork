@@ -110,7 +110,7 @@ function Roll:key(x, y, z)
 	elseif z == 1 then
 		local v = self.y_voices[y]
 		if v ~= nil then
-			self.on_step_key(x, y, v, self:get_voice_step(v, x))
+			self:on_step_key(x, y, v, self:get_voice_step(v, x))
 		end
 	end
 end
