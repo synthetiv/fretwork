@@ -4,7 +4,7 @@ local RateSelector = setmetatable({}, VoiceSliderBank)
 RateSelector.__index = RateSelector
 
 function RateSelector.new(x, y, width, height, n_voices, voices, type)
-	local selector = setmetatable(VoiceSliderBank.new(x, y, width, height, n_voices, voices, type, 1, 1, 15), RateSelector)
+	local selector = setmetatable(VoiceSliderBank.new(x, y, width, height, n_voices, voices, type, 5, 1, 8), RateSelector)
 	selector.on_select = function(v, r)
 		selector.voice_params[v].rate = r
 	end
@@ -29,20 +29,14 @@ function RateSelector:key(x, y, z)
 end
 
 function RateSelector:draw(g)
-	local x_center = self.x_center
 	for v = 1, self.n_voices do
+		local voice = self.voices[v]
 		local slider = self.sliders[v]
+		local x_center = self.x_center
 		local x_rate, y = slider:get_option_coords(slider.selected)
-		local x_jitter = self.voices[v]:get_step_length(0)
-		if x_rate == x_center then
-			x_jitter = 0
-		elseif x_rate > x_center then
-			x_jitter = math.max(x_center, self.x2 + 1 - x_jitter)
-		else
-			x_jitter = math.min(x_center, self.x - 1 + x_jitter)
-		end
+		local x_jitter = x_rate + voice:get_step_length(0) - voice.ticks_per_shift
 		for x = self.x, self.x2 do
-			local level = 1
+			local level = (x >= slider.x and x <= slider.x2) and 2 or 0
 			if x == x_jitter then
 				level = get_voice_control_level(v, 3)
 			elseif x <= x_rate and x >= x_center then
