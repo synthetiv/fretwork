@@ -221,14 +221,14 @@ grid_view_selector = Select.new(3, 8, 11, 1)
 grid_views = {
 	rate_selector,
 	nil, -- spacer
-	pitch_register_selector,
 	pitch_offset_roll,
+	pitch_register_selector,
 	pitch_keyboard,
 	mask_keyboard,
 	transpose_keyboard,
 	nil, -- spacer
-	mod_register_selector,
 	mod_offset_roll,
+	mod_register_selector,
 	gate_roll
 }
 
