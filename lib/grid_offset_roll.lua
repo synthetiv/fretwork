@@ -14,13 +14,12 @@ end
 
 -- TODO: draw based on difference between actual (wrapped) positions, then draw scramble
 
--- TODO: any way to make this not so twitchy when rates differ?
 function OffsetRoll:get_key_level(x, y, v, step)
 	local tap = self.taps[v]
 	local top_tap = self.taps[top_voice_index] -- TODO: avoid global state
 	-- TODO: is this useful if taps' SRs aren't the same?
-	local top_pos = top_tap.shift_register:wrap_loop_pos(top_tap.pos)
-	local pos = tap.shift_register:wrap_loop_pos(tap.pos)
+	local top_pos = top_tap.shift_register:wrap_loop_pos(top_tap.pos + top_tap.tick / top_tap:get_step_length(0))
+	local pos = tap.shift_register:wrap_loop_pos(tap.pos + tap.tick / tap:get_step_length(0))
 	local diff = pos - top_pos
 	local half_length = tap.shift_register.loop_length / 2
 	diff = math.floor((diff + half_length) % tap.shift_register.loop_length - half_length + 0.5)
