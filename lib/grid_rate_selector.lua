@@ -33,7 +33,7 @@ function RateSelector:draw(g)
 	for v = 1, self.n_voices do
 		local slider = self.sliders[v]
 		local x_rate, y = slider:get_option_coords(slider.selected)
-		local x_jitter = self.taps[v]:get_step_length(0)
+		local x_jitter = self.voices[v]:get_step_length(0)
 		if x_rate == x_center then
 			x_jitter = 0
 		elseif x_rate > x_center then

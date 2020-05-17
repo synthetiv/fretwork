@@ -5,6 +5,7 @@ RegisterSelector.__index = RegisterSelector
 
 function RegisterSelector.new(x, y, width, height, n_voices, voices, type)
 	local selector = setmetatable(VoiceSliderBank.new(x, y, width, height, n_voices, voices, type, 4, 1, n_registers), RegisterSelector)
+	selector.x_retrograde = selector.x
 	selector.x_inversion = selector.x + 1
 	selector.x_half = selector.sliders[1].x2 + 2
 	selector.x_dec = selector.sliders[1].x2 + 3
@@ -35,9 +36,13 @@ function RegisterSelector:key(x, y, z)
 	local tap = self.taps[v]
 	local voice_params = self.voice_params[v]
 	local held_loop_keys = self.held_keys[v]
-	if x == self.x_inversion then
+	if x == self.x_retrograde then
 		if z == 1 then
-			voice_params.multiply = tap.next_multiply < 0 and 2 or 1
+			voice_params.retrograde = tap.direction < 0 and 0 or 1
+		end
+	elseif x == self.x_inversion then
+		if z == 1 then
+			voice_params.inversion = tap.next_multiply < 0 and 0 or 1
 		end
 	elseif x == self.x_half then
 		held_loop_keys.half = z == 1
@@ -77,6 +82,7 @@ function RegisterSelector:draw(g)
 		local tap = self.taps[v]
 		local register = tap.shift_register
 		local held_keys = self.held_keys[v]
+		g:led(self.x_retrograde, y, tap.direction < 0 and 7 or 2)
 		g:led(self.x_inversion, y, tap.next_multiply < 0 and 7 or 2)
 		g:led(self.x_half, y, held_keys.half and 7 or 2)
 		g:led(self.x_dec, y, held_keys.dec and 4 or 1)

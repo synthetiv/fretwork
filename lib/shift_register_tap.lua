@@ -14,8 +14,6 @@ local RandomQueue = include 'lib/random_queue'
 ShiftRegisterTap.new = function(offset, shift_register, voice)
 	local tap = setmetatable({}, ShiftRegisterTap)
 	tap.pos = shift_register:get_loop_offset_pos(offset)
-	tap.tick = 0
-	tap.ticks_per_shift = 2
 	tap.shift_register = shift_register
 	tap.direction = 1
 	tap.next_scramble = 0
@@ -24,9 +22,6 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	tap.next_noise = 0
 	tap.noise = 0
 	tap.noise_values = RandomQueue.new(137)
-	tap.next_jitter = 0
-	tap.jitter = 0
-	tap.jitter_values = RandomQueue.new(139)
 	tap.next_bias = 0
 	tap.bias = 0
 	tap.next_multiply = 1
@@ -41,70 +36,14 @@ ShiftRegisterTap.new = function(offset, shift_register, voice)
 	return tap
 end
 
---- change the shift rate
--- @param direction shift direction, -1 or +1
--- @param ticks_per_shift the number of times `shift()` must be called for `pos` to change by +/-1
-function ShiftRegisterTap:set_rate(direction, ticks_per_shift)
-	-- maintain current fractional position as best you can
-	self.tick = math.floor(self.tick * ticks_per_shift / self.ticks_per_shift)
-	self.ticks_per_shift = ticks_per_shift
-	self.direction = direction
-	self.dirty = true
-end
-	
---- get the length of a particular step in ticks
--- @param s steps from now
--- @return ticks per shift, potentially affected by jitter
-function ShiftRegisterTap:get_step_length(s)
-	local jitter_amount = s > 0 and self.next_jitter or self.jitter
-	local jitter = self.jitter_values:get(s * self.direction) * jitter_amount + 1
-	local rate = self.ticks_per_shift * math.max(0, jitter)
-	return math.floor(rate + 0.5)
-end
-
---- get the corresponding shift register step for a tick
--- @param t ticks from now
--- @return the difference between the current `pos` and `pos` `t` ticks from now
--- @return the remainder in ticks, after reducing `t` by step lengths
-function ShiftRegisterTap:get_tick_step(t)
-	-- `slowest_rate` ticks/shift won't be shifted by clock, so future == past == present
-	if self.ticks_per_shift == slowest_rate then
-		return 0, self.tick
-	end
-	-- reduce `|t + tick|` by current + adjacent step lengths until reducing further would hit 0
-	t = t + self.tick
-	local step = 0
-	local direction = t > 0 and 1 or -1
-	-- if `t + tick` < 0, we've effectively already skipped the current step
-	local step_length = t > 0 and self:get_step_length(0) or 1
-	t = math.abs(t)
-	while t >= step_length do
-		t = t - step_length
-		step = step + direction
-		step_length = self:get_step_length(step)
-	end
-	if direction <= 0 then
-		t = step_length - t - 1
-	end
-	return step * self.direction, t
-end
-
 --- get the past/present/future value of `pos`
 -- @param s steps from now
 -- @return the value of `pos` in `s` steps, potentially affected by scramble + jitter
 function ShiftRegisterTap:get_step_pos(s)
 	local scramble = s > 0 and self.next_scramble or self.scramble
+	s = s * self.direction
 	local scramble_offset = math.floor(self.scramble_values:get(s) * scramble + 0.5)
 	return s + self.pos + scramble_offset
-end
-
---- get the past/present/future value of `pos`, by tick
--- @param t ticks from now
--- @return the value of `pos` in `t` ticks, potentially affected by scramble + jitter
--- @return the step `t` ticks from now, potentially affected by scramble + jitter
-function ShiftRegisterTap:get_tick_pos(t)
-	local step = self:get_tick_step(t)
-	return self:get_step_pos(step), step
 end
 
 --- get a past/present/future shift register value
@@ -122,18 +61,6 @@ function ShiftRegisterTap:get_step_value(s)
 	return self.shift_register:read(pos) * multiply + noisy_bias, noisy_bias, bias, pos
 end
 
---- get a past/present/future shift register value, by tick
--- @param t ticks from now
--- @return a value from the shift register, potentially offset by bias + noise
--- @return bias + noise
--- @return bias
--- @return the position in the buffer at step `s`
--- @return the step `t` ticks from now
-function ShiftRegisterTap:get_tick_value(t)
-	local pos, step = self:get_tick_pos(t)
-	return self:get_step_value(step), pos, step
-end
-
 --- set a past/present/future shift register value, by step
 -- @param t steps from now
 -- @param value new value, will be offset by -(bias + noise) and written to scrambled/jittered index
@@ -146,13 +73,6 @@ function ShiftRegisterTap:set_step_value(s, value)
 	self.shift_register:write(pos, (value - noisy_bias) / multiply)
 	self.on_write(pos)
 	self.dirty = true
-end
-
---- set a past/present/future shift register value, by tick
--- @param t ticks from now
--- @param value new value, will be offset by -(bias + noise) and written to scrambled/jittered index
-function ShiftRegisterTap:set_tick_value(t, value)
-	self:set_step_value(self:get_tick_step(t), value)
 end
 
 --- apply the 'next' bias and offset values (this makes quantization of changes possible)
@@ -189,31 +109,28 @@ function ShiftRegisterTap:apply_edits()
 	end
 end
 
---- change `tick`, which may or may not change `pos`
--- @param d number of ticks to shift by
--- @param manual true if tap should always shift, even if it's 'stopped' (i.e. `ticks_per_shift` ==
--- `slowest_rate`); will be true when shift triggered by an encoder, false when triggered by clock
-function ShiftRegisterTap:shift(d, manual)
-	-- don't shift automatically if `slowest_rate` ticks/shift
-	if not manual and self.ticks_per_shift == slowest_rate then
-		return
-	end
-	local synced = self.shift_register.sync_tap == self
+--- check whether this tap is synced to its shift register
+-- @return true if synced, false if not
+function ShiftRegisterTap:is_synced()
+	return self.shift_register.sync_tap == self
+end
+
+--- shift tap position
+-- @param d number of steps to shift by
+function ShiftRegisterTap:shift(d)
+	local synced = self:is_synced()
 	local direction = d > 0 and self.direction or -self.direction
-	local steps, new_tick = self:get_tick_step(d)
-	for s = 1, math.abs(steps) do
+	for s = 1, math.abs(d) do
 		if synced then
 			self.shift_register:shift(direction)
 		end
 		self.scramble_values:shift(direction)
 		self.noise_values:shift(direction)
-		self.jitter_values:shift(direction)
 		self.pos = self.shift_register:wrap_loop_pos(self.pos + direction)
 		self:apply_edits()
 		self.dirty = true
 		self.on_shift(direction)
 	end
-	self.tick = new_tick
 	self.dirty = true
 end
 

@@ -79,26 +79,28 @@ output_mode_names = {
 output_mode = output_mode_crow_4
 
 voice_param_names = {
+	rate = {
+		rate = 'voice_%d_rate',
+		jitter = 'voice_%d_jitter'
+	},
 	pitch = {
 		loop_length = 'pitch_loop_%%d_length',
 		register = 'voice_%d_pitch_register',
 		detune = 'voice_%d_detune',
 		transpose = 'voice_%d_transpose',
-		multiply = 'voice_%d_pitch_multiply',
+		retrograde = 'voice_%d_pitch_retrograde',
+		inversion = 'voice_%d_pitch_inversion',
 		scramble = 'voice_%d_pitch_scramble',
-		noise = 'voice_%d_pitch_noise',
-		rate = 'voice_%d_pitch_rate',
-		jitter = 'voice_%d_pitch_jitter'
+		noise = 'voice_%d_pitch_noise'
 	},
 	mod = {
 		loop_length = 'mod_loop_%%d_length',
 		register = 'voice_%d_mod_register',
 		bias = 'voice_%d_bias',
-		multiply = 'voice_%d_mod_multiply',
+		retrograde = 'voice_%d_mod_retrograde',
+		inversion = 'voice_%d_mod_inversion',
 		scramble = 'voice_%d_mod_scramble',
-		noise = 'voice_%d_mod_noise',
-		rate = 'voice_%d_mod_rate',
-		jitter = 'voice_%d_mod_jitter'
+		noise = 'voice_%d_mod_noise'
 	}
 }
 
@@ -146,20 +148,6 @@ for v = 1, n_voices do
 	end
 end
 
-rate_divisions = {}
-slowest_rate = 8
-for r = 1, slowest_rate do
-	if r == 1 then
-		rate_divisions[r] = '-1'
-		rate_divisions[slowest_rate * 2 - r] = '1'
-	elseif r == slowest_rate then
-		rate_divisions[r] = '0'
-	else
-		rate_divisions[r] = '-1/' .. r
-		rate_divisions[slowest_rate * 2 - r] = '1/' .. r
-	end
-end
-
 voice_selector = MultiSelect.new(1, 3, 1, 4)
 
 g = grid.connect()
@@ -187,11 +175,10 @@ end
 
 view_octave = 0
 
-pitch_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'pitch')
-pitch_rate_selector = RateSelector.new(2, 1, 15, 7, n_voices, voices, 'pitch')
+rate_selector = RateSelector.new(2, 1, 15, 7, n_voices, voices, 'rate')
 
+pitch_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'pitch')
 mod_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'mod')
-mod_rate_selector = RateSelector.new(2, 1, 15, 7, n_voices, voices, 'mod')
 
 pitch_keyboard = Keyboard.new(2, 1, 15, 7, scale)
 mask_keyboard = Keyboard.new(2, 1, 15, 7, scale)
@@ -232,15 +219,15 @@ memory_view = MemorySelector.new(2, 1, 15, 7)
 grid_view_selector = Select.new(3, 8, 11, 1)
 
 grid_views = {
+	rate_selector,
+	nil, -- spacer
 	pitch_register_selector,
-	pitch_rate_selector,
 	pitch_offset_roll,
 	pitch_keyboard,
 	mask_keyboard,
 	transpose_keyboard,
 	nil, -- spacer
 	mod_register_selector,
-	mod_rate_selector,
 	mod_offset_roll,
 	gate_roll
 }
@@ -263,11 +250,10 @@ for v = 1, n_voices do
 	local voice_path = {}
 	for n = 1, n_screen_notes do
 		voice_path[n] = {
+			step = 0,
 			pitch = 0,
-			pitch_step = 0,
 			pitch_pos = 0,
 			mod = 0,
-			mod_step = 0,
 			mod_pos = 0,
 			gate = false,
 			connect = false,
@@ -300,15 +286,16 @@ edit_tap_mod = 2
 edit_tap = edit_tap_pitch
 edit_both_taps = true
 
-n_edit_fields = 8
+n_edit_fields = 9
 edit_field_multiply = 1
-edit_field_time = 2
-edit_field_rate = 3
-edit_field_jitter = 4
-edit_field_scramble = 5
-edit_field_noise = 6
-edit_field_bias = 7
-edit_field_length = 8
+edit_field_direction = 2
+edit_field_time = 3
+edit_field_rate = 4
+edit_field_jitter = 5
+edit_field_scramble = 6
+edit_field_noise = 7
+edit_field_bias = 8
+edit_field_length = 9
 edit_field = edit_field_time
 
 blink_slow = false
@@ -557,15 +544,16 @@ function grid_redraw()
 
 	-- view buttons
 	grid_view_selector:draw(g, 7, 3)
-	-- clear 'spacer'
-	g:led(9, 8, 0)
+	-- clear 'spacers'
+	g:led(4, 8, 0)
+	g:led(10, 8, 0)
 	-- darken non-unique views
-	for v = 1, 3 do
+	for v = 3, 4 do
 		if not grid_view_selector:is_selected(v) then
 			g:led(v + 2, 8, 2)
 		end
 	end
-	for v = 8, 10 do
+	for v = 9, 10 do
 		if not grid_view_selector:is_selected(v) then
 			g:led(v + 2, 8, 2)
 		end
@@ -860,7 +848,7 @@ function g.key(x, y, z)
 		end
 	elseif grid_view_selector:should_handle_key(x, y) then
 		-- ignore spacer keys
-		if x == 2 or x == 9 then
+		if x == 4 or x == 10 then
 			return
 		end
 		-- clear the current keyboard's held note stack, in order to prevent held notes from getting
@@ -970,6 +958,36 @@ function add_params()
 		params:add_group(string.format('voice %d', v), 15)
 		params:add{
 			type = 'number',
+			id = string.format('voice_%d_rate', v),
+			name = string.format('voice %d rate', v),
+			min = 1,
+			max = 8,
+			default = 4,
+			action = function(value)
+				voice:set_rate(value)
+				rate_selector.sliders[v].selected = value
+				dirty = true
+				if quantization_off() then
+					voice:update()
+				end
+			end
+		}
+		params:add{
+			type = 'control',
+			id = string.format('voice_%d_jitter', v),
+			name = string.format('voice %d jitter', v),
+			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
+			action = function(value)
+				voice.next_jitter = value
+				dirty = true
+				if quantization_off() then
+					voice:apply_edits()
+					voice:update()
+				end
+			end
+		}
+		params:add{
+			type = 'number',
 			id = string.format('voice_%d_pitch_register', v),
 			name = string.format('voice %d pitch register', v),
 			min = 1,
@@ -1030,13 +1048,32 @@ function add_params()
 			end
 		}
 		params:add{
-			type = 'option',
-			id = string.format('voice_%d_pitch_multiply', v),
-			name = string.format('voice %d pitch multiply', v),
-			options = { '-1', '1' },
-			default = 2,
+			type = 'number',
+			id = string.format('voice_%d_pitch_retrograde', v),
+			name = string.format('voice %d pitch retrograde', v),
+			min = 0,
+			max = 1,
+			default = 0,
 			action = function(value)
-				pitch_tap.next_multiply = value == 2 and 1 or -1
+				pitch_tap.direction = value * -2 + 1
+				if pitch_tap:is_synced() then
+					pitch_tap:sync() -- resync to set shift register direction
+				end
+				dirty = true
+				if quantization_off() then
+					voice:update()
+				end
+			end
+		}
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_pitch_inversion', v),
+			name = string.format('voice %d pitch inversion', v),
+			min = 0,
+			max = 1,
+			default = 0,
+			action = function(value)
+				pitch_tap.next_multiply = value * -2 + 1
 				dirty = true
 				if quantization_off() then
 					pitch_tap:apply_edits()
@@ -1066,43 +1103,6 @@ function add_params()
 			controlspec = controlspec.new(0, 48, 'lin', 1 / 10, 0, 'st'),
 			action = function(value)
 				pitch_tap.next_noise = value / 12
-				dirty = true
-				-- memory.pitch.dirty = true -- TODO
-				if quantization_off() then
-					pitch_tap:apply_edits()
-					voice:update()
-				end
-			end
-		}
-		params:add{
-			type = 'option',
-			id = string.format('voice_%d_pitch_rate', v),
-			name = string.format('voice %d pitch rate', v),
-			options = rate_divisions,
-			default = 11,
-			action = function(value)
-				local direction = value < slowest_rate and -1 or 1
-				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
-				pitch_tap:set_rate(direction, ticks_per_shift)
-				pitch_rate_selector.sliders[v].selected = value
-				if top_voice_index == v then
-					-- resync in case direction has changed
-					top_voice.pitch_tap:sync()
-				end
-				dirty = true
-				-- memory.transposition.dirty = true -- TODO
-				if quantization_off() then
-					voice:update()
-				end
-			end
-		}
-		params:add{
-			type = 'control',
-			id = string.format('voice_%d_pitch_jitter', v),
-			name = string.format('voice %d pitch jitter', v),
-			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
-			action = function(value)
-				pitch_tap.next_jitter = value
 				dirty = true
 				-- memory.pitch.dirty = true -- TODO
 				if quantization_off() then
@@ -1162,13 +1162,32 @@ function add_params()
 			end
 		}
 		params:add{
-			type = 'option',
-			id = string.format('voice_%d_mod_multiply', v),
-			name = string.format('voice %d mod multiply', v),
-			options = { '-1', '1' },
-			default = 2,
+			type = 'number',
+			id = string.format('voice_%d_mod_retrograde', v),
+			name = string.format('voice %d mod retrograde', v),
+			min = 0,
+			max = 1,
+			default = 0,
 			action = function(value)
-				mod_tap.next_multiply = value == 2 and 1 or -1
+				mod_tap.direction = value * -2 + 1
+				if mod_tap:is_synced() then
+					mod_tap:sync() -- resync to set shift register direction
+				end
+				dirty = true
+				if quantization_off() then
+					voice:update()
+				end
+			end
+		}
+		params:add{
+			type = 'number',
+			id = string.format('voice_%d_mod_inversion', v),
+			name = string.format('voice %d mod inversion', v),
+			min = 0,
+			max = 1,
+			default = 0,
+			action = function(value)
+				mod_tap.next_multiply = value * -2 + 1
 				dirty = true
 				if quantization_off() then
 					mod_tap:apply_edits()
@@ -1198,43 +1217,6 @@ function add_params()
 			controlspec = controlspec.new(0, 16, 'lin', 0.2, 0),
 			action = function(value)
 				mod_tap.next_noise = value
-				dirty = true
-				-- memory.mod.dirty = true -- TODO
-				if quantization_off() then
-					mod_tap:apply_edits()
-					voice:update()
-				end
-			end
-		}
-		params:add{
-			type = 'option',
-			id = string.format('voice_%d_mod_rate', v),
-			name = string.format('voice %d mod rate', v),
-			options = rate_divisions,
-			default = 11,
-			action = function(value)
-				local direction = value < slowest_rate and -1 or 1
-				local ticks_per_shift = slowest_rate - math.abs(slowest_rate - value)
-				mod_tap:set_rate(direction, ticks_per_shift)
-				mod_rate_selector.sliders[v].selected = value
-				if top_voice_index == v then
-					-- resync in case direction has changed
-					top_voice.mod_tap:sync()
-				end
-				dirty = true
-				-- memory.transposition.dirty = true -- TODO
-				if quantization_off() then
-					voice:update()
-				end
-			end
-		}
-		params:add{
-			type = 'control',
-			id = string.format('voice_%d_mod_jitter', v),
-			name = string.format('voice %d mod jitter', v),
-			controlspec = controlspec.new(0, 8, 'lin', 0.1, 0),
-			action = function(value)
-				mod_tap.next_jitter = value
 				dirty = true
 				-- memory.mod.dirty = true -- TODO
 				if quantization_off() then
@@ -1520,30 +1502,27 @@ function edit_field_delta(d)
 	if edit_field == edit_field_multiply then
 		if edit_both_taps or edit_tap == edit_tap_pitch then
 			-- set pitch +/-
-			voice_param_delta('pitch_multiply', d)
+			voice_param_delta('pitch_inversion', -d)
 		end
 		if edit_both_taps or edit_tap == edit_tap_mod then
 			-- set mod +/-
-			voice_param_delta('mod_multiply', d)
+			voice_param_delta('mod_inversion', -d)
+		end
+	elseif edit_field == edit_field_direction then
+		if edit_both_taps or edit_tap == edit_tap_pitch then
+			-- set pitch +/-
+			voice_param_delta('pitch_retrograde', -d)
+		end
+		if edit_both_taps or edit_tap == edit_tap_mod then
+			-- set mod +/-
+			voice_param_delta('mod_retrograde', -d)
 		end
 	elseif edit_field == edit_field_rate then
-		if edit_both_taps or edit_tap == edit_tap_pitch then
-			-- set pitch rate/direction
-			voice_param_delta('pitch_rate', d)
-		end
-		if edit_both_taps or edit_tap == edit_tap_mod then
-			-- set mod rate/direction
-			voice_param_delta('mod_rate', d)
-		end
+		-- set voice rate/direction
+		voice_param_delta('rate', d)
 	elseif edit_field == edit_field_jitter then
-		if edit_both_taps or edit_tap == edit_tap_pitch then
-			-- set pitch jitter
-			voice_param_delta('pitch_jitter', d)
-		end
-		if edit_both_taps or edit_tap == edit_tap_mod then
-			-- set mod jitter
-			voice_param_delta('mod_jitter', d)
-		end
+		-- set voice jitter
+		voice_param_delta('jitter', d)
 	elseif edit_field == edit_field_scramble then
 		if edit_both_taps or edit_tap == edit_tap_pitch then
 			-- set pitch scramble
@@ -1560,7 +1539,7 @@ function edit_field_delta(d)
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
-						voice.pitch_tap:shift(-d, true)
+						voice.pitch_tap:shift(-d)
 						voice:update()
 					end
 				end
@@ -1571,7 +1550,7 @@ function edit_field_delta(d)
 				for v = 1, n_voices do
 					if voice_selector:is_selected(v) then
 						local voice = voices[v]
-						voice.mod_tap:shift(-d, true)
+						voice.mod_tap:shift(-d)
 						voice:update()
 					end
 				end
@@ -1646,10 +1625,11 @@ function calculate_voice_path(v)
 	local x = 0
 	for t = 1, n_screen_notes do
 		local tick = t - screen_note_center
-		local pitch, pitch_pos, pitch_step = pitch_tap:get_tick_value(tick)
-		local mod, mod_pos, mod_step = mod_tap:get_tick_value(tick)
+		local step = voice:get_tick_step(tick)
+		local pitch, pitch_noisy_bias, pitch_bias, pitch_pos = pitch_tap:get_step_value(step)
+		local mod, mod_noisy_bias, mod_bias, mod_pos = mod_tap:get_step_value(step)
 		local gate = voice.active and voice:mod_to_gate(mod)
-		if n == 0 or pitch_step ~= note.pitch_step or mod_step ~= note.mod_step then
+		if n == 0 or step ~= note.step then
 			local y = get_screen_note_y(scale:snap(pitch))
 			local y0 = note.y or y
 			local connect = n ~= 0 and gate and note.gate
@@ -1659,10 +1639,9 @@ function calculate_voice_path(v)
 			-- fill in info for this note
 			n = n + 1
 			note = path[n]
-			note.pitch_step = pitch_step
+			note.step = step
 			note.pitch_pos = pitch_tap.shift_register:wrap_loop_pos(pitch_pos)
 			note.pitch = pitch
-			note.mod_step = mod_step
 			note.mod_pos = mod_tap.shift_register:wrap_loop_pos(mod_pos)
 			note.mod = mod
 			note.gate = gate
@@ -1688,6 +1667,7 @@ function draw_voice_path(v, level)
 	local voice = voices[v]
 	local path = voice_paths[v]
 	local prev_level = 0
+	local prev_gate = false
 	local pitch_tap = voice.pitch_tap
 	local pitch_register = pitch_tap.shift_register
 	local mod_tap = voice.mod_tap
@@ -1701,7 +1681,7 @@ function draw_voice_path(v, level)
 		local y = note.y
 		local y0 = note.y0
 		local gate = note.gate
-		local note_edit_dim = ((has_pitch_edits and note.pitch_step <= 0) or (has_mod_edits and note.mod_step <= 0)) and 1 or 0
+		local note_edit_dim = ((has_pitch_edits and note.step <= 0) or (has_mod_edits and note.step <= 0)) and 1 or 0
 		local note_level = 0
 		-- set flash level, if this note was recently changed
 		for w = 1, n_recent_writes do
@@ -1714,29 +1694,34 @@ function draw_voice_path(v, level)
 				end
 			end
 		end
+		-- draw this note, including dotted lines for inactive notes in selected voices
+		local outline_x = x
 		-- if previous note was at the same `y` and its level was higher, don't redraw the leftmost
 		-- pixel of this note over it
-		if y0 == y and prev_level > note_level then
+		if y0 == y and (prev_level > note_level or (prev_gate and not gate)) then
 			x = x + 1
 		end
-		-- draw this note, including dotted lines for inactive notes in selected voices
 		if gate then
 			-- solid line for active notes
 			local note_y = y + 0.5
 			-- outline
 			if y0 == y then
-				screen.move(x, note_y)
+				if not prev_gate and gate then
+					screen.move(outline_x - 1, note_y)
+				else
+					screen.move(outline_x, note_y)
+				end
 			elseif math.abs(y0 - y) == 1 then
 				-- when y0 and y are within 1 pixel of one another, draw a partial outline to prevent
 				-- overlap with the previous note
-				screen.move(x - 1, note_y + (y - y0) * 0.5)
-				screen.line_rel(x + 1, 0)
+				screen.move(outline_x - 1, note_y + (y - y0) * 0.5)
+				screen.line_rel(outline_x + 1, 0)
 				screen.level(0)
 				screen.line_width(2)
 				screen.stroke()
-				screen.move(x + 1, note_y)
+				screen.move(outline_x + 1, note_y)
 			else
-				screen.move(x - 1, note_y)
+				screen.move(outline_x - 1, note_y)
 			end
 			screen.line(x2 + 2, note_y)
 			screen.level(0)
@@ -1780,14 +1765,16 @@ function draw_voice_path(v, level)
 		end
 		-- save flash level to compare with next note
 		prev_level = note_level
+		prev_gate = gate
 	end
 end
 
-function draw_tap_equation(y, label, tap, unit_multiplier, editing)
+function draw_tap_equation(y, label, voice, tap, unit_multiplier, editing)
 	local highlight_multiply = editing and edit_field == edit_field_multiply
+	local highlight_direction = editing and edit_field == edit_field_direction
 	local highlight_time = editing and edit_field == edit_field_time
-	local highlight_rate = editing and edit_field == edit_field_rate
-	local highlight_jitter = editing and edit_field == edit_field_jitter
+	local highlight_rate = edit_field == edit_field_rate
+	local highlight_jitter = edit_field == edit_field_jitter
 	local highlight_scramble = editing and edit_field == edit_field_scramble
 	local highlight_noise = editing and edit_field == edit_field_noise
 	local highlight_bias = editing and edit_field == edit_field_bias
@@ -1795,8 +1782,8 @@ function draw_tap_equation(y, label, tap, unit_multiplier, editing)
 
 	local multiply = tap.next_multiply
 	local direction = tap.direction
-	local ticks_per_shift = tap.ticks_per_shift
-	local jitter = tap.next_jitter
+	local ticks_per_shift = voice.ticks_per_shift
+	local jitter = voice.next_jitter
 	local scramble = tap.next_scramble * direction
 	local noise = tap.next_noise * direction * unit_multiplier
 	local bias = tap.next_bias * unit_multiplier
@@ -1812,12 +1799,15 @@ function draw_tap_equation(y, label, tap, unit_multiplier, editing)
 	screen.level(3)
 	screen.text(label .. '[')
 
-	screen.level(highlight_time and 15 or 3)
+	screen.level(highlight_direction and 15 or 3)
 	if direction < 0 then
-		screen.text('-t')
-	else
-		screen.text('t')
+		screen.text('-')
+	elseif highlight_direction then
+		screen.text('+')
 	end
+
+	screen.level(highlight_time and 15 or 3)
+	screen.text('t')
 
 	screen.level(3)
 
@@ -1924,9 +1914,9 @@ function redraw()
 		screen.level(3)
 		screen.text(string.format('%d.', top_voice_index))
 
-		draw_tap_equation(54, 'p', top_voice.pitch_tap, 12, edit_both_taps or edit_tap == edit_tap_pitch)
+		draw_tap_equation(54, 'p', top_voice, top_voice.pitch_tap, 12, edit_both_taps or edit_tap == edit_tap_pitch)
 
-		draw_tap_equation(62, 'g', top_voice.mod_tap, 1, edit_both_taps or edit_tap == edit_tap_mod)
+		draw_tap_equation(62, 'g', top_voice, top_voice.mod_tap, 1, edit_both_taps or edit_tap == edit_tap_mod)
 
 	end
 

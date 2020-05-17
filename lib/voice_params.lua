@@ -44,7 +44,7 @@ function VoiceParamGroup:__newindex(param, value)
 	end
 end
 
---- a pair of param groups, pitch + mod
+--- a set of param groups
 local VoiceParams = {}
 
 --- create a new pair of param groups
@@ -53,8 +53,9 @@ local VoiceParams = {}
 -- @return table containing pitch and mod param groups
 function VoiceParams.new(voice, param_names)
 	local params = setmetatable({}, VoiceParams)
-	params.pitch = VoiceParamGroup.new(voice, param_names.pitch)
-	params.mod = VoiceParamGroup.new(voice, param_names.mod)
+	for type, names in pairs(param_names) do
+		params[type] = VoiceParamGroup.new(voice, names)
+	end
 	return params
 end
 
