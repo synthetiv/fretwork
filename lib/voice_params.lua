@@ -16,7 +16,7 @@ function VoiceParamGroup.new(voice, names)
 	group.map = map
 	group.get_full_param = function(self, param)
 		if param == 'loop_length' then
-			param = string.format(param, self.register)
+			return string.format(self.map[param], self.register)
 		end
 		return self.map[param]
 	end

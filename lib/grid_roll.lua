@@ -3,8 +3,8 @@ local VoiceControl = include 'lib/grid_voice_control'
 local Roll = setmetatable({}, VoiceControl)
 Roll.__index = Roll
 
-function Roll.new(x, y, width, height, n_voices, voices)
-	local roll = setmetatable(VoiceControl.new(x, y, width, height, n_voices, voices), Roll)
+function Roll.new(x, y, width, height, n_voices, voices, type)
+	local roll = setmetatable(VoiceControl.new(x, y, width, height, n_voices, voices, type), Roll)
 	roll.hold = false
 	roll.x_left = roll.x2 - 2
 	roll.x_hold = roll.x2 - 1

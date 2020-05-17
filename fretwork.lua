@@ -210,7 +210,7 @@ end
 pitch_offset_roll = OffsetRoll.new(2, 1, 15, 7, n_voices, voices, 'pitch')
 mod_offset_roll = OffsetRoll.new(2, 1, 15, 7, n_voices, voices, 'mod')
 
-gate_roll = Roll.new(2, 1, 15, 7, n_voices, voices)
+gate_roll = Roll.new(2, 1, 15, 7, n_voices, voices, 'mod')
 for v = 1, n_voices do
 	local mod_tap = voices[v].mod_tap
 	local on_shift = mod_tap.on_shift

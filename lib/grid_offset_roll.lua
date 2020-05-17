@@ -4,8 +4,7 @@ local OffsetRoll = setmetatable({}, Roll)
 OffsetRoll.__index = OffsetRoll
 
 function OffsetRoll.new(x, y, width, height, n_voices, voices, type)
-	local roll = setmetatable(Roll.new(x, y, width, height, n_voices, voices), OffsetRoll)
-	roll.tap_key = type .. '_tap'
+	local roll = setmetatable(Roll.new(x, y, width, height, n_voices, voices, type), OffsetRoll)
 	return roll
 end
 
@@ -17,9 +16,8 @@ end
 
 -- TODO: any way to make this not so twitchy when rates differ?
 function OffsetRoll:get_key_level(x, y, v, step)
-	local voice = self.voices[v]
-	local tap = voice[self.tap_key]
-	local top_tap = top_voice[self.tap_key] -- TODO: avoid global state
+	local tap = self.taps[v]
+	local top_tap = self.taps[top_voice_index] -- TODO: avoid global state
 	-- TODO: is this useful if taps' SRs aren't the same?
 	local top_pos = top_tap.shift_register:wrap_loop_pos(top_tap.pos)
 	local pos = tap.shift_register:wrap_loop_pos(tap.pos)
