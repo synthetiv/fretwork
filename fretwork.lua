@@ -92,13 +92,13 @@ voice_param_names = {
 	},
 	mod = {
 		loop_length = 'mod_loop_%%d_length',
-		register = 'voice_%d_pitch_register',
+		register = 'voice_%d_mod_register',
 		bias = 'voice_%d_bias',
-		multiply = 'voice_%d_pitch_multiply',
-		scramble = 'voice_%d_pitch_scramble',
-		noise = 'voice_%d_pitch_noise',
-		rate = 'voice_%d_pitch_rate',
-		jitter = 'voice_%d_pitch_jitter'
+		multiply = 'voice_%d_mod_multiply',
+		scramble = 'voice_%d_mod_scramble',
+		noise = 'voice_%d_mod_noise',
+		rate = 'voice_%d_mod_rate',
+		jitter = 'voice_%d_mod_jitter'
 	}
 }
 
