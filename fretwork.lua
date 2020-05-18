@@ -1320,7 +1320,7 @@ function add_params()
 		type = 'file',
 		id = 'tuning_file',
 		name = 'tuning_file',
-		path = '/home/we/dust/data/fretwork/scales/y/young-lm_guitar.scl',
+		path = '/home/we/dust/code/fretwork/lib/12tet.scl',
 		action = function(value)
 			scale:read_scala_file(value)
 			mask_keyboard:set_white_keys()
