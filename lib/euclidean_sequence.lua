@@ -1,15 +1,4 @@
-local LoopMemory = include 'lib/memory_loop'
-
-local ModMemory = setmetatable({}, LoopMemory)
-ModMemory.__index = ModMemory
-
-ModMemory.new = function()
-	local mem = setmetatable(LoopMemory.new('mod', mod_registers[1], -5), ModMemory) -- TODO!
-	mem:initialize()
-	return mem
-end
-
-local function euclid(fill, length)
+local function euclidean_sequence(fill, length)
 	local pattern = {}
 	-- initialize pattern with all 1s at start
 	for i = 1, length do
@@ -43,8 +32,4 @@ local function euclid(fill, length)
 	return flat
 end
 
-function ModMemory:get_slot_default_values(s)
-	return euclid(self.n_slots - s, self.n_slots)
-end
-
-return ModMemory
+return euclidean_sequence

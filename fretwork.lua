@@ -177,8 +177,8 @@ view_octave = 0
 
 rate_selector = RateSelector.new(2, 1, 15, 7, n_voices, voices, 'rate')
 
-pitch_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'pitch')
-mod_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, 'mod')
+pitch_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, n_registers, pitch_registers, 'pitch')
+mod_register_selector = RegisterSelector.new(2, 1, 15, 7, n_voices, voices, n_registers, mod_registers, 'mod')
 
 pitch_keyboard = Keyboard.new(2, 1, 15, 7, scale)
 mask_keyboard = Keyboard.new(2, 1, 15, 7, scale)
@@ -214,10 +214,6 @@ for v = 1, n_voices do
 	end
 end
 
-memory_view = MemorySelector.new(2, 1, 15, 7)
-
-grid_view_selector = Select.new(3, 8, 11, 1)
-
 grid_views = {
 	rate_selector,
 	nil, -- spacer
@@ -231,6 +227,19 @@ grid_views = {
 	mod_register_selector,
 	gate_roll
 }
+n_grid_views = 11
+grid_view_rate = 1
+grid_view_pitch_offset = 3
+grid_view_pitch_register = 4
+grid_view_pitch = 5
+grid_view_mask = 6
+grid_view_transpose = 7
+grid_view_mod_offset = 9
+grid_view_mod_register = 10
+grid_view_gate = 11
+
+grid_view_selector = Select.new(3, 8, 11, 1)
+memory_view = MemorySelector.new(2, 1, 15, 8)
 
 grid_view_selector.on_select = function(option)
 	if not held_keys.esc then
@@ -543,19 +552,21 @@ function grid_redraw()
 	g:all(0)
 
 	-- view buttons
-	grid_view_selector:draw(g, 7, 3)
-	-- clear 'spacers'
-	g:led(4, 8, 0)
-	g:led(10, 8, 0)
-	-- darken non-unique views
-	for v = 3, 4 do
-		if not grid_view_selector:is_selected(v) then
-			g:led(v + 2, 8, 2)
+	if not held_keys.esc then
+		grid_view_selector:draw(g, 7, 3)
+		-- clear 'spacers'
+		g:led(grid_view_rate + 3, 8, 0)
+		g:led(grid_view_transpose + 3, 8, 0)
+		-- darken non-unique views
+		for v = grid_view_pitch_offset, grid_view_pitch_register do
+			if not grid_view_selector:is_selected(v) then
+				g:led(v + 2, 8, 2)
+			end
 		end
-	end
-	for v = 9, 10 do
-		if not grid_view_selector:is_selected(v) then
-			g:led(v + 2, 8, 2)
+		for v = grid_view_mod_offset, grid_view_mod_register do
+			if not grid_view_selector:is_selected(v) then
+				g:led(v + 2, 8, 2)
+			end
 		end
 	end
 
@@ -864,12 +875,10 @@ function g.key(x, y, z)
 	elseif x == 1 and y == 1 then
 		-- esc key
 		held_keys.esc = z == 1
-		if z == 1 then
-			if grid_view == memory_view then
-				grid_view = grid_views[grid_view_selector.selected]
-			else
-				grid_view = memory_view
-			end
+		if held_keys.esc then
+			grid_view = memory_view
+		else
+			grid_view = grid_views[grid_view_selector.selected]
 		end
 	elseif x == 1 and y == 7 then
 		-- shift key
@@ -1397,10 +1406,12 @@ function init()
 
 	-- TODO: if memory file is missing (like when freshly installed), copy defaults from the code directory?
 	-- params:set('restore_memory')
-	-- memory.pitch:recall_slot(1)
-	-- memory.mask:recall_slot(1)
-	-- memory.transposition:recall_slot(1)
-	-- memory.mod:recall_slot(1)
+	for v = 1, n_grid_views do
+		local selector = memory_view.selectors[v]
+		if selector ~= nil then
+			selector:select(1)
+		end
+	end
 
 	-- match encoder sensitivity used in norns menus
 	norns.enc.accel(1, false)

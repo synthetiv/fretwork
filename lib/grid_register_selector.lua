@@ -3,8 +3,10 @@ local VoiceSliderBank = include 'lib/grid_voice_slider_bank'
 local RegisterSelector = setmetatable({}, VoiceSliderBank)
 RegisterSelector.__index = RegisterSelector
 
-function RegisterSelector.new(x, y, width, height, n_voices, voices, type)
+function RegisterSelector.new(x, y, width, height, n_voices, voices, n_registers, registers, type)
 	local selector = setmetatable(VoiceSliderBank.new(x, y, width, height, n_voices, voices, type, 4, 1, n_registers), RegisterSelector)
+	selector.n_registers = n_registers
+	selector.registers = registers
 	selector.x_retrograde = selector.x
 	selector.x_inversion = selector.x + 1
 	selector.x_half = selector.sliders[1].x2 + 2
@@ -88,6 +90,41 @@ function RegisterSelector:draw(g)
 		g:led(self.x_dec, y, held_keys.dec and 4 or 1)
 		g:led(self.x_inc, y, held_keys.inc and 4 or 1)
 		g:led(self.x_double, y, held_keys.double and 7 or 2)
+	end
+end
+
+function RegisterSelector:get_state()
+	local state = {
+		voices = {},
+		loops = {}
+	}
+	for v = 1, self.n_voices do
+		local tap = self.taps[v]
+		local voice_params = self.voice_params[v]
+		local voice_state = {}
+		local r = voice_params.register
+		voice_state.register = r
+		voice_state.retrograde = voice_params.retrograde
+		voice_state.inversion = voice_params.inversion
+		state.voices[v] = voice_state
+	end
+	for r = 1, self.n_registers do
+		state.loops[r] = self.registers[r]:get_loop(1)
+	end
+	return state
+end
+
+function RegisterSelector:set_state(state)
+	for v = 1, self.n_voices do
+		local tap = self.taps[v]
+		local voice_params = self.voice_params[v]
+		local voice_state = state.voices[v]
+		voice_params.register = voice_state.register
+		voice_params.retrograde = voice_state.retrograde
+		voice_params.inversion = voice_state.inversion
+	end
+	for r = 1, self.n_registers do
+		self.registers[r]:set_loop(1, state.loops[r])
 	end
 end
 

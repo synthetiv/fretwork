@@ -49,4 +49,25 @@ function RateSelector:draw(g)
 	end
 end
 
+function RateSelector:get_state()
+	local state = {}
+	for v = 1, self.n_voices do
+		local voice_params = self.voice_params[v]
+		local voice_state = {}
+		voice_state.rate = voice_params.rate
+		voice_state.jitter = voice_params.jitter
+		state[v] = voice_state
+	end
+	return state
+end
+
+function RateSelector:set_state(state)
+	for v = 1, self.n_voices do
+		local voice_params = self.voice_params[v]
+		local voice_state = state[v]
+		voice_params.rate = voice_state.rate
+		voice_params.jitter = voice_state.jitter
+	end
+end
+
 return RateSelector
