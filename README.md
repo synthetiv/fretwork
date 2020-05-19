@@ -84,6 +84,12 @@ hold **esc** (1, 1) to activate the memory selector. states can be stored and re
 
 most of this script's params do things that have already been described above, but the "output mode" param is important: it lets you send notes to Crow instead of the internal PolySub engine, either as two voices of pitch + gate, or four voices of pitch only. in 4-voice mode, note data is also sent to MIDI, so you can use a MIDI-CV interface for gates while using crow's precision and slew shapes for pitch.
 
+## one more thing
+
+fretwork is built for microtonality. upload [a Scala file or two](http://www.huygens-fokker.org/scala/downloads.html#scales) to norns and select one using the **tuning file** parameter. 
+
+when using a non-12-tone scale, each row of the grid will be 5 scale degrees apart, _not_ necessarily a perfect fourth. sorry (?) / enjoy (?).
+
 ## ok, happy fretting!
 
 thank you for reading all this nonsense. I welcome thoughts, suggestions, bug reports, etc. on lines + github.
