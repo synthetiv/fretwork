@@ -146,9 +146,9 @@ MemorySelector.new = function(x, y, width, height)
 	selectors[grid_view_mask].on_select = function(m)
 		if held_keys.shift then
 			-- TODO: globals...!
-			memory.pitch.mask[m] = scale:mask_to_pitches(scale.next_mask)
+			memory.pitch.mask[m] = scale:get_mask_pitches(scale.next_mask)
 		else
-			scale:mask_from_pitches(memory.pitch.mask[m])
+			scale:set_mask_to_pitches(memory.pitch.mask[m])
 			if quantization_off() then
 				scale:apply_edits()
 				-- force pitch values + paths to update

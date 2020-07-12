@@ -7,7 +7,8 @@ local function parse_cents(value)
 	if value == nil then
 		error('bad cent value: ' .. value)
 	end
-	return value / 1200
+	value = value / 1200
+	return value, math.pow(2, value), 1
 end
 
 local function parse_ratio(value)
@@ -27,7 +28,7 @@ local function parse_ratio(value)
 			error('bad ratio value: ' .. value)
 		end
 	end
-	return math.log(num / den) / log2
+	return math.log(num / den) / log2, num, den
 end
 
 function read_scala_file(path)
@@ -38,6 +39,7 @@ function read_scala_file(path)
 	local length = 0
 	local expected_length = 0
 	local pitches = {}
+	local ratios = {}
 	for line in io.lines(path) do
 		line = string.gsub(line, '\r', '') -- trim pesky CR characters that make debugging a pain
 		if string.sub(line, 1, 1) ~= '!' then -- ignore comments
@@ -46,6 +48,8 @@ function read_scala_file(path)
 				desc = line
 			else
 				local value = string.match(line, '(%S+)')
+				local num = 1
+				local den = 1
 				if expected_length == 0 then
 					-- second line is the number of pitches
 					expected_length = tonumber(value)
@@ -56,11 +60,12 @@ function read_scala_file(path)
 					-- everything else is a pitch
 					length = length + 1
 					if string.find(value, '%.') ~= nil then
-						value = parse_cents(value)
+						value, num, den = parse_cents(value)
 					else
-						value = parse_ratio(value)
+						value, num, den = parse_ratio(value)
 					end
 					pitches[length] = value
+					ratios[length] = { num, den }
 				end
 			end
 		end
@@ -71,7 +76,7 @@ function read_scala_file(path)
 	end
 	-- enforce low -> high pitch order, or scale.lua's quantization won't work
 	table.sort(pitches)
-	return pitches, length, desc
+	return pitches, ratios, length, desc
 end
 
 return read_scala_file

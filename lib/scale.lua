@@ -9,16 +9,22 @@ Scale.__index = Scale
 local n_values = 128
 local center_pitch_id = n_values / 2
 
+local log2 = math.log(2)
+
 function Scale.new(pitch_class_values, length)
 	local instance = setmetatable({}, Scale)
 	instance.values = {}
-	instance:init(pitch_class_values, length)
+	instance.pitch_class_values = pitch_class_values
+	instance.length = length
+	instance:init()
 	instance:update_mask_pitch_ids()
 	return instance
 end
 
-function Scale:init(pitch_class_values, length)
+function Scale:init()
 	-- precalculate all pitch values across all octaves
+	local pitch_class_values = self.pitch_class_values
+	local length = self.length
 	local values = self.values
 	local span = pitch_class_values[length]
 	local pitch_class = 1
@@ -154,7 +160,7 @@ function Scale:snap(value)
 	return self.values[nearest_mask_pitch_id]
 end
 
-function Scale:mask_to_pitches()
+function Scale:get_mask_pitches()
 	local pitches = {}
 	local mask = self.next_mask
 	for class = 1, self.length do
@@ -165,7 +171,7 @@ function Scale:mask_to_pitches()
 	return pitches
 end
 
-function Scale:mask_from_pitches(pitches)
+function Scale:set_mask_to_pitches(pitches)
 	local mask = self.next_mask
 	for class = 1, self.length do
 		mask[class] = false
@@ -177,15 +183,102 @@ function Scale:mask_from_pitches(pitches)
 	end
 end
 
+local function sort_ratios(a, b)
+	if a == nil then
+		return false
+	elseif b == nil then
+		return true
+	end
+	return a[1] / a[2] < b[1] / b[2]
+end
+
+function Scale:sort_ratios()
+	table.sort(self.ratios, sort_ratios)
+end
+
+function Scale:update_from_ratios()
+	local mask_pitches = self:get_mask_pitches()
+	local length = 0
+	self:sort_ratios()
+	for i, r in ipairs(self.ratios) do
+		if r ~= nil then
+			length = length + 1
+		end
+		self.pitch_class_values[i] = math.log(r[1] / r[2]) / log2
+	end
+	self.length = length
+	self.span_ratio = self.ratios[self.length]
+	self:init()
+	self:set_mask_to_pitches(mask_pitches)
+end
+
+function Scale:reduce_ratio(ratio)
+	local bumper = 1
+	local span = self.span_ratio[1] / self.span_ratio[2]
+	while ratio[1] / ratio[2] > span do
+		print('down', ratio[1], ratio[2])
+		ratio[1] = ratio[1] * self.span_ratio[2]
+		ratio[2] = ratio[2] * self.span_ratio[1]
+		bumper = bumper + 1
+		if bumper > 10 then
+			print('too many loops down', ratio[1], ratio[2])
+			return
+		end
+	end
+	while ratio[2] / ratio[1] > span do
+		print('up', ratio[1], ratio[2])
+		ratio[1] = ratio[1] * self.span_ratio[1]
+		ratio[2] = ratio[2] * self.span_ratio[2]
+		bumper = bumper + 1
+		if bumper > 10 then
+			print('too many loops up', ratio[1], ratio[2])
+			return
+		end
+	end
+end
+
+function Scale:set_ratio(pitch_class, num, den)
+	local ratio = self.ratios[pitch_class]
+	ratio[1] = num
+	ratio[2] = den
+	self:reduce_ratio(ratio)
+	self:update_from_ratios()
+end
+
+function Scale:alter_ratio(pitch_class, num, den)
+	local ratio = self.ratios[pitch_class]
+	self:set_ratio(pitch_class, ratio[1] * num, ratio[2] * den)
+end
+
+function Scale:remove_ratio(pitch_class)
+	self.ratios[pitch_class] = nil
+	-- self.length = self.length - 1
+	self:update_from_ratios()
+end
+
+function Scale:add_ratio(num, den)
+	-- self.length = self.length + 1
+	self.ratios[self.length + 1] = { num, den }
+	self:update_from_ratios()
+end
+
+function Scale:print_ratios()
+	for p = 1, self.length do
+		local r = self.ratios[p]
+		print((self.mask[p] and '* ' or '  ') .. r[1] .. '/' .. r[2])
+	end
+end
+
 function Scale:read_scala_file(path)
-	-- read the file
-	local pitch_class_values, length, desc = read_scala_file(path)
 	-- save current mask pitches
-	local mask_pitches = self:mask_to_pitches(self.mask)
+	local mask_pitches = self:get_mask_pitches()
+	-- read the file
+	self.pitch_class_values, self.ratios, self.length, self.desc = read_scala_file(path)
+	self:update_from_ratios()
 	-- set scale values
-	self:init(pitch_class_values, length)
+	self:init()
 	-- reset mask to match old pitches as closely as possible
-	self:mask_from_pitches(mask_pitches)
+	self:set_mask_to_pitches(mask_pitches)
 	-- announce ourselves
 	print(desc)
 end
