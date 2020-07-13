@@ -8,7 +8,6 @@ engine.name = 'PolySub'
 polysub = require 'we/lib/polysub'
 
 musicutil = require 'musicutil'
-BeatClock = require 'beatclock'
 
 Roll = include 'lib/grid_roll'
 OffsetRoll = include 'lib/grid_offset_roll'
@@ -1243,7 +1242,7 @@ function add_params()
 		id = 'output_mode',
 		name = 'output mode',
 		options = output_mode_names,
-		default = output_mode_polysub,
+		default = output_mode_crow_4,
 		action = function(value)
 			-- kill notes
 			if output_mode ~= output_mode_polysub then
