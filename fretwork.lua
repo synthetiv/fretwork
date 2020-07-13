@@ -8,7 +8,6 @@ engine.name = 'PolySub'
 polysub = require 'we/lib/polysub'
 
 musicutil = require 'musicutil'
-BeatClock = require 'beatclock'
 
 Roll = include 'lib/grid_roll'
 OffsetRoll = include 'lib/grid_offset_roll'
