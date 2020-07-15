@@ -137,7 +137,7 @@ function ShiftRegisterVoice:update(force_pitch_update, force_mod_update)
 	if force_pitch_update or pitch_tap.dirty then
 		local scale = self.scale
 		local pitch, noisy_bias, bias = pitch_tap:get_step_value(0)
-		local pitch_id = scale:get_nearest_mask_pitch_id(pitch)
+		local pitch_id = scale:get_nearest_active_pitch_id(pitch)
 		if pitch_id == -1 then
 			pitch_id = scale:get_nearest_pitch_id(pitch)
 		else

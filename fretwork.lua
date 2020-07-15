@@ -21,6 +21,7 @@ ShiftRegister = include 'lib/shift_register'
 ShiftRegisterVoice = include 'lib/shift_register_voice'
 VoiceParams = include 'lib/voice_params'
 Scale = include 'lib/scale'
+ScaleEditor = include 'lib/scale_editor'
 Blinker = include 'lib/blinker'
 
 crow_slew_shapes = {
@@ -35,12 +36,8 @@ crow_slew_shapes = {
 	'rebound'
 }
 
--- calculate pitch class values
-et12 = {} -- 12TET
-for p = 1, 12 do 
-	et12[p] = p / 12
-end
-scale = Scale.new(et12, 12)
+scale = Scale.new({ 1 }) -- "empty" scale, all octaves
+scale_editor = ScaleEditor.new(scale)
 
 pitch_registers = {}
 mod_registers = {}
@@ -652,7 +649,7 @@ function pitch_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
 	local level = absolute_pitch_levels[n]
 	-- highlight mask
-	if self.scale:mask_contains(n) then
+	if self.scale:is_pitch_id_active(n) then
 		level = led_blend(level, 3.5)
 	end
 	return math.min(15, math.ceil(level))
@@ -660,10 +657,10 @@ end
 
 function mask_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
-	local level = absolute_pitch_levels[n]
+	local level = absolute_pitch_levels[n] * 0.7
 	-- highlight mask
-	local in_mask = self.scale:mask_contains(n)
-	local in_next_mask = self.scale:next_mask_contains(n)
+	local in_mask = self.scale:is_pitch_id_active(n)
+	local in_next_mask = self.scale:is_pitch_id_next_active(n)
 	if in_mask and in_next_mask then
 		level = led_blend(level, 4)
 	elseif in_next_mask then
@@ -671,9 +668,9 @@ function mask_keyboard:get_key_level(x, y, n)
 	elseif in_mask then
 		level = led_blend(level, 1)
 	end
-	-- highlight white keys
-	if self:is_white_key(n) then
-		level = led_blend(level, 2)
+	-- highlight center octave/span
+	if n >= scale.center_pitch_id and n < scale.center_pitch_id + scale.length then
+		level = led_blend(level, 3)
 	end
 	return math.min(15, math.ceil(level))
 end
@@ -749,7 +746,7 @@ end
 
 function toggle_mask_class(pitch_id)
 	scale:toggle_class(pitch_id)
-	memory.mask.dirty = true
+	-- memory.mask.dirty = true
 	if quantization_off() then
 		scale:apply_edits()
 		update_voices(true)
@@ -1319,9 +1316,10 @@ function add_params()
 		type = 'file',
 		id = 'tuning_file',
 		name = 'tuning_file',
-		path = '/home/we/dust/code/fretwork/lib/12tet.scl',
+		-- path = '/home/we/dust/code/fretwork/lib/12tet.scl',
+		path = '/home/we/dust/data/fretwork/scales/harmopent.scl',
 		action = function(value)
-			scale:read_scala_file(value)
+			scale_editor:read_scala_file(value)
 			mask_keyboard:set_white_keys()
 			if quantization_off() then
 				scale:apply_edits()
@@ -1874,6 +1872,10 @@ end
 
 function redraw()
 	screen.clear()
+
+	if scale_editor.active then
+		scale_editor:draw_screen()
+	end
 
 	-- draw paths
 	for i = n_voices, 1, -1 do

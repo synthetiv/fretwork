@@ -68,7 +68,7 @@ MemorySelector.new = function(x, y, width, height)
 		-- masks: pentatonic scales
 		local pitches = {}
 		for n = 1, 5 do
-			pitches[n] = ((pentatonic[n] + m * 7) % 12) / 12
+			pitches[n] = pentatonic[n] -- ((pentatonic[n] + m * 7) % 12) / 12
 		end
 		memory.pitch.mask[m] = pitches
 
@@ -146,9 +146,9 @@ MemorySelector.new = function(x, y, width, height)
 	selectors[grid_view_mask].on_select = function(m)
 		if held_keys.shift then
 			-- TODO: globals...!
-			memory.pitch.mask[m] = scale:get_mask_pitches(scale.next_mask)
+			memory.pitch.mask[m] = scale:get_active_values(scale.next_mask)
 		else
-			scale:set_mask_to_pitches(memory.pitch.mask[m])
+			scale:set_active_values(memory.pitch.mask[m])
 			if quantization_off() then
 				scale:apply_edits()
 				-- force pitch values + paths to update

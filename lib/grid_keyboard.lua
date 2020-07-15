@@ -147,7 +147,7 @@ function Keyboard:set_white_keys()
 	local white_key_pitch_ids = {}
 	local white_keys = {}
 	for k = 1, 7 do
-		white_key_pitch_ids[k] = self.scale:get_pitch_class(self.scale:get_nearest_pitch_id(white_key_pitches[k]))
+		white_key_pitch_ids[k] = self.scale:get_class(self.scale:get_nearest_pitch_id(white_key_pitches[k]))
 	end
 	local k = 1
 	for c = 1, self.scale.length do
@@ -162,7 +162,7 @@ function Keyboard:set_white_keys()
 end
 
 function Keyboard:is_white_key(n)
-	return self.white_keys[self.scale:get_pitch_class(n)]
+	return self.white_keys[self.scale:get_class(n)]
 end
 
 function Keyboard:is_octave_key(x, y)

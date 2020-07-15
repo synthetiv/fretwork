@@ -2,13 +2,56 @@
 
 local log2 = math.log(2)
 
+local cf = {}
+function continue_fraction(f, term)
+	local i = math.floor(f) + 0.0
+	if term == nil then
+		term = 1
+	else
+		term = term + 1
+	end
+	-- convert int to float, otherwise goofy stuff happens later when we start multiplying large ints
+	cf[term] = i + 0.0
+	f = f - i
+	-- TODO: find a sensible precision threshold that will keep rational approximations within, say,
+	-- 1/100th of a cent of original cent values
+	if f < 0.0001 or term > 16383 then
+		return cf, term
+	end
+	return continue_fraction(1 / f, term)
+end
+
+function rationalize(f)
+	local cf, term = continue_fraction(f, 0)
+	local num = cf[term] + 0.0
+	local den = 1.0
+	term = term - 1
+	while term > 0 do
+		num, den = den, num
+		num = num + cf[term] * den
+		-- if we hit inf anywhere, consider this an irrational number
+		if num == math.huge or den == math.huge then
+			return f, 1.0
+		end
+		term = term - 1
+	end
+	local diff = f - (num / den)
+	if math.abs(diff) ~= 0.0 then
+		print(string.format('rationalization imperfect: %f - %f/%f = %f', f, num, den, diff))
+		return f, 1.0
+	end
+	return num, den
+end
+
 local function parse_cents(value)
 	value = tonumber(value)
 	if value == nil then
 		error('bad cent value: ' .. value)
 	end
 	value = value / 1200
-	return value, math.pow(2, value), 1
+	print(value)
+	local num, den = rationalize(math.pow(2, value))
+	return value, num, den
 end
 
 local function parse_ratio(value)
@@ -65,7 +108,10 @@ function read_scala_file(path)
 						value, num, den = parse_ratio(value)
 					end
 					pitches[length] = value
-					ratios[length] = { num, den }
+					ratios[length] = {
+						num = num,
+						den = den
+					}
 				end
 			end
 		end
@@ -74,9 +120,7 @@ function read_scala_file(path)
 	if length ~= expected_length then
 		error('length mismatch', length, expected_length)
 	end
-	-- enforce low -> high pitch order, or scale.lua's quantization won't work
-	table.sort(pitches)
-	return pitches, ratios, length, desc
+	return pitches, ratios, desc
 end
 
 return read_scala_file
