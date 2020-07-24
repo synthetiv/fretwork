@@ -706,6 +706,14 @@ function transpose_keyboard:get_key_level(x, y, n)
 	return math.min(15, math.ceil(level))
 end
 
+local fourth_log = math.log(4/3) / math.log(2)
+function scale_editor:on_update()
+	local fourth = scale:get_class(scale:get_nearest_pitch_id(fourth_log)) - 1
+	pitch_keyboard:set_row_offsets(fourth)
+	mask_keyboard:set_row_offsets(fourth)
+	transpose_keyboard:set_row_offsets(fourth)
+end
+
 -- TODO: views manage memory: get_state, set_state, store em in a table
 
 function get_voice_note_level(v, note, type)

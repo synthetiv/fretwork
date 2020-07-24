@@ -660,6 +660,7 @@ function ScaleEditor.new(scale)
 		lalt = false,
 		ralt = false
 	}
+	editor.on_update = function() end
 	return editor
 end
 
@@ -744,6 +745,8 @@ function ScaleEditor:update()
 	self.scale:set_class_values(class_values)
 	
 	self:print_ratios()
+
+	self:on_update()
 end
 
 function ScaleEditor:replace_ratio(r, num, den)

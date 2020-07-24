@@ -11,9 +11,7 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.last_key = 0
 	-- set offset interval per row, rather than calculating it dynamically, so that "open tunings" are possible
 	instance.row_offsets = {}
-	for row = instance.y, instance.y2 do
-		instance.row_offsets[row] = instance.scale.center_pitch_id + (instance.y_center - row) * 5
-	end
+	instance:set_row_offsets(5)
 	instance:set_white_keys()
 	instance.octave = 0
 	instance.held_octave_keys = {
@@ -21,6 +19,12 @@ function Keyboard.new(x, y, width, height, scale)
 		up = false
 	}
 	return instance
+end
+
+function Keyboard:set_row_offsets(offset)
+	for row = self.y, self.y2 do
+		self.row_offsets[row] = self.scale.center_pitch_id + (self.y_center - row) * offset
+	end
 end
 
 function Keyboard:get_key_pitch_id(x, y)
