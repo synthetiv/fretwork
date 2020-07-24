@@ -39,6 +39,27 @@ crow_slew_shapes = {
 scale = Scale.new({ 1 }) -- "empty" scale, all octaves
 scale_editor = ScaleEditor.new(scale)
 
+function keyboard_event(type, code, value)
+	if type == 1 and value == 1 then
+		if code == hid.codes.KEY_ESC then
+			editor_active = not editor_active
+			return
+		end
+	end
+	if editor_active then
+		scale_editor:keyboard_event(type, code, value)
+	end
+end
+
+editor_active = false
+hid_keyboard = hid.connect(2)
+hid_keyboard.event = keyboard_event
+hid.add = function(device)
+	tab.print(device)
+	hid_keyboard = hid.connect(device.port)
+	hid_keyboard.event = keyboard_event
+end
+
 pitch_registers = {}
 mod_registers = {}
 n_registers = 7
@@ -657,7 +678,7 @@ end
 
 function mask_keyboard:get_key_level(x, y, n)
 	-- highlight voice notes
-	local level = absolute_pitch_levels[n] * 0.7
+	local level = absolute_pitch_levels[n]
 	-- highlight mask
 	local in_mask = self.scale:is_pitch_id_active(n)
 	local in_next_mask = self.scale:is_pitch_id_next_active(n)
@@ -760,16 +781,25 @@ function pitch_keyboard:note_key(x, y, z)
 	end
 	local previous_note = self:get_last_pitch_id()
 	self:note(x, y, z)
-	if self.n_held_keys > 0 and (z == 1 or previous_note ~= self:get_last_pitch_id()) then
+	local pitch_id = self:get_last_pitch_id()
+	if self.n_held_keys > 0 and (z == 1 or previous_note ~= pitch_id) then
 		if write_enable then
 			write(self:get_last_value())
+			print('wrote', pitch_id)
 		end
+	end
+	if z == 1 then
+		scale_editor:select_pitch(pitch_id)
 	end
 end
 
 function mask_keyboard:note_key(x, y, z)
 	if z == 1 then
-		toggle_mask_class(self:get_key_pitch_id(x, y))
+		local pitch_id = self:get_key_pitch_id(x, y)
+		toggle_mask_class(pitch_id)
+		if scale:is_pitch_id_next_active(pitch_id) then
+			scale_editor:select_pitch(pitch_id)
+		end
 	end
 end
 
@@ -1871,6 +1901,12 @@ function draw_tap_equation(y, label, voice, tap, unit_multiplier, editing)
 end
 
 function redraw()
+
+	if editor_active then
+		scale_editor:redraw()
+		return
+	end
+
 	screen.clear()
 
 	if scale_editor.active then

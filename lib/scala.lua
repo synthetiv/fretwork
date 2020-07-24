@@ -22,6 +22,9 @@ function continue_fraction(f, term)
 end
 
 function rationalize(f)
+	if f == 1 then -- short circuit
+		return 1, 1
+	end
 	local cf, term = continue_fraction(f, 0)
 	local num = cf[term] + 0.0
 	local den = 1.0
