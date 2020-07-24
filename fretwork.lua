@@ -184,10 +184,14 @@ held_keys = {
 }
 
 absolute_pitch_levels = {} -- used by pitch + mask keyboards
+class_levels = {} -- used by mask keyboard
 relative_pitch_levels = {} -- used by transpose keyboard
 for n = 1, scale.n_values do
 	absolute_pitch_levels[n] = 0
 	relative_pitch_levels[n] = 0
+end
+for n = 1, scale.length do
+	class_levels[n] = 0
 end
 
 view_octave = 0
@@ -613,6 +617,9 @@ function grid_redraw()
 			absolute_pitch_levels[n] = 0
 			relative_pitch_levels[n] = 0
 		end
+		for n = 1, scale.length do
+			class_levels[n] = 0
+		end
 		for v = 1, n_voices do
 			local voice = voices[v]
 			local recent_notes = recent_voice_notes[v]
@@ -622,10 +629,12 @@ function grid_redraw()
 				local level = get_voice_note_level(v, recent_notes[n], 4)
 				local note = recent_notes[n]
 				local pitch_id = note.pitch_id
+				local class = scale:get_class(pitch_id)
 				local bias_pitch_id = note.bias_pitch_id
 				local noisy_bias_pitch_id = note.noisy_bias_pitch_id
 				if pitch_id >= low_pitch_id and pitch_id <= high_pitch_id then
 					absolute_pitch_levels[pitch_id] = led_blend(absolute_pitch_levels[pitch_id], level)
+					class_levels[class] = led_blend(class_levels[class], level)
 				end
 				-- TODO: it's hard to distinguish between highlighted and non-highlighted relative notes now, because they pile up
 				if bias_pitch_id >= low_pitch_id and bias_pitch_id <= high_pitch_id then
@@ -673,24 +682,35 @@ function pitch_keyboard:get_key_level(x, y, n)
 	if self.scale:is_pitch_id_active(n) then
 		level = led_blend(level, 3.5)
 	end
+	-- highlight center octave/span
+	if self:is_pitch_id_in_center_octave(n) then
+		level = led_blend(level, 2)
+	end
 	return math.min(15, math.ceil(level))
 end
 
 function mask_keyboard:get_key_level(x, y, n)
+	local in_center_octave = self:is_pitch_id_in_center_octave(n)
 	-- highlight voice notes
-	local level = absolute_pitch_levels[n]
+	-- TODO: consolidate/transpose/reduce into one octave
+	local level = 0
+	if in_center_octave then
+		level = class_levels[self.scale:get_class(n)]
+	else
+		level = absolute_pitch_levels[n] * 0.15
+	end
 	-- highlight mask
 	local in_mask = self.scale:is_pitch_id_active(n)
 	local in_next_mask = self.scale:is_pitch_id_next_active(n)
 	if in_mask and in_next_mask then
-		level = led_blend(level, 4)
+		level = led_blend(level, in_center_octave and 4 or 2)
 	elseif in_next_mask then
-		level = led_blend(level, 2)
+		level = led_blend(level, in_center_octave and 2 or 1)
 	elseif in_mask then
-		level = led_blend(level, 1)
+		level = led_blend(level, in_center_octave and 1 or 0)
 	end
 	-- highlight center octave/span
-	if n >= scale.center_pitch_id and n < scale.center_pitch_id + scale.length then
+	if in_center_octave then
 		level = led_blend(level, 3)
 	end
 	return math.min(15, math.ceil(level))
@@ -703,15 +723,17 @@ function transpose_keyboard:get_key_level(x, y, n)
 	if (n - scale.center_pitch_id) % scale.length == 0 then
 		level = math.max(level, 2)
 	end
+	-- highlight center octave/span
+	if self:is_pitch_id_in_center_octave(n) then
+		level = led_blend(level, 2)
+	end
 	return math.min(15, math.ceil(level))
 end
 
-local fourth_log = math.log(4/3) / math.log(2)
 function scale_editor:on_update()
-	local fourth = scale:get_class(scale:get_nearest_pitch_id(fourth_log)) - 1
-	pitch_keyboard:set_row_offsets(fourth)
-	mask_keyboard:set_row_offsets(fourth)
-	transpose_keyboard:set_row_offsets(fourth)
+	pitch_keyboard:tune()
+	mask_keyboard:tune()
+	transpose_keyboard:tune()
 end
 
 -- TODO: views manage memory: get_state, set_state, store em in a table
@@ -774,7 +796,7 @@ function gate_roll:on_step_key(x, y, v, step)
 end
 
 function toggle_mask_class(pitch_id)
-	scale:toggle_class(pitch_id)
+	scale:toggle_pitch_id(pitch_id)
 	-- memory.mask.dirty = true
 	if quantization_off() then
 		scale:apply_edits()
@@ -1358,7 +1380,6 @@ function add_params()
 		path = '/home/we/dust/data/fretwork/scales/harmopent.scl',
 		action = function(value)
 			scale_editor:read_scala_file(value)
-			mask_keyboard:set_white_keys()
 			if quantization_off() then
 				scale:apply_edits()
 				update_voices(true)

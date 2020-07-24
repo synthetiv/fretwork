@@ -58,11 +58,10 @@ function ScaleEditor:reduce_ratio(r)
 end
 
 function ScaleEditor:print_ratios()
-	local classes_active = self.scale.classes_active
-	for p = 1, self.length do
-		local r = (p == self.length and self.span_ratio or self.ratios[p])
-		local marker = (classes_active[p % self.length + 1] and '*' or ' ')
-		print(string.format('%d. %s %s', p, marker, r))
+	for r = 1, self.length do
+		local ratio = (r == self.length and self.span_ratio or self.ratios[p])
+		local marker = (self:is_class_active(r + 1) and '*' or ' ')
+		print(string.format('%d. %s %s', r, marker, ratio))
 	end
 end
 
@@ -109,30 +108,53 @@ function ScaleEditor:update()
 	self:on_update()
 end
 
-function ScaleEditor:replace_ratio(r, num, den)
-	if r < 2 or r > self.length then
-		error('invalid ratio index: ' .. r)
+function ScaleEditor:is_class_active(class)
+	if class == nil then
+		class = self.selected_ratio + 1
+	end
+	return self.scale:is_class_active(class)
+end
+
+function ScaleEditor:toggle_class(class)
+	if class == nil then
+		class = self.selected_ratio + 1
+	end
+	return self.scale:toggle_class(class)
+end
+
+function ScaleEditor:replace_class(class, num, den)
+	if class == nil then
+		class = self.selected_ratio + 1
+	end
+	if class < 2 or class > self.length then
+		error('invalid ratio index: ' .. class)
 		return
 	end
-	self.selected_ratio = r - 1
+	self.selected_ratio = class - 1
 	self.ratios[self.selected_ratio] = Ratio.new(num, den)
 	self:update()
 end
 
-function ScaleEditor:multiply_ratio(r, num, den)
-	if r < 2 or r > self.length then
-		error('invalid ratio index: ' .. r)
+function ScaleEditor:multiply_class(class, num, den)
+	if class == nil then
+		r = self.selected_ratio + 1
+	end
+	if class < 2 or class > self.length then
+		error('invalid ratio index: ' .. class)
 		return
 	end
-	self:replace_ratio(r, self.ratios[self.selected_ratio] * Ratio.new(num, den))
+	self:replace_class(class, self.ratios[class] * Ratio.new(num, den))
 end
 
-function ScaleEditor:delete_ratio(r)
-	if r < 2 or r > self.length then
-		error('invalid ratio index: ' .. r)
+function ScaleEditor:delete_class(class)
+	if class == nil then
+		class = self.selected_ratio + 1
+	end
+	if class < 2 or class > self.length then
+		error('invalid ratio index: ' .. class)
 		return
 	end
-	table.remove(self.ratios, r - 1)
+	table.remove(self.ratios, class - 1)
 	self:update()
 end
 
@@ -168,10 +190,9 @@ function ScaleEditor:redraw()
 	-- large: 29/13 (mono), 27/10 (contrasty mono), 30/13 (italic), 32/13 (same, light), 34/16 (italic), 36/16 (same, light)
 	-- tiny: 25/6
 	--
-	local classes_active = self.scale.classes_active
 	local selected_ratio = self.selected_ratio
-	local class = selected_ratio % self.scale.length + 1
-	local active = classes_active[class]
+	local class = selected_ratio + 1
+	local active = self:is_class_active()
 	local ratio = self.ratios[selected_ratio]
 	if class == 1 then
 		ratio = self.span_ratio
@@ -240,10 +261,10 @@ function ScaleEditor:redraw()
 	local span_value = self.span_ratio.value
 	local level = 1
 	local len = 1
-	if self.selected_ratio == 0 and classes_active[1] then
+	if self.selected_ratio == 0 and self:is_class_active(1) then
 		level = 15
 		len = 5
-	elseif classes_active[1] then
+	elseif self:is_class_active(1) then
 		level = 7
 		len = 4
 	elseif self.selected_ratio == 0 then
@@ -260,10 +281,10 @@ function ScaleEditor:redraw()
 		local x = math.floor(127 * self.ratios[r].value / span_value) + 0.5
 		level = 1
 		len = 1
-		if self.selected_ratio == r and classes_active[r + 1] then
+		if self.selected_ratio == r and self:is_class_active(r + 1) then
 			level = 15
 			len = 5
-		elseif classes_active[r + 1] then
+		elseif self:is_class_active(r + 1) then
 			level = 7
 			len = 4
 		elseif self.selected_ratio == r then

@@ -104,6 +104,46 @@ function Scale:apply_edits()
 	self.n_active_pitch_ids = i - 1
 end
 
+--- ensure the argument is between 1 and self.length
+-- @param class a pitch class
+-- @return `class`, wrapped to [1, self.length]
+function Scale:wrap_class(class)
+	if class < 1 or class > self.length then
+		class = (class - 1) % self.length + 1
+	end
+	return class
+end
+
+--- check whether a pitch class is currently active
+-- @param class pitch class from 1 to self.length
+-- @return true if active, false if not
+function Scale:is_class_active(class)
+	return self.classes_active[self:wrap_class(class)]
+end
+
+--- check whether a pitch class will be active after apply_edits() is called
+-- @param class pitch class from 1 to self.length
+-- @return true if pitch will be active, false if not
+function Scale:is_class_next_active(class)
+	return self.next_classes_active[self:wrap_class(class)]
+end
+
+--- activate/deactivate a pitch class
+-- @param class a pitch class from 1 to self.length
+-- @enable true to activate, false to deactivate
+function Scale:set_class_active(class, enable)
+	self.next_classes_active[self:wrap_class(class)] = enable
+	self.active_values = self:get_active_values()
+end
+
+--- toggle active status of a pitch class
+-- @param class a pitch class from 1 to self.length
+function Scale:toggle_class(class)
+	class = self:wrap_class(class)
+	self.next_classes_active[class] = not self.next_classes_active[class]
+	self.active_values = self:get_active_values()
+end
+
 --- get the pitch class of a pitch id
 -- @param pitch_id pitch id from 1 to n_values
 -- @return pitch class from 1 to self.length
@@ -128,14 +168,14 @@ end
 --- activate/deactivate a pitch id (and all pitches in its pitch class)
 -- @param pitch_id a pitch id from 1 to n_values
 -- @enable true to activate, false to deactivate
-function Scale:set_class_active(pitch_id, enable)
+function Scale:set_pitch_id_active(pitch_id, enable)
 	self.next_classes_active[self:get_class(pitch_id)] = enable
 	self.active_values = self:get_active_values()
 end
 
 --- toggle active status of a pitch id (and all pitches in its pitch class)
 -- @param pitch_id a pitch id from 1 to n_values
-function Scale:toggle_class(pitch_id)
+function Scale:toggle_pitch_id(pitch_id)
 	local class = self:get_class(pitch_id)
 	self.next_classes_active[class] = not self.next_classes_active[class]
 	self.active_values = self:get_active_values()

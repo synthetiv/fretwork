@@ -3,6 +3,8 @@ local Control = include 'lib/grid_control'
 local Keyboard = setmetatable({}, Control)
 Keyboard.__index = Keyboard
 
+local fourth_value = math.log(4/3) / math.log(2) -- for tuning rows to fourths
+	
 function Keyboard.new(x, y, width, height, scale)
 	local instance = setmetatable(Control.new(x, y, width, height), Keyboard)
 	instance.scale = scale
@@ -11,8 +13,7 @@ function Keyboard.new(x, y, width, height, scale)
 	instance.last_key = 0
 	-- set offset interval per row, rather than calculating it dynamically, so that "open tunings" are possible
 	instance.row_offsets = {}
-	instance:set_row_offsets(5)
-	instance:set_white_keys()
+	instance:tune()
 	instance.octave = 0
 	instance.held_octave_keys = {
 		down = false,
@@ -21,9 +22,11 @@ function Keyboard.new(x, y, width, height, scale)
 	return instance
 end
 
-function Keyboard:set_row_offsets(offset)
+function Keyboard:tune()
+	local fourth = self.scale:get_class(self.scale:get_nearest_pitch_id(fourth_value)) - 1
+	local half_scale = math.floor(self.scale.length / 2 + 0.5)
 	for row = self.y, self.y2 do
-		self.row_offsets[row] = self.scale.center_pitch_id + (self.y_center - row) * offset
+		self.row_offsets[row] = self.scale.center_pitch_id + (self.y_center - row) * fourth + half_scale
 	end
 end
 
@@ -146,27 +149,9 @@ function Keyboard:draw(g)
 	g:led(self.x2, self.y, math.min(15, math.max(0, up_level + math.max(self.octave, 0))))
 end
 
-function Keyboard:set_white_keys()
-	local white_key_pitches = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 }
-	local white_key_pitch_ids = {}
-	local white_keys = {}
-	for k = 1, 7 do
-		white_key_pitch_ids[k] = self.scale:get_class(self.scale:get_nearest_pitch_id(white_key_pitches[k]))
-	end
-	local k = 1
-	for c = 1, self.scale.length do
-		if c == white_key_pitch_ids[k] then
-			white_keys[c] = true
-			k = k + 1
-		else
-			white_keys[c] = false
-		end
-	end
-	self.white_keys = white_keys
-end
-
-function Keyboard:is_white_key(n)
-	return self.white_keys[self.scale:get_class(n)]
+function Keyboard:is_pitch_id_in_center_octave(pitch_id)
+	local center_pitch_id = self.scale.center_pitch_id
+	return pitch_id >= center_pitch_id and pitch_id <= center_pitch_id + scale.length
 end
 
 function Keyboard:is_octave_key(x, y)
@@ -193,7 +178,7 @@ end
 
 -- this method can be redefined on the fly
 function Keyboard:get_key_level(x, y, n)
-	return self:is_white_key(n) and 2 or 0
+	return 0
 end
 
 return Keyboard
