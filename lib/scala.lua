@@ -1,50 +1,6 @@
 -- scala file interpreter
 
-local log2 = math.log(2)
-
-local cf = {}
-function continue_fraction(f, term)
-	local i = math.floor(f) + 0.0
-	if term == nil then
-		term = 1
-	else
-		term = term + 1
-	end
-	-- convert int to float, otherwise goofy stuff happens later when we start multiplying large ints
-	cf[term] = i + 0.0
-	f = f - i
-	-- TODO: find a sensible precision threshold that will keep rational approximations within, say,
-	-- 1/100th of a cent of original cent values
-	if f < 0.0001 or term > 16383 then
-		return cf, term
-	end
-	return continue_fraction(1 / f, term)
-end
-
-function rationalize(f)
-	if f == 1 then -- short circuit
-		return 1, 1
-	end
-	local cf, term = continue_fraction(f, 0)
-	local num = cf[term] + 0.0
-	local den = 1.0
-	term = term - 1
-	while term > 0 do
-		num, den = den, num
-		num = num + cf[term] * den
-		-- if we hit inf anywhere, consider this an irrational number
-		if num == math.huge or den == math.huge then
-			return f, 1.0
-		end
-		term = term - 1
-	end
-	local diff = f - (num / den)
-	if math.abs(diff) ~= 0.0 then
-		print(string.format('rationalization imperfect: %f - %f/%f = %f', f, num, den, diff))
-		return f, 1.0
-	end
-	return num, den
-end
+local Ratio = include 'lib/ratio'
 
 local function parse_cents(value)
 	value = tonumber(value)
@@ -52,9 +8,7 @@ local function parse_cents(value)
 		error('bad cent value: ' .. value)
 	end
 	value = value / 1200
-	print(value)
-	local num, den = rationalize(math.pow(2, value))
-	return value, num, den
+	return Ratio.new(math.pow(2, value))
 end
 
 local function parse_ratio(value)
@@ -74,7 +28,7 @@ local function parse_ratio(value)
 			error('bad ratio value: ' .. value)
 		end
 	end
-	return math.log(num / den) / log2, num, den
+	return Ratio.new(num, den)
 end
 
 function read_scala_file(path)
@@ -84,7 +38,6 @@ function read_scala_file(path)
 	local desc = nil
 	local length = 0
 	local expected_length = 0
-	local pitches = {}
 	local ratios = {}
 	for line in io.lines(path) do
 		line = string.gsub(line, '\r', '') -- trim pesky CR characters that make debugging a pain
@@ -106,15 +59,11 @@ function read_scala_file(path)
 					-- everything else is a pitch
 					length = length + 1
 					if string.find(value, '%.') ~= nil then
-						value, num, den = parse_cents(value)
+						ratio = parse_cents(value)
 					else
-						value, num, den = parse_ratio(value)
+						ratio = parse_ratio(value)
 					end
-					pitches[length] = value
-					ratios[length] = {
-						num = num,
-						den = den
-					}
+					ratios[length] = ratio
 				end
 			end
 		end
@@ -123,7 +72,7 @@ function read_scala_file(path)
 	if length ~= expected_length then
 		error('length mismatch', length, expected_length)
 	end
-	return pitches, ratios, desc
+	return ratios, desc
 end
 
 return read_scala_file
