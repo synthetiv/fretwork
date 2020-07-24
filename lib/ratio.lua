@@ -1,7 +1,12 @@
+-- primes well beyond what anyone's likely to care about (127-limit)
 local primes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127 }
 local n_primes = #primes
 
+-- used for converting ratios to CV-friendly values
 local log2 = math.log(2)
+
+-- base notes in Ben Johnston's notation
+-- TODO: can't these go somewhere near the accidentals?
 local notes = {
 	{
 		note_name = 'C',
@@ -40,8 +45,14 @@ local notes = {
 	},
 }
 
+-- allocate one table for continue_fraction() to store data in
 local cf = {}
-function continue_fraction(f, term)
+
+--- run the continued fraction algorithm on a number
+-- @param f the initial number, usually a float
+-- @param term the number of terms in the continued fraction expression (n1 + 1/(n2 + 1/(n3 + 1/(n4 + 1/(...)))))
+-- @return a table of {n1, n2, n3 ...} as described above, and the total number of terms
+local function continued_fraction(f, term)
 	local i = math.floor(f) + 0.0
 	if term == nil then
 		term = 1
@@ -56,14 +67,17 @@ function continue_fraction(f, term)
 	if f < 0.0001 or term > 16383 then
 		return cf, term
 	end
-	return continue_fraction(1 / f, term)
+	return continued_fraction(1 / f, term)
 end
 
-function rationalize(f)
-	if f == 1 then -- short circuit
+--- attempt to translate a number to a ratio of whole numbers
+-- @param f the initial number, usually a float
+-- @return numerator, denominator
+local function rationalize(f)
+	if f == 1 then -- short circuit for efficiency
 		return 1, 1
 	end
-	local cf, term = continue_fraction(f, 0)
+	local cf, term = continued_fraction(f, 0)
 	local num = cf[term] + 0.0
 	local den = 1.0
 	term = term - 1
@@ -86,7 +100,8 @@ end
 
 --- get prime factors of a number
 -- @param n any number
-function factorize(n)
+-- @return table of factors with indices corresponding to the `primes` table (i.e. factors of 5 at index 3)
+local function factorize(n)
 	local p = 1
 	local prime = primes[p]
 	local factors = {}
@@ -298,6 +313,23 @@ function Ratio:print_factors()
 	print(string)
 end
 
+-- allocate a table for tallying up accidentals
+local ac = {
+	{ '#',  0 },
+	{ 'b',  0 },
+	{ '7',  0 },
+	{ 'L',  0 },
+	{ '^',  0 },
+	{ 'v',  0 },
+	{ '13', 0 },
+	{ 'El', 0 },
+	{ '17', 0 },
+	{ 'Ll', 0 },
+	{ '19', 0 },
+	{ '6l', 0 },
+	{ '+',  0 },
+	{ '-',  0 }
+}
 function Ratio:johnstonize()
 	print('johnstonizing...')
 
@@ -311,6 +343,11 @@ function Ratio:johnstonize()
 	local thirteens = 0
 	local seventeens = 0
 	local nineteens = 0
+	--[[ TODO:
+	local twentythrees = 0
+	local twentynines = 0
+	local thirtyones = 0
+	--]]
 
 	-- For every 3 in the numerator:
 	-- Ascend one perfect fifth. (Add a plus to the perfect fifth note if starting on any kind of B or
@@ -498,24 +535,23 @@ function Ratio:johnstonize()
 	end
 
 	local name = notes[class].note_name
-	local accidentals = {
-		['#']  = sharps,
-		['b']  = -sharps,
-		['7']  = sevens,
-		['L']  = -sevens,
-		['^']  = arrows,
-		['v']  = -arrows,
-		['13'] = thirteens,
-		['El'] = -thirteens,
-		['17'] = seventeens,
-		['Ll'] = -seventeens,
-		['19'] = nineteens,
-		['6l'] = -nineteens,
-		['+']  = pluses,
-		['-']  = -pluses
-	}
+	ac[1][2] = sharps
+	ac[2][2] = -sharps
+	ac[3][2] = sevens
+	ac[4][2] = -sevens
+	ac[5][2] = arrows
+	ac[6][2] = -arrows
+	ac[7][2] = thirteens
+	ac[8][2] = -thirteens
+	ac[9][2] = seventeens
+	ac[10][2] = -seventeens
+	ac[11][2] = nineteens
+	ac[12][2] = -nineteens
+	ac[13][2] = pluses
+	ac[14][2] = -pluses
 
-	for accidental, count in pairs(accidentals) do
+	for i, a in ipairs(ac) do
+		local accidental, count = a[1], a[2]
 		while count > 0 do
 			name = name .. accidental
 			count = count - 1
@@ -525,7 +561,10 @@ function Ratio:johnstonize()
 	local check = Ratio.dejohnstonize(name)
 	for p = 2, n_primes do -- ignore factors of 2
 		if check.factors[p] ~= factors[p] then
-			error('incorrect johnstonization')
+			print('can\'t fully johnstonize')
+			print(debug.traceback())
+			self._name = self:__tostring()
+			return
 		end
 	end
 	
@@ -533,16 +572,26 @@ function Ratio:johnstonize()
 end
 
 Ratio.accidentals = {
-	plus = Ratio.new(81, 80),
-	sharp = Ratio.new(25, 24),
-	seven = Ratio.new(35, 36),
-	arrow = Ratio.new(33, 32),
-	thirteen = Ratio.new(65, 64),
-	seventeen = Ratio.new(51, 50),
-	nineteen = Ratio.new(95, 96),
-	twentythree = Ratio.new(46, 45),
-	twentynine = Ratio.new(145, 144),
-	thirtyone = Ratio.new(31, 30)
+	['+']  = Ratio.new(81, 80),
+	['-']  = Ratio.new(80, 81),
+	['#']  = Ratio.new(25, 24),
+	['b']  = Ratio.new(24, 25),
+	['7']  = Ratio.new(35, 36),
+	['L']  = Ratio.new(36, 35),
+	['^']  = Ratio.new(33, 32),
+	['v']  = Ratio.new(32, 33),
+	['13'] = Ratio.new(65, 64),
+	['El'] = Ratio.new(64, 65),
+	['17'] = Ratio.new(51, 50),
+	['Ll'] = Ratio.new(50, 51),
+	['19'] = Ratio.new(95, 96),
+	['6l'] = Ratio.new(96, 95),
+	['23'] = Ratio.new(46, 45),
+	['EZ'] = Ratio.new(45, 46),
+	['29'] = Ratio.new(145, 144),
+	['6Z'] = Ratio.new(144, 145),
+	['31'] = Ratio.new(31, 30),
+	['lE'] = Ratio.new(30, 31)
 }
 
 function Ratio.dejohnstonize(name)
@@ -563,41 +612,11 @@ function Ratio.dejohnstonize(name)
 	while string.len(name) > 0 do
 		local char = string.sub(name, 1, 1)
 		local pair = string.sub(name, 1, 2)
-		if char == '#' then
-			ratio = ratio * accidentals.sharp
+		if accidentals[char] ~= nil then
+			ratio = ratio * accidentals[char]
 			name = string.sub(name, 2)
-		elseif char == 'b' then
-			ratio = ratio / accidentals.sharp
-			name = string.sub(name, 2)
-		elseif char == '7' then
-			ratio = ratio * accidentals.seven
-			name = string.sub(name, 2)
-		elseif char == 'L' then
-			ratio = ratio / accidentals.seven
-			name = string.sub(name, 2)
-		elseif char == '^' then
-			ratio = ratio * accidentals.arrow
-			name = string.sub(name, 2)
-		elseif char == 'v' then
-			ratio = ratio / accidentals.arrow
-			name = string.sub(name, 2)
-		elseif pair == '13' then
-			ratio = ratio * accidentals.thirteen
-			name = string.sub(name, 3)
-		elseif pair == 'El' then
-			ratio = ratio / accidentals.thirteen
-			name = string.sub(name, 3)
-		elseif pair == '17' then
-			ratio = ratio * accidentals.seventeen
-			name = string.sub(name, 3)
-		elseif pair == 'Ll' then
-			ratio = ratio / accidentals.seventeen
-			name = string.sub(name, 3)
-		elseif pair == '19' then
-			ratio = ratio * accidentals.nineteen
-			name = string.sub(name, 3)
-		elseif pair == '6l' then
-			ratio = ratio / accidentals.nineteen
+		elseif accidentals[pair] ~= nil then
+			ratio = ratio * accidentals[pair]
 			name = string.sub(name, 3)
 		else
 			print(name)
