@@ -45,6 +45,10 @@ local notes = {
 	},
 }
 
+for i, note in ipairs(notes) do
+	notes[note.note_name] = note
+end
+
 -- allocate one table for continue_fraction() to store data in
 local cf = {}
 
@@ -596,28 +600,20 @@ Ratio.accidentals = {
 
 function Ratio.dejohnstonize(name)
 	print('dejohnstonizing...')
-	local ratio = nil
-	local note_name = string.sub(name, 1, 1)
-	for n = 1, 7 do
-		if notes[n].note_name == note_name then
-			ratio = notes[n]
-		end
-	end
-	if ratio ~= nil then
-		name = string.sub(name, 2)
-	else
-		ratio = Ratio.new()
-	end
+	local ratio = Ratio.new()
 	local accidentals = Ratio.accidentals
 	while string.len(name) > 0 do
-		local char = string.sub(name, 1, 1)
-		local pair = string.sub(name, 1, 2)
-		if accidentals[char] ~= nil then
-			ratio = ratio * accidentals[char]
-			name = string.sub(name, 2)
-		elseif accidentals[pair] ~= nil then
+		local char = string.sub(name, -1, -1)
+		local pair = string.sub(name, -2, -1)
+		if accidentals[pair] ~= nil then
 			ratio = ratio * accidentals[pair]
-			name = string.sub(name, 3)
+			name = string.sub(name, 1, -3)
+		elseif accidentals[char] ~= nil then
+			ratio = ratio * accidentals[char]
+			name = string.sub(name, 1, -2)
+		elseif string.len(name) == 1 and notes[name] ~= nil then
+			ratio = ratio * notes[name]
+			name = string.sub(name, 1, -2)
 		else
 			print(name)
 			error('can\'t dejohnstonize')
