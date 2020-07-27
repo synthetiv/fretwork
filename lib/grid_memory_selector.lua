@@ -68,7 +68,7 @@ MemorySelector.new = function(x, y, width, height)
 		-- masks: pentatonic scales
 		local pitches = {}
 		for n = 1, 5 do
-			pitches[n] = pentatonic[n] -- ((pentatonic[n] + m * 7) % 12) / 12
+			pitches[n] = ((pentatonic[n] + (m - 1) * 7) % 12) / 12
 		end
 		memory.pitch.mask[m] = pitches
 
