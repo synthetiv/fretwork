@@ -139,6 +139,21 @@ function ScaleEditor:delete_class(class)
 	self:update()
 end
 
+-- transpose the entire scale
+function ScaleEditor:transpose(num, den)
+	local shift = Ratio.new(num, den)
+	local active_values = self.scale:get_active_values()
+	for i, v in ipairs(active_values) do
+		active_values[i] = v + shift.value
+	end
+	self.root = self.pitches[1] * shift
+	self.root:reduce(self.span)
+	self:update()
+	self.scale:set_active_values(active_values)
+	self.scale:apply_edits()
+end
+
+-- change the root pitch of the scale, without changing absolute pitches
 function ScaleEditor:reroot(class)
 	if class == nil then
 		class = self.selected_ratio + 1
@@ -163,6 +178,8 @@ function ScaleEditor:reroot(class)
 	self:update()
 	self.selected_ratio = 0
 end
+
+-- TODO: another function to respell note names only, without changing pitches
 
 function ScaleEditor:insert_ratio(num, den)
 	self.ratios[self.length] = Ratio.new(num, den)
