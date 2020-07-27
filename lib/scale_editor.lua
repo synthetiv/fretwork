@@ -137,7 +137,7 @@ end
 
 function ScaleEditor:multiply_class(class, num, den)
 	if class == nil then
-		r = self.selected_ratio + 1
+		class = self.selected_ratio + 1
 	end
 	if class < 2 or class > self.length then
 		error('invalid ratio index: ' .. class)
