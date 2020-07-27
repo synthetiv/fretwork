@@ -225,8 +225,104 @@ function ScaleEditor:redraw()
 	screen.level(active and 10 or 3)
 	screen.font_face(1)
 	screen.font_size(8)
-	screen.move(3, 28)
-	screen.text(ratio.name)
+	
+	local x = 3
+	local name = ratio.name
+	local char = string.sub(name, 1, 1)
+	name = string.sub(name, 2)
+	screen.move(x, 23)
+	screen.text(char)
+	x = x + screen.text_extents(char) + 1
+	while string.len(name) > 0 do
+		char = string.sub(name, 1, 1)
+		name = string.sub(name, 2)
+		screen.move(x, 23)
+		if char == 'b' then
+			screen.move_rel(0.5, -5)
+			screen.line_rel(0, 5)
+			screen.move_rel(0.5, -0.5)
+			screen.line_rel(1, 0)
+			screen.move_rel(0.5, -0.5)
+			screen.line_rel(0, -2)
+			screen.move_rel(-0.5, 0.5)
+			screen.line_rel(-1, 0)
+			screen.stroke()
+			x = x + 4
+		elseif char == '^' then
+			screen.move_rel(0, -2.5)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, -1)
+			screen.line_rel(1, 0)
+			screen.move_rel(0.5, -1.5)
+			screen.line_rel(0, 5)
+			screen.move_rel(0.5, -3.5)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(1, 0)
+			screen.stroke()
+			x = x + 6
+		elseif char == 'v' then
+			screen.move_rel(0, -2.5)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(1, 0)
+			screen.move_rel(0.5, 1.5)
+			screen.line_rel(0, -5)
+			screen.move_rel(0.5, 3.5)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, -1)
+			screen.line_rel(1, 0)
+			screen.stroke()
+			x = x + 6
+		elseif char == 'E' then
+			screen.move_rel(1, -4.5)
+			screen.line_rel(3, 0)
+			screen.move_rel(-4, 1)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(2, 0)
+			screen.move_rel(-3, 1)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(3, 0)
+			screen.stroke()
+			x = x + 5
+		elseif char == 'l' then
+			screen.move_rel(0.5, -5)
+			screen.line_rel(0, 5)
+			screen.move_rel(0.5, -0.5)
+			screen.line_rel(1, 0)
+			screen.stroke()
+			x = x + 3
+		elseif char == 'L' then
+			screen.move_rel(0, -0.5)
+			screen.line_rel(4, 0)
+			screen.move_rel(-4, -0.5)
+			screen.line_rel(1, 0)
+			screen.move_rel(0, -1)
+			screen.line_rel(1, 0)
+			screen.move_rel(0.5, -0.5)
+			screen.line_rel(0, -2)
+			screen.stroke()
+			x = x + 5
+		elseif char == 'Z' then
+			screen.move_rel(0, -4.5)
+			screen.line_rel(4, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(-1, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(-2, 0)
+			screen.move_rel(0, 1)
+			screen.line_rel(-1, 0)
+			screen.move_rel(1, 1)
+			screen.line_rel(3, 0)
+			screen.stroke()
+			x = x + 5
+		else
+			screen.text(char)
+			x = x + screen.text_extents(char) + 1
+		end
+	end
 
 	screen.move(3, 42)
 	if ratio.factors ~= nil then
