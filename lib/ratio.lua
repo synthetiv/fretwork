@@ -153,7 +153,6 @@ end
 
 --- recalculate factors based on num/den, then simplify if possible
 function Ratio:factorize()
-	print('factorizing...')
 	local factors = factorize(self.num)
 	local den_factors = factorize(self.den)
 	-- if we couldn't factorize either the numerator or the denominator, set factors to nil to
@@ -171,7 +170,6 @@ function Ratio:factorize()
 end
 
 --- set factors property and simplify num/den if possible
--- TODO: reduce!
 function Ratio:update_from_factors(factors)
 	if factors == nil then
 		factors = self._factors
@@ -190,6 +188,36 @@ function Ratio:update_from_factors(factors)
 	self.num = num
 	self.den = den
 	self._dirty = false
+end
+
+--- reduce a ratio to [1/1, span)
+-- @param span a maximum ratio (usually an octave)
+-- TODO: I sorta don't like that this mutates self
+function Ratio:reduce(span)
+	if getmetatable(span) ~= Ratio then
+		span = Ratio.new(span)
+	end
+	local i = 1
+	while self >= span do
+		self.num = self.num * span.den
+		self.den = self.den * span.num
+		i = i + 1
+		if i > 10 then
+			print('too many loops down', self.num .. '/' .. self.den)
+			return
+		end
+		self._dirty = true
+	end
+	while self < 1 do
+		self.num = self.num * span.num
+		self.den = self.den * span.den
+		i = i + 1
+		if i > 10 then
+			print('too many loops up', self.num .. '/' .. self.den)
+			return
+		end
+		self._dirty = true
+	end
 end
 
 function Ratio:__index(key)
@@ -216,6 +244,9 @@ function Ratio:__index(key)
 end
 
 function Ratio:__mul(other)
+	if getmetatable(self) ~= Ratio then
+		self = Ratio.new(self)
+	end
 	if getmetatable(other) ~= Ratio then
 		other = Ratio.new(other)
 	end
@@ -235,6 +266,9 @@ function Ratio:__mul(other)
 end
 
 function Ratio:__div(other)
+	if getmetatable(self) ~= Ratio then
+		self = Ratio.new(self)
+	end
 	if getmetatable(other) ~= Ratio then
 		other = Ratio.new(other)
 	end
@@ -252,7 +286,9 @@ function Ratio:__div(other)
 end
 
 function Ratio:__lt(other)
-	if type(other) == 'number' then
+	if type(self) == 'number' then
+		return self < other.quotient
+	elseif type(other) == 'number' then
 		return self.quotient < other
 	elseif getmetatable(other) ~= Ratio then
 		other = Ratio.new(other)
@@ -261,7 +297,9 @@ function Ratio:__lt(other)
 end
 
 function Ratio:__lte(other)
-	if type(other) == 'number' then
+	if type(self) == 'number' then
+		return self <= other.quotient
+	elseif type(other) == 'number' then
 		return self.quotient <= other
 	elseif getmetatable(other) ~= Ratio then
 		other = Ratio.new(other)
@@ -270,7 +308,9 @@ function Ratio:__lte(other)
 end
 
 function Ratio:__gt(other)
-	if type(other) == 'number' then
+	if type(self) == 'number' then
+		return self > other.quotient
+	elseif type(other) == 'number' then
 		return self.quotient > other
 	elseif getmetatable(other) ~= Ratio then
 		other = Ratio.new(other)
@@ -279,7 +319,9 @@ function Ratio:__gt(other)
 end
 
 function Ratio:__gte(other)
-	if type(other) == 'number' then
+	if type(self) == 'number' then
+		return self >= other.quotient
+	elseif type(other) == 'number' then
 		return self.quotient >= other
 	elseif getmetatable(other) ~= Ratio then
 		other = Ratio.new(other)
@@ -335,8 +377,6 @@ local ac = {
 	{ '-',  0 }
 }
 function Ratio:johnstonize()
-	print('johnstonizing...')
-
 	local factors = self.factors
 	local note = 1 -- C
 	local class = 1
@@ -599,7 +639,6 @@ Ratio.accidentals = {
 }
 
 function Ratio.dejohnstonize(name)
-	print('dejohnstonizing...')
 	local ratio = Ratio.new()
 	local accidentals = Ratio.accidentals
 	while string.len(name) > 0 do

@@ -15,27 +15,29 @@ function Scale.new(class_values)
 	scale.classes_active = {}
 	scale.next_classes_active = {}
 	scale.active_values = { 0 } -- just the root note
-	scale:set_class_values(class_values)
+	scale:set_class_values(class_values, 0)
 	return scale
 end
 
 --- update scale to a new set of pitch class values, and calculate values across all spans
 -- @param class_values table of pitch class values
-function Scale:set_class_values(class_values)
+-- @param root shift all values up or down by this much
+function Scale:set_class_values(class_values, root)
 	local length = #class_values
 	local span = class_values[length]
 	local values = self.values
 	local class = 1
 	local current_span = 0
 	for p = 0, center_pitch_id do
-		values[center_pitch_id + p + 1] = class_values[class] + current_span * span
-		values[center_pitch_id - p] = class_values[length - class + 1] - (current_span + 1) * span
+		values[center_pitch_id + p + 1] = root + class_values[class] + current_span * span
+		values[center_pitch_id - p] = root + class_values[length - class + 1] - (current_span + 1) * span
 		class = class + 1
 		if class > length then
 			class = 1
 			current_span = current_span + 1
 		end
 	end
+	self.root = root
 	self.class_values = class_values
 	self.length = length
 	self.span = span
@@ -75,7 +77,7 @@ function Scale:get_active_values()
 	local i = 1
 	for class, is_active in ipairs(self.next_classes_active) do
 		if is_active then
-			active_values[i] = self.class_values[(class - 2) % self.length + 1]
+			active_values[i] = self.root + self.class_values[(class - 2) % self.length + 1]
 			i = i + 1
 		end
 	end

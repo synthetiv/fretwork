@@ -8,6 +8,9 @@ function ScaleEditor.new(scale)
 	local editor = setmetatable({}, ScaleEditor)
 	editor.scale = scale
 	editor.ratios = {}
+	editor.span = Ratio.new(2)
+	editor.root = Ratio.new()
+	editor.pitches = {}
 	editor.selected_ratio = 0
 	editor.held_keys = {
 		ctrl = false,
@@ -28,40 +31,11 @@ function ScaleEditor:select_pitch(pitch_id)
 	self.selected_ratio = self.scale:get_class(pitch_id) - 1
 end
 
---- reduce a ratio to [1/1, span_ratio)
--- @param r a ratio table containing `num` and `den` properties; a `factors` property will be added
-function ScaleEditor:reduce_ratio(r)
-	local i = 1
-	local s = self.span_ratio
-	local span = s.num / s.den
-	while r.num / r.den >= span do
-		print('down', r.num .. '/' .. r.den)
-		r.num = r.num * s.den
-		r.den = r.den * s.num
-		i = i + 1
-		if i > 10 then
-			print('too many loops down', r.num .. '/' .. r.den)
-			return
-		end
-	end
-	while r.den / r.num > span do
-		print('up', r.num .. '/' .. r.den)
-		r.num = r.num * s.num
-		r.den = r.den * s.den
-		i = i + 1
-		if i > 10 then
-			print('too many loops up', r.num .. '/' .. r.den)
-			return
-		end
-	end
-	r._dirty = true
-end
-
 function ScaleEditor:print_ratios()
 	for r = 1, self.length do
-		local ratio = (r == self.length and self.span_ratio or self.ratios[p])
-		local marker = (self:is_class_active(r + 1) and '*' or ' ')
-		print(string.format('%d. %s %s', r, marker, ratio))
+		local ratio = (r == 1 and self.span or self.ratios[r - 1])
+		local marker = (self:is_class_active(r) and '*' or ' ')
+		print(string.format('%d. %s %s -> %s', r, marker, ratio, self.pitches[r]))
 	end
 end
 
@@ -79,29 +53,35 @@ function ScaleEditor:update()
 
 	local ratios = self.ratios
 	local count = #ratios
+	local span = self.span
+	local root = self.root
+	local pitches = self.pitches
+	
 	local selected = self.ratios[self.selected_ratio]
 
-	for i = 1, count do
-		self:reduce_ratio(ratios[i])
+	for r = 1, count do
+		ratios[r]:reduce(span)
 	end
+	
 	table.sort(ratios, sort_ratios)
 
 	self.selected_ratio = 0
+	pitches[1] = root
 	for r = 1, count do
 		if ratios[r] == selected then
 			self.selected_ratio = r
 		end
+		pitches[r + 1] = ratios[r] * root
 	end
 
-	self.span_ratio._dirty = true -- TODO: why did I think this was necessary...?
-	self.length = #ratios + 1 -- include span ratio in length
+	self.length = count + 1 -- include span ratio in length
 
 	local class_values = {}
-	for i, ratio in ipairs(ratios) do
-		class_values[i] = ratio.value
+	for i = 1, count do
+		class_values[i] = self.ratios[i].value
 	end
-	class_values[self.length] = self.span_ratio.value
-	self.scale:set_class_values(class_values)
+	class_values[self.length] = span.value
+	self.scale:set_class_values(class_values, root.value)
 	
 	self:print_ratios()
 
@@ -155,7 +135,33 @@ function ScaleEditor:delete_class(class)
 		return
 	end
 	table.remove(self.ratios, class - 1)
+	-- TODO: select next lowest ratio
 	self:update()
+end
+
+function ScaleEditor:reroot(class)
+	if class == nil then
+		class = self.selected_ratio + 1
+	end
+	if class < 2 or class > self.length then
+		error('invalid ratio index: ' .. class)
+		return
+	end
+	local root = self.pitches[class]
+	root:reduce(self.span)
+	local shift = self.ratios[class - 1]
+	for r = 1, self.length - 1 do
+		if r == class - 1 then
+			-- shift/shift = 1/1, which is always & already in the scale; the pitch we really want is 1/shift
+			self.ratios[r] = 1 / shift
+		else
+			local str = self.ratios[r]:__tostring()
+			self.ratios[r] = self.ratios[r] / shift
+		end
+	end
+	self.root = root
+	self:update()
+	self.selected_ratio = 0
 end
 
 function ScaleEditor:insert_ratio(num, den)
@@ -173,7 +179,7 @@ function ScaleEditor:read_scala_file(path)
 	for i = 1, self.length do
 		setmetatable(ratios[i], Ratio)
 	end
-	self.span_ratio = ratios[self.length]
+	self.span = ratios[self.length]
 	ratios[self.length] = nil
 	-- sort, reduce, and update scale ratios
 	self.ratios = ratios
@@ -192,10 +198,11 @@ function ScaleEditor:redraw()
 	--
 	local selected_ratio = self.selected_ratio
 	local class = selected_ratio + 1
+	local pitch = self.pitches[class]
 	local active = self:is_class_active()
 	local ratio = self.ratios[selected_ratio]
 	if class == 1 then
-		ratio = self.span_ratio
+		ratio = self.span
 	end
 
 	screen.level(active and 10 or 3)
@@ -227,7 +234,7 @@ function ScaleEditor:redraw()
 	screen.font_size(8)
 	
 	local x = 3
-	local name = ratio.name
+	local name = pitch.name
 	local char = string.sub(name, 1, 1)
 	name = string.sub(name, 2)
 	screen.move(x, 23)
@@ -354,16 +361,16 @@ function ScaleEditor:redraw()
 		end
 	end
 
-	local span_value = self.span_ratio.value
+	local span_value = self.span.value
 	local level = 1
 	local len = 1
-	if self.selected_ratio == 0 and self:is_class_active(1) then
+	if class == 1 and self:is_class_active(1) then
 		level = 15
 		len = 5
 	elseif self:is_class_active(1) then
 		level = 7
 		len = 4
-	elseif self.selected_ratio == 0 then
+	elseif class == 1 then
 		level = 5
 	end
 	screen.level(level)
@@ -377,13 +384,13 @@ function ScaleEditor:redraw()
 		local x = math.floor(127 * self.ratios[r].value / span_value) + 0.5
 		level = 1
 		len = 1
-		if self.selected_ratio == r and self:is_class_active(r + 1) then
+		if selected_ratio == r and self:is_class_active(r + 1) then
 			level = 15
 			len = 5
 		elseif self:is_class_active(r + 1) then
 			level = 7
 			len = 4
-		elseif self.selected_ratio == r then
+		elseif selected_ratio == r then
 			level = 5
 		end
 		screen.move(x, 64)
@@ -417,6 +424,13 @@ function ScaleEditor:keyboard_event(type, code, value)
 			self.held_keys.alt = self.held_keys.lalt or self.held_keys.ralt
 		elseif value == 1 then
 			if self.held_keys.alt and not (self.held_keys.ctrl or self.held_keys.shift) then
+				if code == hid.codes.KEY_ENTER then
+					self:toggle_class()
+				elseif code == hid.codes.KEY_BACKSPACE or code == hid.codes.KEY_DELETE then
+					self:delete_class()
+				elseif code == hid.codes.KEY_DOT then
+					self:reroot()
+				end
 			elseif not (self.held_keys.ctrl or self.held_keys.alt or self.held_keys.shift) then
 				if code == hid.codes.KEY_RIGHTBRACE then
 					self.selected_ratio = (self.selected_ratio + 1) % self.scale.length
@@ -430,7 +444,6 @@ function ScaleEditor:keyboard_event(type, code, value)
 			end
 		end
 	end
-	print('editor key', type, code, value)
 end
 
 return ScaleEditor
