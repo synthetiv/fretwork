@@ -11,7 +11,6 @@ function ScaleEditor.new(scale)
 	editor.span = Ratio.new(2)
 	editor.root = Ratio.new()
 	editor.pitches = {}
-	editor.selected_ratio = 0
 	editor.held_keys = {
 		ctrl = false,
 		lctrl = false,
@@ -21,14 +20,40 @@ function ScaleEditor.new(scale)
 		rshift = false,
 		alt = false,
 		lalt = false,
-		ralt = false
+		ralt = false,
+		numlock = false,
+		plus = false
 	}
+	editor.class = 0
+	editor.ratio = nil
+	editor.input = ''
+	editor.cursor = 1
+	editor.num = 1
+	editor.den = 1
+	editor.focus_field = 0
+	editor.n_fields = 2
 	editor.on_update = function() end
 	return editor
 end
 
+function ScaleEditor:select(class)
+	if class ~= nil then
+		self.class = class
+	end
+	self.input = ''
+	self.cursor = 1
+	self.focus_field = 0
+	if self.class == 1 then
+		self.ratio = self.span
+	else
+		self.ratio = self.ratios[self.class - 1]
+	end
+	self.num = self.ratio.num
+	self.den = self.ratio.den
+end
+
 function ScaleEditor:select_pitch(pitch_id)
-	self.selected_ratio = self.scale:get_class(pitch_id) - 1
+	self:select(self.scale:get_class(pitch_id))
 end
 
 function ScaleEditor:print_ratios()
@@ -57,19 +82,17 @@ function ScaleEditor:update()
 	local root = self.root
 	local pitches = self.pitches
 	
-	local selected = self.ratios[self.selected_ratio]
-
 	for r = 1, count do
 		ratios[r]:reduce(span)
 	end
 	
 	table.sort(ratios, sort_ratios)
 
-	self.selected_ratio = 0
+	self.class = 1
 	pitches[1] = root
 	for r = 1, count do
-		if ratios[r] == selected then
-			self.selected_ratio = r
+		if ratios[r] == self.ratio then
+			self.class = r + 1
 		end
 		pitches[r + 1] = ratios[r] * root
 	end
@@ -84,51 +107,53 @@ function ScaleEditor:update()
 	self.scale:set_class_values(class_values, root.value)
 	
 	self:print_ratios()
-
+	self:select()
 	self:on_update()
 end
 
 function ScaleEditor:is_class_active(class)
 	if class == nil then
-		class = self.selected_ratio + 1
+		class = self.class
 	end
 	return self.scale:is_class_active(class)
 end
 
 function ScaleEditor:toggle_class(class)
 	if class == nil then
-		class = self.selected_ratio + 1
+		class = self.class
 	end
 	return self.scale:toggle_class(class)
 end
 
-function ScaleEditor:replace_class(class, num, den)
-	if class == nil then
-		class = self.selected_ratio + 1
+function ScaleEditor:replace_class(class, ratio)
+	if ratio == nil then
+		ratio = class
+		class = self.class
 	end
 	if class < 2 or class > self.length then
 		error('invalid ratio index: ' .. class)
 		return
 	end
-	self.selected_ratio = class - 1
-	self.ratios[self.selected_ratio] = Ratio.new(num, den)
+	self.ratios[class - 1] = Ratio.new(ratio)
+	self:select(class)
 	self:update()
 end
 
-function ScaleEditor:multiply_class(class, num, den)
-	if class == nil then
-		class = self.selected_ratio + 1
+function ScaleEditor:multiply_class(class, ratio)
+	if ratio == nil then
+		ratio = class
+		class = self.class
 	end
 	if class < 2 or class > self.length then
 		error('invalid ratio index: ' .. class)
 		return
 	end
-	self:replace_class(class, self.ratios[class] * Ratio.new(num, den))
+	self:replace_class(class, self.ratios[class] * ratio)
 end
 
 function ScaleEditor:delete_class(class)
 	if class == nil then
-		class = self.selected_ratio + 1
+		class = self.class
 	end
 	if class < 2 or class > self.length then
 		error('invalid ratio index: ' .. class)
@@ -140,8 +165,8 @@ function ScaleEditor:delete_class(class)
 end
 
 -- transpose the entire scale
-function ScaleEditor:transpose(num, den)
-	local shift = Ratio.new(num, den)
+function ScaleEditor:transpose(ratio)
+	local shift = Ratio.new(ratio)
 	local active_values = self.scale:get_active_values()
 	for i, v in ipairs(active_values) do
 		active_values[i] = v + shift.value
@@ -156,7 +181,7 @@ end
 -- change the root pitch of the scale, without changing absolute pitches
 function ScaleEditor:reroot(class)
 	if class == nil then
-		class = self.selected_ratio + 1
+		class = self.class
 	end
 	if class < 2 or class > self.length then
 		error('invalid ratio index: ' .. class)
@@ -176,15 +201,31 @@ function ScaleEditor:reroot(class)
 	end
 	self.root = root
 	self:update()
-	self.selected_ratio = 0
+	self:select(1)
 end
 
 -- TODO: another function to respell note names only, without changing pitches
 
-function ScaleEditor:insert_ratio(num, den)
-	self.ratios[self.length] = Ratio.new(num, den)
-	self.selected_ratio = self.length
+function ScaleEditor:insert(ratio)
+	self.ratios[self.length] = Ratio.new(ratio)
+	self:select(self.length + 1)
 	self:update()
+end
+
+--- find the pitch class nearest to ratio and retune it to match
+-- @param ratio target ratio
+-- @param insert_threshold if nearest found class is > than this many cents away from `ratio`, inset `ratio` as a new pitch class instead or retuning
+function ScaleEditor:retune(ratio, insert_threshold)
+	ratio = Ratio.new(ratio)
+	local nearest_pitch_id = self.scale:get_nearest_pitch_id(ratio.value)
+	if insert_threshold ~= nil then
+		cents_diff = math.abs(ratio.value - self.scale.values[nearest_pitch_id]) * 1200
+		if cents_diff > insert_threshold then
+			self:insert(ratio)
+			return
+		end
+	end
+	self:replace_class(self.scale:get_class(nearest_pitch_id), ratio)
 end
 
 function ScaleEditor:read_scala_file(path)
@@ -205,22 +246,71 @@ function ScaleEditor:read_scala_file(path)
 	print(description)
 end
 
+function ScaleEditor:split_input_at_cursor()
+	local before = string.sub(self.input, 1, self.cursor - 1)
+	local after = string.sub(self.input, self.cursor, -1)
+	return before, after
+end
+
+function ScaleEditor:draw_field(x, y, value, level, right)
+	if self.input ~= '' then
+		local before, after = self:split_input_at_cursor()
+		local width_before, height_before = screen.text_extents(before)
+		local width_after, height_after = screen.text_extents(after)
+		local height = math.max(height_before, height_after) -- one of these may be 0
+
+		if right then
+			screen.move(x - width_before - width_after - 3, y)
+		else
+			screen.move(x, y)
+		end
+		screen.level(level)
+		screen.text(before)
+
+		if right then
+			screen.move(x - width_after - 0.5, y + 1)
+		else
+			screen.move(x + width_before + 0.5, y + 1)
+		end
+		screen.line_rel(0, -height)
+		screen.level(blink_slow and 15 or 3)
+		screen.stroke()
+
+		if right then
+			screen.move(x - width_after, y)
+		else
+			screen.move(x + width_before + 2, y)
+		end
+		screen.level(level)
+		screen.text(after)
+	else
+		local width, height = screen.text_extents(value)
+		if right then
+			screen.rect(x - width - 1, y - height + 2, width + 2, height - 1)
+			screen.level(1)
+			screen.fill()
+			screen.move(x - width, y)
+		else
+			screen.rect(x - 1, y - height + 2, width + 2, height - 1)
+			screen.level(1)
+			screen.fill()
+			screen.move(x, y)
+		end
+		screen.level(blink_slow and level or math.floor(level / 2))
+		screen.text(value)
+	end
+end
+
 function ScaleEditor:redraw()
 	screen.clear()
 
 	screen.font_face(1)
 	screen.font_size(8)
-	-- large: 29/13 (mono), 27/10 (contrasty mono), 30/13 (italic), 32/13 (same, light), 34/16 (italic), 36/16 (same, light)
-	-- tiny: 25/6
-	--
-	local selected_ratio = self.selected_ratio
-	local class = selected_ratio + 1
+
+	local class = self.class
 	local pitch = self.pitches[class]
 	local active = self:is_class_active()
-	local ratio = self.ratios[selected_ratio]
-	if class == 1 then
-		ratio = self.span
-	end
+	local ratio = self.ratio
 
 	screen.level(active and 10 or 3)
 	screen.move(3, 14)
@@ -230,25 +320,39 @@ function ScaleEditor:redraw()
 		screen.text(string.format('%d.', class))
 	end
 
-	screen.level(active and 15 or 7)
 	screen.font_face(27)
 	screen.font_size(10)
 
-	screen.move(61, 12)
-	screen.text_right(string.format('%.0f', ratio.num))
+	if self.focus_field == 1 then
+		self:draw_field(61, 12, string.format('%.0f', self.num), active and 15 or 7, true)
+	else
+		screen.move(61, 12)
+		screen.level(active and 15 or 7)
+		screen.text_right(string.format('%.0f', self.num))
+	end
 
 	screen.level(active and 4 or 1)
 	screen.move(58, 21)
 	screen.line(68, 1)
 	screen.stroke()
 
-	screen.level(active and 15 or 7)
-	screen.move(66, 17)
-	screen.text(string.format('%.0f', ratio.den))
+	if self.focus_field == 2 then
+		self:draw_field(66, 17, string.format('%.0f', self.den), active and 15 or 7)
+	else
+		screen.move(66, 17)
+		screen.level(active and 15 or 7)
+		screen.text(string.format('%.0f', self.den))
+	end
 
-	screen.level(active and 10 or 3)
+	if self.input ~= '' or self.num ~= ratio.num or self.den ~= ratio.den then
+		screen.move_rel(3, -7)
+		screen.level((self.focus_field == 0 and blink_slow and 15) or 3)
+		screen.text('*')
+	end
+
 	screen.font_face(1)
 	screen.font_size(8)
+	screen.level(active and 10 or 3)
 	
 	local x = 3
 	local name = pitch.name
@@ -378,6 +482,8 @@ function ScaleEditor:redraw()
 		end
 	end
 
+	-- TODO: draw dots above/below selected pitch instead of changing length
+	-- (keep highlight, though)
 	local span_value = self.span.value
 	local level = 1
 	local len = 1
@@ -397,17 +503,17 @@ function ScaleEditor:redraw()
 	screen.move(127.5, 64)
 	screen.line_rel(0, -len)
 	screen.stroke()
-	for r = 1, self.length - 1 do
-		local x = math.floor(127 * self.ratios[r].value / span_value) + 0.5
+	for c = 2, self.length do
+		local x = math.floor(127 * self.ratios[c - 1].value / span_value) + 0.5
 		level = 1
 		len = 1
-		if selected_ratio == r and self:is_class_active(r + 1) then
+		if class == c and self:is_class_active(c) then
 			level = 15
 			len = 5
-		elseif self:is_class_active(r + 1) then
+		elseif self:is_class_active(c) then
 			level = 7
 			len = 4
-		elseif selected_ratio == r then
+		elseif class == c then
 			level = 5
 		end
 		screen.move(x, 64)
@@ -419,8 +525,54 @@ function ScaleEditor:redraw()
 	screen.update()
 end
 
+function ScaleEditor:type(char)
+	if self.focus_field ~= 0 then
+		local before, after = self:split_input_at_cursor()
+		self.input = before .. char .. after
+		self.cursor = self.cursor + 1
+	end
+end
+
+function ScaleEditor:direction_key(direction)
+	-- directions: 1 = left, 2 = down, 3 = up, 4 = right
+	if self.focus_field == 0 then
+		if direction == 1 then
+			self:select((self.class - 2) % self.length + 1)
+		elseif direction == 4 then
+			self:select(self.class % self.length + 1)
+		end
+	else
+		if direction == 1 then
+			self.cursor = math.max(1, self.cursor - 1)
+		elseif direction == 2 then
+			self.cursor = string.len(self.input) + 1
+		elseif direction == 3 then
+			self.cursor = 1
+		elseif direction == 4 then
+			self.cursor = math.min(string.len(self.input) + 1, self.cursor + 1)
+		end
+	end
+end
+
+function ScaleEditor:focus_next()
+	if self.input ~= '' then
+		if self.focus_field == 1 then
+			self.num = tonumber(self.input)
+		elseif self.focus_field == 2 then
+			self.den = tonumber(self.input)
+		end
+		self.input = ''
+	end
+	self.cursor = 1
+	if self.held_keys.plus or self.held_keys.shift then
+		self.focus_field = (self.focus_field - 1) % (self.n_fields + 1)
+	else
+		self.focus_field = (self.focus_field + 1) % (self.n_fields + 1)
+	end
+end
+
 function ScaleEditor:keyboard_event(type, code, value)
-	if type == 1 then
+	if type == hid.types.EV_KEY then
 		if code == hid.codes.KEY_LEFTCTRL then
 			self.held_keys.lctrl = value ~= 0
 			self.held_keys.ctrl = self.held_keys.lctrl or self.held_keys.rctrl
@@ -439,26 +591,89 @@ function ScaleEditor:keyboard_event(type, code, value)
 		elseif code == hid.codes.KEY_RIGHTALT then
 			self.held_keys.ralt = value ~= 0
 			self.held_keys.alt = self.held_keys.lalt or self.held_keys.ralt
+		elseif code == hid.codes.KEY_KPPLUS then
+			self.held_keys.plus = value ~= 0
 		elseif value == 1 then
-			if self.held_keys.alt and not (self.held_keys.ctrl or self.held_keys.shift) then
-				if code == hid.codes.KEY_ENTER then
+			if (self.held_keys.alt or self.held_keys.plus) and not (self.held_keys.ctrl or self.held_keys.shift) then
+				if code == hid.codes.KEY_ENTER or code == hid.codes.KEY_KP5 then
 					self:toggle_class()
-				elseif code == hid.codes.KEY_BACKSPACE or code == hid.codes.KEY_DELETE then
+					return
+				elseif code == hid.codes.KEY_BACKSPACE or code == hid.codes.KEY_KPDOT then
 					self:delete_class()
-				elseif code == hid.codes.KEY_DOT then
+					return
+				elseif code == hid.codes.KEY_DOT or code == hid.codes.KEY_KP7 then
 					self:reroot()
+					return
+				elseif code == hid.codes.KEY_KP1 then
+					-- TODO: undo
+					return
 				end
 			elseif not (self.held_keys.ctrl or self.held_keys.alt or self.held_keys.shift) then
+				if self.held_keys.numlock then
+					if code == hid.codes.KEY_1 or code == hid.codes.KEY_KP1 then
+						self:type('1')
+					elseif code == hid.codes.KEY_2 or code == hid.codes.KEY_KP2 then
+						self:type('2')
+					elseif code == hid.codes.KEY_3 or code == hid.codes.KEY_KP3 then
+						self:type('3')
+					elseif code == hid.codes.KEY_4 or code == hid.codes.KEY_KP4 then
+						self:type('4')
+					elseif code == hid.codes.KEY_5 or code == hid.codes.KEY_KP5 then
+						self:type('5')
+					elseif code == hid.codes.KEY_6 or code == hid.codes.KEY_KP6 then
+						self:type('6')
+					elseif code == hid.codes.KEY_7 or code == hid.codes.KEY_KP7 then
+						self:type('7')
+					elseif code == hid.codes.KEY_8 or code == hid.codes.KEY_KP8 then
+						self:type('8')
+					elseif code == hid.codes.KEY_9 or code == hid.codes.KEY_KP9 then
+						self:type('9')
+					elseif self.input ~= '' and (code == hid.codes.KEY_0 or code == hid.codes.KEY_KP0) then
+						self:type('0')
+					end
+				else
+					if code == hid.codes.KEY_KP1 or code == hid.codes.KEY_KP2 then
+						self:direction_key(2)
+						return
+					elseif code == hid.codes.KEY_KP4 then
+						self:direction_key(1)
+						return
+					elseif code == hid.codes.KEY_KP6 then
+						self:direction_key(4)
+						return
+					elseif code == hid.codes.KEY_KP7 or code == hid.codes.KEY_KP8 then
+						self:direction_key(3)
+					end
+				end
+				-- TODO: other direction keys: left, right, up, down, home, end, fwd delete, ctrl keys...
 				if code == hid.codes.KEY_RIGHTBRACE then
-					self.selected_ratio = (self.selected_ratio + 1) % self.scale.length
-					dirty = true
+					self:direction_key(4)
 					return
 				elseif code == hid.codes.KEY_LEFTBRACE then
-					self.selected_ratio = (self.selected_ratio - 1) % self.scale.length
-					dirty = true
+					self:direction_key(1)
+					return
+				elseif code == hid.codes.KEY_BACKSPACE then
+					local before, after = self:split_input_at_cursor()
+					self.input = string.sub(before, 1, -2) .. after
+					self.cursor = math.max(1, self.cursor - 1)
 					return
 				end
 			end
+			if code == hid.codes.KEY_TAB then
+				self:focus_next()
+				return
+			elseif code == hid.codes.KEY_ENTER or code == hid.codes.KEY_KPENTER then
+				if self.focus_field == 0 then
+					self:replace_class(self.num / self.den)
+					return
+				else
+					self:focus_next()
+				end
+			end
+		end
+	elseif type == hid.types.EV_LED then
+		if code == hid.codes.LED_NUML then
+			self.held_keys.numlock = value ~= 0
 		end
 	end
 end
