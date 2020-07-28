@@ -23,12 +23,10 @@ function Keyboard.new(x, y, width, height, scale)
 end
 
 function Keyboard:tune()
-	local root_value = self.scale.values[self.scale.center_pitch_id]
-	local fourth_pitch_id = self.scale:get_nearest_pitch_id(root_value + fourth_value)
-	local fourth = self.scale:get_class(fourth_pitch_id) - 1
+	local average_fourth_steps = math.floor(fourth_value * self.scale.length + 0.5)
 	local half_scale = math.floor(self.scale.length / 2 + 0.5)
 	for row = self.y, self.y2 do
-		self.row_offsets[row] = self.scale.center_pitch_id + (self.y_center - row) * fourth + half_scale
+		self.row_offsets[row] = self.scale.center_pitch_id + (self.y_center - row) * average_fourth_steps + half_scale
 	end
 end
 
