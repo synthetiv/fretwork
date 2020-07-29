@@ -89,9 +89,20 @@ end
 
 Ratio = {}
 
+--- create a new Ratio
+-- @param num numerator, float, table of factors, or a Ratio
+-- @param den denominator or nil
+-- @return a new Ratio or, if num is a Ratio, num, unmodified
 function Ratio.new(num, den)
+	local factors_arg = nil
 	if type(num) == 'table' then
-		return num
+		if getmetatable(num) == Ratio then
+			return num
+		else
+			factors_arg = num
+			num = 1
+			den = 1
+		end
 	elseif type(num) == 'string' then
 		return Ratio.dejohnstonize(num)
 	elseif type(num) ~= 'number' then
@@ -103,63 +114,17 @@ function Ratio.new(num, den)
 	local r = {
 		_num = num,
 		_den = den,
-		set_num = num,
-		set_den = den,
-		_factors = {},
-		_dirty = true,
+		_factors = factors_arg or {},
+		_dirty = factors_arg == nil,
 		_name = ''
 	}
-	return setmetatable(r, Ratio)
+	setmetatable(r, Ratio)
+	-- calculate factors or num/den, whichever we don't already have
+	r:simplify()
+	return r
 end
 
--- base notes in Ben Johnston's notation (look up by name or number)
-Ratio.notes = {
-	Ratio.new(1, 1),
-	Ratio.new(9, 8),
-	Ratio.new(5, 4),
-	Ratio.new(4, 3),
-	Ratio.new(3, 2),
-	Ratio.new(5, 3),
-	Ratio.new(15, 8)
-}
-Ratio.notes.C = Ratio.notes[1]
-Ratio.notes.D = Ratio.notes[2]
-Ratio.notes.E = Ratio.notes[3]
-Ratio.notes.F = Ratio.notes[4]
-Ratio.notes.G = Ratio.notes[5]
-Ratio.notes.A = Ratio.notes[6]
-Ratio.notes.B = Ratio.notes[7]
--- set `name` directly to bypass __newindex and __index
-for name, ratio in pairs(Ratio.notes) do
-	if type(name) == 'string' then
-		rawset(ratio, 'name', name)
-	end
-end
-
-Ratio.accidentals = {
-	['+']  = Ratio.new(81, 80),
-	['-']  = Ratio.new(80, 81),
-	['#']  = Ratio.new(25, 24),
-	['b']  = Ratio.new(24, 25),
-	['7']  = Ratio.new(35, 36),
-	['L']  = Ratio.new(36, 35),
-	['^']  = Ratio.new(33, 32),
-	['v']  = Ratio.new(32, 33),
-	['13'] = Ratio.new(65, 64),
-	['El'] = Ratio.new(64, 65),
-	['17'] = Ratio.new(51, 50),
-	['Ll'] = Ratio.new(50, 51),
-	['19'] = Ratio.new(95, 96),
-	['6l'] = Ratio.new(96, 95),
-	['23'] = Ratio.new(46, 45),
-	['EZ'] = Ratio.new(45, 46),
-	['29'] = Ratio.new(145, 144),
-	['6Z'] = Ratio.new(144, 145),
-	['31'] = Ratio.new(31, 30),
-	['lE'] = Ratio.new(30, 31)
-}
-
---- recalculate factors based on num/den, then simplify if possible
+--- (re)calculate factors based on num/den
 function Ratio:factorize()
 	local factors = factorize(self.num)
 	local den_factors = factorize(self.den)
@@ -174,16 +139,16 @@ function Ratio:factorize()
 	for p = 1, n_primes do
 		factors[p] = factors[p] - den_factors[p]
 	end
-	self:update_from_factors(factors)
+	self._factors = factors
+	self._dirty = false
 end
 
---- set factors property and simplify num/den if possible
-function Ratio:update_from_factors(factors)
-	if factors == nil then
-		factors = self._factors
-	else
-		self._factors = factors
+--- simplify num/den based on factors
+function Ratio:simplify()
+	if self._dirty then
+		self:factorize()
 	end
+	local factors = self._factors
 	local num = 1
 	local den = 1
 	for p = 1, n_primes do
@@ -193,14 +158,12 @@ function Ratio:update_from_factors(factors)
 			den = den * math.pow(primes[p], -factors[p])
 		end
 	end
-	self._num = num
-	self._den = den
-	self._dirty = false
+	self.num = num
+	self.den = den
 end
 
 --- reduce a ratio to [1/1, span)
 -- @param span a maximum ratio (usually an octave)
--- TODO: I sorta don't like that this mutates self
 function Ratio:reduce(span)
 	if getmetatable(span) ~= Ratio then
 		span = Ratio.new(span)
@@ -224,6 +187,7 @@ function Ratio:reduce(span)
 			return
 		end
 	end
+	self:simplify()
 end
 
 function Ratio:__index(key)
@@ -248,21 +212,16 @@ function Ratio:__index(key)
 		self:johnstonize()
 		return self._name
 	end
-	if Ratio[key] ~= nil then
-		return Ratio[key]
-	end
+	return Ratio[key]
 end
 
 function Ratio:__newindex(key, value)
+	-- mark ratios as needing factorization after setting num or den by hand
 	if 'num' == key then
 		self._num = value
-		self.set_num = value
-		self._den = self.set_den
 		self._dirty = true
 	elseif 'den' == key then
 		self._den = value
-		self.set_den = value
-		self._num = self.set_num
 		self._dirty = true
 	end
 end
@@ -280,13 +239,11 @@ function Ratio:__mul(other)
 	end
 	local factors = self.factors
 	local other_factors = other.factors
-	local product = Ratio.new()
 	local product_factors = {}
 	for p = 1, n_primes do
 		product_factors[p] = factors[p] + other_factors[p]
 	end
-	product:update_from_factors(product_factors)
-	return product
+	return Ratio.new(product_factors)
 end
 
 function Ratio:__div(other)
@@ -300,13 +257,11 @@ function Ratio:__div(other)
 		-- one or both ratios is irrational, so just multiply num*den + den*num
 		return Ratio.new(self.num * other.den, self.den * other.num)
 	end
-	local quotient = Ratio.new()
 	local quotient_factors = {}
 	for p = 1, n_primes do
 		quotient_factors[p] = self.factors[p] - other.factors[p]
 	end
-	quotient:update_from_factors(quotient_factors)
-	return quotient
+	return Ratio.new(quotient_factors)
 end
 
 function Ratio:__lt(other)
@@ -669,6 +624,53 @@ function Ratio.dejohnstonize(name)
 	end
 	return ratio
 end
+
+-- base notes in Ben Johnston's notation (look up by name or number)
+Ratio.notes = {
+	Ratio.new(1, 1),
+	Ratio.new(9, 8),
+	Ratio.new(5, 4),
+	Ratio.new(4, 3),
+	Ratio.new(3, 2),
+	Ratio.new(5, 3),
+	Ratio.new(15, 8)
+}
+Ratio.notes.C = Ratio.notes[1]
+Ratio.notes.D = Ratio.notes[2]
+Ratio.notes.E = Ratio.notes[3]
+Ratio.notes.F = Ratio.notes[4]
+Ratio.notes.G = Ratio.notes[5]
+Ratio.notes.A = Ratio.notes[6]
+Ratio.notes.B = Ratio.notes[7]
+-- set `name` directly to bypass __newindex and __index
+for name, ratio in pairs(Ratio.notes) do
+	if type(name) == 'string' then
+		rawset(ratio, 'name', name)
+	end
+end
+
+Ratio.accidentals = {
+	['+']  = Ratio.new(81, 80),
+	['-']  = Ratio.new(80, 81),
+	['#']  = Ratio.new(25, 24),
+	['b']  = Ratio.new(24, 25),
+	['7']  = Ratio.new(35, 36),
+	['L']  = Ratio.new(36, 35),
+	['^']  = Ratio.new(33, 32),
+	['v']  = Ratio.new(32, 33),
+	['13'] = Ratio.new(65, 64),
+	['El'] = Ratio.new(64, 65),
+	['17'] = Ratio.new(51, 50),
+	['Ll'] = Ratio.new(50, 51),
+	['19'] = Ratio.new(95, 96),
+	['6l'] = Ratio.new(96, 95),
+	['23'] = Ratio.new(46, 45),
+	['EZ'] = Ratio.new(45, 46),
+	['29'] = Ratio.new(145, 144),
+	['6Z'] = Ratio.new(144, 145),
+	['31'] = Ratio.new(31, 30),
+	['lE'] = Ratio.new(30, 31)
+}
 
 Ratio.primes = primes
 Ratio.n_primes = n_primes

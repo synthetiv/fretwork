@@ -328,11 +328,11 @@ function ScaleEditor:redraw()
 	screen.font_size(10)
 
 	if self.focus_field == 1 then
-		self:draw_field(61, 12, string.format('%.0f', edit_ratio.set_num), active and 15 or 4, true)
+		self:draw_field(61, 12, string.format('%.0f', edit_ratio.num), active and 15 or 4, true)
 	else
 		screen.move(61, 12)
 		screen.level(active and 15 or 4)
-		screen.text_right(string.format('%.0f', edit_ratio.set_num))
+		screen.text_right(string.format('%.0f', edit_ratio.num))
 	end
 
 	screen.level(active and 4 or 1)
@@ -341,11 +341,11 @@ function ScaleEditor:redraw()
 	screen.stroke()
 
 	if self.focus_field == 2 then
-		self:draw_field(66, 17, string.format('%.0f', edit_ratio.set_den), active and 15 or 4)
+		self:draw_field(66, 17, string.format('%.0f', edit_ratio.den), active and 15 or 4)
 	else
 		screen.move(66, 17)
 		screen.level(active and 15 or 4)
-		screen.text(string.format('%.0f', edit_ratio.set_den))
+		screen.text(string.format('%.0f', edit_ratio.den))
 	end
 
 	if self.ratio == nil or self.input ~= '' or edit_ratio.set_num ~= self.ratio.num or edit_ratio.set_den ~= self.ratio.den then
