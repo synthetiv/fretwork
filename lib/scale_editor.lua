@@ -324,10 +324,10 @@ function ScaleEditor:redraw()
 	screen.font_size(10)
 
 	if self.focus_field == 1 then
-		self:draw_field(61, 12, string.format('%.0f', self.num), active and 15 or 7, true)
+		self:draw_field(61, 12, string.format('%.0f', self.num), active and 15 or 4, true)
 	else
 		screen.move(61, 12)
-		screen.level(active and 15 or 7)
+		screen.level(active and 15 or 4)
 		screen.text_right(string.format('%.0f', self.num))
 	end
 
@@ -337,16 +337,16 @@ function ScaleEditor:redraw()
 	screen.stroke()
 
 	if self.focus_field == 2 then
-		self:draw_field(66, 17, string.format('%.0f', self.den), active and 15 or 7)
+		self:draw_field(66, 17, string.format('%.0f', self.den), active and 15 or 4)
 	else
 		screen.move(66, 17)
-		screen.level(active and 15 or 7)
+		screen.level(active and 15 or 4)
 		screen.text(string.format('%.0f', self.den))
 	end
 
 	if self.input ~= '' or self.num ~= ratio.num or self.den ~= ratio.den then
 		screen.move_rel(3, -7)
-		screen.level((self.focus_field == 0 and blink_slow and 15) or 3)
+		screen.level((self.focus_field == 0 and blink_slow and 15) or 2)
 		screen.text('*')
 	end
 
@@ -482,44 +482,46 @@ function ScaleEditor:redraw()
 		end
 	end
 
-	-- TODO: draw dots above/below selected pitch instead of changing length
-	-- (keep highlight, though)
 	local span_value = self.span.value
-	local level = 1
-	local len = 1
-	if class == 1 and self:is_class_active(1) then
-		level = 15
-		len = 5
-	elseif self:is_class_active(1) then
-		level = 7
-		len = 4
-	elseif class == 1 then
-		level = 5
-	end
-	screen.level(level)
-	screen.move(0.5, 64)
-	screen.line_rel(0, -len)
-	screen.stroke()
-	screen.move(127.5, 64)
-	screen.line_rel(0, -len)
-	screen.stroke()
-	for c = 2, self.length do
-		local x = math.floor(127 * self.ratios[c - 1].value / span_value) + 0.5
-		level = 1
-		len = 1
+	for c = 1, self.length do
+		
+		local ratio = c == 1 and self.span or self.ratios[c - 1]
+		local x = math.floor(125 * ratio.value / span_value) + 1.5
+		local len = self:is_class_active(c) and 4 or 1
+
+		local level = 1
 		if class == c and self:is_class_active(c) then
 			level = 15
-			len = 5
 		elseif self:is_class_active(c) then
 			level = 7
-			len = 4
 		elseif class == c then
 			level = 5
 		end
+		screen.level(level)
+
 		screen.move(x, 64)
 		screen.line_rel(0, -len)
-		screen.level(level)
 		screen.stroke()
+		if c == 1 then
+			screen.move(1.5, 64)
+			screen.line_rel(0, -len)
+			screen.stroke()
+		end
+
+		if class == c then
+			screen.move(x - 1.5, 59.5 - len)
+			screen.line_rel(3, 0)
+			screen.move_rel(-2, 1)
+			screen.line_rel(1, 0)
+			screen.stroke()
+			if c == 1 then
+				screen.move(0, 59.5 - len)
+				screen.line_rel(3, 0)
+				screen.move_rel(-2, 1)
+				screen.line_rel(1, 0)
+				screen.stroke()
+			end
+		end
 	end
 
 	screen.update()
