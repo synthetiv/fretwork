@@ -659,6 +659,8 @@ function ScaleEditor:keyboard_event(type, code, value)
 					self.input = string.sub(before, 1, -2) .. after
 					self.cursor = math.max(1, self.cursor - 1)
 					return
+				elseif self.focus_field == 1 and code == hid.codes.KEY_KPSLASH then
+					self:focus_next()
 				end
 			end
 			if code == hid.codes.KEY_TAB then
