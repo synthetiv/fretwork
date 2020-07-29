@@ -26,10 +26,9 @@ function ScaleEditor.new(scale)
 	}
 	editor.class = 0
 	editor.ratio = nil
+	editor.edit_ratio = Ratio.new()
 	editor.input = ''
 	editor.cursor = 1
-	editor.num = 1
-	editor.den = 1
 	editor.focus_field = 0
 	editor.n_fields = 2
 	editor.on_update = function() end
@@ -43,13 +42,16 @@ function ScaleEditor:select(class)
 	self.input = ''
 	self.cursor = 1
 	self.focus_field = 0
-	if self.class == 1 then
+	if self.class == 0 then
+		self.ratio = nil
+		return
+	elseif self.class == 1 then
 		self.ratio = self.span
 	else
 		self.ratio = self.ratios[self.class - 1]
 	end
-	self.num = self.ratio.num
-	self.den = self.ratio.den
+	self.edit_ratio.num = self.ratio.num
+	self.edit_ratio.den = self.ratio.den
 end
 
 function ScaleEditor:select_pitch(pitch_id)
@@ -310,11 +312,13 @@ function ScaleEditor:redraw()
 	local class = self.class
 	local pitch = self.pitches[class]
 	local active = self:is_class_active()
-	local ratio = self.ratio
+	local edit_ratio = self.edit_ratio
 
 	screen.level(active and 10 or 3)
 	screen.move(3, 14)
-	if class == 1 then
+	if class == 0 then
+		screen.text('insert')
+	elseif class == 1 then
 		screen.text('span')
 	else
 		screen.text(string.format('%d.', class))
@@ -324,11 +328,11 @@ function ScaleEditor:redraw()
 	screen.font_size(10)
 
 	if self.focus_field == 1 then
-		self:draw_field(61, 12, string.format('%.0f', self.num), active and 15 or 4, true)
+		self:draw_field(61, 12, string.format('%.0f', edit_ratio.set_num), active and 15 or 4, true)
 	else
 		screen.move(61, 12)
 		screen.level(active and 15 or 4)
-		screen.text_right(string.format('%.0f', self.num))
+		screen.text_right(string.format('%.0f', edit_ratio.set_num))
 	end
 
 	screen.level(active and 4 or 1)
@@ -337,14 +341,14 @@ function ScaleEditor:redraw()
 	screen.stroke()
 
 	if self.focus_field == 2 then
-		self:draw_field(66, 17, string.format('%.0f', self.den), active and 15 or 4)
+		self:draw_field(66, 17, string.format('%.0f', edit_ratio.set_den), active and 15 or 4)
 	else
 		screen.move(66, 17)
 		screen.level(active and 15 or 4)
-		screen.text(string.format('%.0f', self.den))
+		screen.text(string.format('%.0f', edit_ratio.set_den))
 	end
 
-	if self.input ~= '' or self.num ~= ratio.num or self.den ~= ratio.den then
+	if self.ratio == nil or self.input ~= '' or edit_ratio.set_num ~= self.ratio.num or edit_ratio.set_den ~= self.ratio.den then
 		screen.move_rel(3, -7)
 		screen.level((self.focus_field == 0 and blink_slow and 15) or 2)
 		screen.text('*')
@@ -354,108 +358,110 @@ function ScaleEditor:redraw()
 	screen.font_size(8)
 	screen.level(active and 10 or 3)
 	
-	local x = 3
-	local name = pitch.name
-	local char = string.sub(name, 1, 1)
-	name = string.sub(name, 2)
-	screen.move(x, 23)
-	screen.text(char)
-	x = x + screen.text_extents(char) + 1
-	while string.len(name) > 0 do
-		char = string.sub(name, 1, 1)
+	if pitch ~= nil then
+		local x = 3
+		local name = pitch.name
+		local char = string.sub(name, 1, 1)
 		name = string.sub(name, 2)
 		screen.move(x, 23)
-		if char == 'b' then
-			screen.move_rel(0.5, -5)
-			screen.line_rel(0, 5)
-			screen.move_rel(0.5, -0.5)
-			screen.line_rel(1, 0)
-			screen.move_rel(0.5, -0.5)
-			screen.line_rel(0, -2)
-			screen.move_rel(-0.5, 0.5)
-			screen.line_rel(-1, 0)
-			screen.stroke()
-			x = x + 4
-		elseif char == '^' then
-			screen.move_rel(0, -2.5)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, -1)
-			screen.line_rel(1, 0)
-			screen.move_rel(0.5, -1.5)
-			screen.line_rel(0, 5)
-			screen.move_rel(0.5, -3.5)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(1, 0)
-			screen.stroke()
-			x = x + 6
-		elseif char == 'v' then
-			screen.move_rel(0, -2.5)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(1, 0)
-			screen.move_rel(0.5, 1.5)
-			screen.line_rel(0, -5)
-			screen.move_rel(0.5, 3.5)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, -1)
-			screen.line_rel(1, 0)
-			screen.stroke()
-			x = x + 6
-		elseif char == 'E' then
-			screen.move_rel(1, -4.5)
-			screen.line_rel(3, 0)
-			screen.move_rel(-4, 1)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(2, 0)
-			screen.move_rel(-3, 1)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(3, 0)
-			screen.stroke()
-			x = x + 5
-		elseif char == 'l' then
-			screen.move_rel(0.5, -5)
-			screen.line_rel(0, 5)
-			screen.move_rel(0.5, -0.5)
-			screen.line_rel(1, 0)
-			screen.stroke()
-			x = x + 3
-		elseif char == 'L' then
-			screen.move_rel(0, -0.5)
-			screen.line_rel(4, 0)
-			screen.move_rel(-4, -0.5)
-			screen.line_rel(1, 0)
-			screen.move_rel(0, -1)
-			screen.line_rel(1, 0)
-			screen.move_rel(0.5, -0.5)
-			screen.line_rel(0, -2)
-			screen.stroke()
-			x = x + 5
-		elseif char == 'Z' then
-			screen.move_rel(0, -4.5)
-			screen.line_rel(4, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(-1, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(-2, 0)
-			screen.move_rel(0, 1)
-			screen.line_rel(-1, 0)
-			screen.move_rel(1, 1)
-			screen.line_rel(3, 0)
-			screen.stroke()
-			x = x + 5
-		else
-			screen.text(char)
-			x = x + screen.text_extents(char) + 1
+		screen.text(char)
+		x = x + screen.text_extents(char) + 1
+		while string.len(name) > 0 do
+			char = string.sub(name, 1, 1)
+			name = string.sub(name, 2)
+			screen.move(x, 23)
+			if char == 'b' then
+				screen.move_rel(0.5, -5)
+				screen.line_rel(0, 5)
+				screen.move_rel(0.5, -0.5)
+				screen.line_rel(1, 0)
+				screen.move_rel(0.5, -0.5)
+				screen.line_rel(0, -2)
+				screen.move_rel(-0.5, 0.5)
+				screen.line_rel(-1, 0)
+				screen.stroke()
+				x = x + 4
+			elseif char == '^' then
+				screen.move_rel(0, -2.5)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, -1)
+				screen.line_rel(1, 0)
+				screen.move_rel(0.5, -1.5)
+				screen.line_rel(0, 5)
+				screen.move_rel(0.5, -3.5)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(1, 0)
+				screen.stroke()
+				x = x + 6
+			elseif char == 'v' then
+				screen.move_rel(0, -2.5)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(1, 0)
+				screen.move_rel(0.5, 1.5)
+				screen.line_rel(0, -5)
+				screen.move_rel(0.5, 3.5)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, -1)
+				screen.line_rel(1, 0)
+				screen.stroke()
+				x = x + 6
+			elseif char == 'E' then
+				screen.move_rel(1, -4.5)
+				screen.line_rel(3, 0)
+				screen.move_rel(-4, 1)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(2, 0)
+				screen.move_rel(-3, 1)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(3, 0)
+				screen.stroke()
+				x = x + 5
+			elseif char == 'l' then
+				screen.move_rel(0.5, -5)
+				screen.line_rel(0, 5)
+				screen.move_rel(0.5, -0.5)
+				screen.line_rel(1, 0)
+				screen.stroke()
+				x = x + 3
+			elseif char == 'L' then
+				screen.move_rel(0, -0.5)
+				screen.line_rel(4, 0)
+				screen.move_rel(-4, -0.5)
+				screen.line_rel(1, 0)
+				screen.move_rel(0, -1)
+				screen.line_rel(1, 0)
+				screen.move_rel(0.5, -0.5)
+				screen.line_rel(0, -2)
+				screen.stroke()
+				x = x + 5
+			elseif char == 'Z' then
+				screen.move_rel(0, -4.5)
+				screen.line_rel(4, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(-1, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(-2, 0)
+				screen.move_rel(0, 1)
+				screen.line_rel(-1, 0)
+				screen.move_rel(1, 1)
+				screen.line_rel(3, 0)
+				screen.stroke()
+				x = x + 5
+			else
+				screen.text(char)
+				x = x + screen.text_extents(char) + 1
+			end
 		end
 	end
 
 	screen.move(3, 42)
-	if ratio.factors ~= nil then
+	if edit_ratio.factors ~= nil then
 		local is_first = true
-		for p, e in ipairs(ratio.factors) do
+		for p, e in ipairs(edit_ratio.factors) do
 			if e ~= 0 then
 
 				screen.font_face(1)
@@ -482,11 +488,19 @@ function ScaleEditor:redraw()
 		end
 	end
 
+	-- TODO draw another (connected?) line indicating edit_ratio.num/edit_ratio.den, if different from selected ratio
 	local span_value = self.span.value
 	for c = 1, self.length do
 		
-		local ratio = c == 1 and self.span or self.ratios[c - 1]
-		local x = math.floor(125 * ratio.value / span_value) + 1.5
+		local ratio
+		if c == class then
+			ratio = self.edit_ratio
+		elseif c == 1 then
+			ratio = self.span
+		else
+			ratio = self.ratios[c - 1]
+		end
+		local x = math.floor(125 * (ratio.value % span_value) / span_value) + 1.5
 		local len = self:is_class_active(c) and 4 or 1
 
 		local level = 1
@@ -503,7 +517,7 @@ function ScaleEditor:redraw()
 		screen.line_rel(0, -len)
 		screen.stroke()
 		if c == 1 then
-			screen.move(1.5, 64)
+			screen.move(126.5, 64)
 			screen.line_rel(0, -len)
 			screen.stroke()
 		end
@@ -515,7 +529,7 @@ function ScaleEditor:redraw()
 			screen.line_rel(1, 0)
 			screen.stroke()
 			if c == 1 then
-				screen.move(0, 59.5 - len)
+				screen.move(125, 59.5 - len)
 				screen.line_rel(3, 0)
 				screen.move_rel(-2, 1)
 				screen.line_rel(1, 0)
@@ -557,11 +571,14 @@ function ScaleEditor:direction_key(direction)
 end
 
 function ScaleEditor:focus_next()
+	if self.class == 1 then
+		return
+	end
 	if self.input ~= '' then
 		if self.focus_field == 1 then
-			self.num = tonumber(self.input)
+			self.edit_ratio.num = tonumber(self.input)
 		elseif self.focus_field == 2 then
-			self.den = tonumber(self.input)
+			self.edit_ratio.den = tonumber(self.input)
 		end
 		self.input = ''
 	end
@@ -609,6 +626,10 @@ function ScaleEditor:keyboard_event(type, code, value)
 				elseif code == hid.codes.KEY_KP1 then
 					-- TODO: undo
 					return
+				elseif code == hid.codes.KEY_KP0 then
+					self:select(0)
+					self.focus_field = 1
+					self.input = ''
 				end
 			elseif not (self.held_keys.ctrl or self.held_keys.alt or self.held_keys.shift) then
 				if self.held_keys.numlock then
@@ -666,9 +687,13 @@ function ScaleEditor:keyboard_event(type, code, value)
 			if code == hid.codes.KEY_TAB then
 				self:focus_next()
 				return
-			elseif code == hid.codes.KEY_ENTER or code == hid.codes.KEY_KPENTER then
+			elseif self.class ~= 1 and code == hid.codes.KEY_ENTER or code == hid.codes.KEY_KPENTER then
 				if self.focus_field == 0 then
-					self:replace_class(self.num / self.den)
+					if self.class == 0 then
+						self:insert(Ratio.new(self.edit_ratio.num, self.edit_ratio.den))
+					else
+						self:replace_class(Ratio.new(self.edit_ratio.num, self.edit_ratio.den))
+					end
 					return
 				else
 					self:focus_next()

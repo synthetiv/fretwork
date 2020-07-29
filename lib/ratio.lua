@@ -5,50 +5,6 @@ local n_primes = #primes
 -- used for converting ratios to CV-friendly values
 local log2 = math.log(2)
 
--- base notes in Ben Johnston's notation
--- TODO: can't these go somewhere near the accidentals?
-local notes = {
-	{
-		note_name = 'C',
-		num = 1,
-		den = 1
-	},
-	{
-		note_name = 'D',
-		num = 9,
-		den = 8
-	},
-	{
-		note_name = 'E',
-		num = 5,
-		den = 4
-	},
-	{
-		note_name = 'F',
-		num = 4,
-		den = 3
-	},
-	{
-		note_name = 'G',
-		num = 3,
-		den = 2
-	},
-	{
-		note_name = 'A',
-		num = 5,
-		den = 3
-	},
-	{
-		note_name = 'B',
-		num = 15,
-		den = 8
-	},
-}
-
-for i, note in ipairs(notes) do
-	notes[note.note_name] = note
-end
-
 -- allocate one table for continue_fraction() to store data in
 local cf = {}
 
@@ -145,11 +101,63 @@ function Ratio.new(num, den)
 		num, den = rationalize(num)
 	end
 	local r = {
-		num = num,
-		den = den
+		_num = num,
+		_den = den,
+		set_num = num,
+		set_den = den,
+		_factors = {},
+		_dirty = true,
+		_name = ''
 	}
 	return setmetatable(r, Ratio)
 end
+
+-- base notes in Ben Johnston's notation (look up by name or number)
+Ratio.notes = {
+	Ratio.new(1, 1),
+	Ratio.new(9, 8),
+	Ratio.new(5, 4),
+	Ratio.new(4, 3),
+	Ratio.new(3, 2),
+	Ratio.new(5, 3),
+	Ratio.new(15, 8)
+}
+Ratio.notes.C = Ratio.notes[1]
+Ratio.notes.D = Ratio.notes[2]
+Ratio.notes.E = Ratio.notes[3]
+Ratio.notes.F = Ratio.notes[4]
+Ratio.notes.G = Ratio.notes[5]
+Ratio.notes.A = Ratio.notes[6]
+Ratio.notes.B = Ratio.notes[7]
+-- set `name` directly to bypass __newindex and __index
+for name, ratio in pairs(Ratio.notes) do
+	if type(name) == 'string' then
+		rawset(ratio, 'name', name)
+	end
+end
+
+Ratio.accidentals = {
+	['+']  = Ratio.new(81, 80),
+	['-']  = Ratio.new(80, 81),
+	['#']  = Ratio.new(25, 24),
+	['b']  = Ratio.new(24, 25),
+	['7']  = Ratio.new(35, 36),
+	['L']  = Ratio.new(36, 35),
+	['^']  = Ratio.new(33, 32),
+	['v']  = Ratio.new(32, 33),
+	['13'] = Ratio.new(65, 64),
+	['El'] = Ratio.new(64, 65),
+	['17'] = Ratio.new(51, 50),
+	['Ll'] = Ratio.new(50, 51),
+	['19'] = Ratio.new(95, 96),
+	['6l'] = Ratio.new(96, 95),
+	['23'] = Ratio.new(46, 45),
+	['EZ'] = Ratio.new(45, 46),
+	['29'] = Ratio.new(145, 144),
+	['6Z'] = Ratio.new(144, 145),
+	['31'] = Ratio.new(31, 30),
+	['lE'] = Ratio.new(30, 31)
+}
 
 --- recalculate factors based on num/den, then simplify if possible
 function Ratio:factorize()
@@ -185,8 +193,8 @@ function Ratio:update_from_factors(factors)
 			den = den * math.pow(primes[p], -factors[p])
 		end
 	end
-	self.num = num
-	self.den = den
+	self._num = num
+	self._den = den
 	self._dirty = false
 end
 
@@ -206,7 +214,6 @@ function Ratio:reduce(span)
 			print('too many loops down', self.num .. '/' .. self.den)
 			return
 		end
-		self._dirty = true
 	end
 	while self < 1 do
 		self.num = self.num * span.num
@@ -216,23 +223,26 @@ function Ratio:reduce(span)
 			print('too many loops up', self.num .. '/' .. self.den)
 			return
 		end
-		self._dirty = true
 	end
 end
 
 function Ratio:__index(key)
-	if 'value' == key then
-		return math.log(self.num / self.den) / log2
+	if 'num' == key then
+		return self._num
+	elseif 'den' == key then
+		return self._den
+	elseif 'value' == key then
+		return math.log(self._num / self._den) / log2
 	elseif 'quotient' == key then
-		return self.num / self.den
+		return self._num / self._den
 	elseif 'factors' == key then
-		if self._dirty == false then
+		if not self._dirty then
 			return self._factors
 		end
 		self:factorize()
 		return self._factors
 	elseif 'name' == key then
-		if self._name ~= nil then
+		if not self._dirty and self._name ~= '' then
 			return self._name
 		end
 		self:johnstonize()
@@ -240,6 +250,18 @@ function Ratio:__index(key)
 	end
 	if Ratio[key] ~= nil then
 		return Ratio[key]
+	end
+end
+
+function Ratio:__newindex(key, value)
+	if 'num' == key then
+		self._num = value
+		self.set_num = value
+		self._dirty = true
+	elseif 'den' == key then
+		self._den = value
+		self.set_den = value
+		self._dirty = true
 	end
 end
 
@@ -340,6 +362,7 @@ function Ratio:print_factors()
 	local factors = self.factors
 	if factors == nil then
 		print('irrational')
+		return
 	end
 	local string = string.format('%s = ', self)
 	local first = true
@@ -377,6 +400,12 @@ local ac = {
 	{ '-',  0 }
 }
 function Ratio:johnstonize()
+
+	if self.factors == nil then
+		self._name = '?'
+		return
+	end
+
 	local factors = self.factors
 	local note = 1 -- C
 	local class = 1
@@ -578,7 +607,7 @@ function Ratio:johnstonize()
 		class = (note - 1) % 7 + 1
 	end
 
-	local name = notes[class].note_name
+	local name = Ratio.notes[class].name
 	ac[1][2] = sharps
 	ac[2][2] = -sharps
 	ac[3][2] = sevens
@@ -615,29 +644,6 @@ function Ratio:johnstonize()
 	self._name = name
 end
 
-Ratio.accidentals = {
-	['+']  = Ratio.new(81, 80),
-	['-']  = Ratio.new(80, 81),
-	['#']  = Ratio.new(25, 24),
-	['b']  = Ratio.new(24, 25),
-	['7']  = Ratio.new(35, 36),
-	['L']  = Ratio.new(36, 35),
-	['^']  = Ratio.new(33, 32),
-	['v']  = Ratio.new(32, 33),
-	['13'] = Ratio.new(65, 64),
-	['El'] = Ratio.new(64, 65),
-	['17'] = Ratio.new(51, 50),
-	['Ll'] = Ratio.new(50, 51),
-	['19'] = Ratio.new(95, 96),
-	['6l'] = Ratio.new(96, 95),
-	['23'] = Ratio.new(46, 45),
-	['EZ'] = Ratio.new(45, 46),
-	['29'] = Ratio.new(145, 144),
-	['6Z'] = Ratio.new(144, 145),
-	['31'] = Ratio.new(31, 30),
-	['lE'] = Ratio.new(30, 31)
-}
-
 function Ratio.dejohnstonize(name)
 	local ratio = Ratio.new()
 	local accidentals = Ratio.accidentals
@@ -650,8 +656,8 @@ function Ratio.dejohnstonize(name)
 		elseif accidentals[char] ~= nil then
 			ratio = ratio * accidentals[char]
 			name = string.sub(name, 1, -2)
-		elseif string.len(name) == 1 and notes[name] ~= nil then
-			ratio = ratio * notes[name]
+		elseif string.len(name) == 1 and Ratio.notes[name] ~= nil then
+			ratio = ratio * Ratio.notes[name]
 			name = string.sub(name, 1, -2)
 		else
 			print(name)
@@ -660,10 +666,6 @@ function Ratio.dejohnstonize(name)
 		end
 	end
 	return ratio
-end
-
-for i, r in ipairs(notes) do
-	setmetatable(r, Ratio)
 end
 
 Ratio.primes = primes
