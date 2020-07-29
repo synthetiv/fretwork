@@ -257,10 +257,12 @@ function Ratio:__newindex(key, value)
 	if 'num' == key then
 		self._num = value
 		self.set_num = value
+		self._den = self.set_den
 		self._dirty = true
 	elseif 'den' == key then
 		self._den = value
 		self.set_den = value
+		self._num = self.set_num
 		self._dirty = true
 	end
 end
