@@ -4,8 +4,8 @@
 -- microtonal autoharp,
 -- etc.
 
+polysub = require 'polysub'
 engine.name = 'PolySub'
-polysub = require 'we/lib/polysub'
 
 musicutil = require 'musicutil'
 
